@@ -111,16 +111,12 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _sortVideos(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
   ) {
-    final sorted = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(
-      docs,
-    );
+    final sorted =
+        List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(docs);
 
     sorted.sort((a, b) {
-      final aData = a.data();
-      final bData = b.data();
-
-      final aTimestamp = aData['createdAt'];
-      final bTimestamp = bData['createdAt'];
+      final aTimestamp = a.data()['createdAt'];
+      final bTimestamp = b.data()['createdAt'];
 
       DateTime aDate = DateTime.fromMillisecondsSinceEpoch(0);
       DateTime bDate = DateTime.fromMillisecondsSinceEpoch(0);
@@ -149,7 +145,6 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      extendBody: false,
       body: SafeArea(
         bottom: false,
         child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -219,12 +214,18 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
                     },
                   ),
                 ),
+
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: _buildVideoBottomNavigation(),
+                ),
               ],
             );
           },
         ),
       ),
-      bottomNavigationBar: _buildVideoBottomNavigation(),
     );
   }
 
@@ -274,6 +275,12 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
               Navigator.pop(context);
             },
           ),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: _buildVideoBottomNavigation(),
         ),
       ],
     );
@@ -332,20 +339,29 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
             },
           ),
         ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: _buildVideoBottomNavigation(),
+        ),
       ],
     );
   }
 
   Widget _buildVideoBottomNavigation() {
     return Container(
-      height: 70,
-      decoration: const BoxDecoration(
-        color: Colors.black,
-        border: Border(
-          top: BorderSide(
-            color: Colors.white12,
-            width: 0.5,
-          ),
+      height: 78,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.black.withValues(alpha: 0.0),
+            Colors.black.withValues(alpha: 0.72),
+            Colors.black.withValues(alpha: 0.94),
+          ],
         ),
       ),
       child: Row(
@@ -399,15 +415,16 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
     required String label,
     required VoidCallback onTap,
   }) {
-    return InkWell(
+    return GestureDetector(
       onTap: onTap,
+      behavior: HitTestBehavior.opaque,
       child: SizedBox(
         height: 70,
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.end,
           children: [
             Icon(
-              _currentPage >= 0 ? icon : activeIcon,
+              icon,
               color: Colors.white,
               size: 24,
             ),
@@ -417,8 +434,10 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 10,
+                fontWeight: FontWeight.w500,
               ),
             ),
+            const SizedBox(height: 8),
           ],
         ),
       ),
@@ -429,20 +448,43 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
     return GestureDetector(
       onTap: _openPostVideo,
       child: Container(
-        width: 48,
-        height: 38,
+        width: 52,
+        height: 42,
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: Colors.white,
-            width: 1,
+          borderRadius: BorderRadius.circular(11),
+          gradient: const LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [
+              Color(0xFF25F4EE),
+              Colors.white,
+              Color(0xFFFF0050),
+            ],
           ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.cyanAccent.withValues(alpha: 0.25),
+              blurRadius: 8,
+              spreadRadius: 1,
+            ),
+            BoxShadow(
+              color: Colors.pinkAccent.withValues(alpha: 0.20),
+              blurRadius: 8,
+              spreadRadius: 1,
+            ),
+          ],
         ),
-        child: const Icon(
-          Icons.add,
-          color: Colors.black,
-          size: 30,
+        padding: const EdgeInsets.all(2),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.black,
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: const Icon(
+            Icons.add,
+            color: Colors.white,
+            size: 30,
+          ),
         ),
       ),
     );
@@ -536,7 +578,6 @@ class _ReelsVideoItem extends StatefulWidget {
 
 class _ReelsVideoItemState extends State<_ReelsVideoItem> {
   VideoPlayerController? _controller;
-
   Timer? _watchTimer;
 
   bool _isInitialized = false;
@@ -564,29 +605,27 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
   User? get currentUser => FirebaseAuth.instance.currentUser;
 
   String get _sellerId {
-    final value = widget.data['sellerId'] ??
-        widget.data['userId'] ??
-        '';
-
-    return value.toString();
+    return (widget.data['sellerId'] ??
+            widget.data['userId'] ??
+            '')
+        .toString();
   }
 
   String get _sellerName {
-    final value = widget.data['sellerName'] ??
-        widget.data['userName'] ??
-        'User';
+    final value = (widget.data['sellerName'] ??
+            widget.data['userName'] ??
+            'User')
+        .toString()
+        .trim();
 
-    final name = value.toString().trim();
-
-    return name.isEmpty ? 'User' : name;
+    return value.isEmpty ? 'User' : value;
   }
 
   String get _sellerProfileImageUrl {
-    final value = widget.data['sellerProfileImageUrl'] ??
-        widget.data['profileImageUrl'] ??
-        '';
-
-    return value.toString();
+    return (widget.data['sellerProfileImageUrl'] ??
+            widget.data['profileImageUrl'] ??
+            '')
+        .toString();
   }
 
   String get _caption {
@@ -697,7 +736,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
       await controller.initialize();
 
       controller.setLooping(true);
-
       controller.addListener(_videoListener);
 
       if (!mounted) {
@@ -870,22 +908,10 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
       return;
     }
 
-    if (!_rewardEligible) {
-      return;
-    }
-
-    if (_rewardClaimed) {
-      return;
-    }
-
-    if (_watchSeconds < _requiredWatchSeconds) {
-      _showMessage(
-        'Watch for $_requiredWatchSeconds seconds to claim the reward.',
-      );
-      return;
-    }
-
-    if (_isClaimingReward) {
+    if (!_rewardEligible ||
+        _rewardClaimed ||
+        _watchSeconds < _requiredWatchSeconds ||
+        _isClaimingReward) {
       return;
     }
 
@@ -934,7 +960,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
       });
 
       _showMessage('Reward claim submitted.');
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         setState(() {
           _isClaimingReward = false;
@@ -1004,10 +1030,8 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
 
           int count = 0;
 
-          final currentCount = data['likeCount'];
-
-          if (currentCount is num) {
-            count = currentCount.toInt();
+          if (data['likeCount'] is num) {
+            count = (data['likeCount'] as num).toInt();
           } else if (data['likesCount'] is num) {
             count = (data['likesCount'] as num).toInt();
           }
@@ -1099,10 +1123,8 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
 
           int count = 0;
 
-          final currentCount = data['viewCount'];
-
-          if (currentCount is num) {
-            count = currentCount.toInt();
+          if (data['viewCount'] is num) {
+            count = (data['viewCount'] as num).toInt();
           } else if (data['viewsCount'] is num) {
             count = (data['viewsCount'] as num).toInt();
           }
@@ -1137,11 +1159,10 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
         'Check out this video on BuyNova:\n$_videoUrl',
       );
 
-      final videoRef = FirebaseFirestore.instance
+      await FirebaseFirestore.instance
           .collection('sellerVideos')
-          .doc(widget.videoId);
-
-      await videoRef.update({
+          .doc(widget.videoId)
+          .update({
         'shareCount': FieldValue.increment(1),
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -1166,7 +1187,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
           top: Radius.circular(20),
         ),
       ),
-      builder: (sheetContext) {
+      builder: (_) {
         return _CommentsSheet(
           videoId: widget.videoId,
           currentUser: user,
@@ -1190,11 +1211,10 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
         return;
       }
 
-      final value = data['commentCount'];
-
-      if (value is num) {
+      if (data['commentCount'] is num) {
         setState(() {
-          _commentCount = value.toInt();
+          _commentCount =
+              (data['commentCount'] as num).toInt();
         });
       }
     } catch (_) {}
@@ -1247,10 +1267,8 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
   @override
   void dispose() {
     _watchTimer?.cancel();
-
     _controller?.removeListener(_videoListener);
     _controller?.dispose();
-
     super.dispose();
   }
 
@@ -1267,7 +1285,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
             left: 0,
             right: 0,
             bottom: 0,
-            height: 360,
+            height: 390,
             child: IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
@@ -1276,8 +1294,8 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
                     end: Alignment.bottomCenter,
                     colors: [
                       Colors.transparent,
-                      Colors.black.withValues(alpha: 0.15),
-                      Colors.black.withValues(alpha: 0.90),
+                      Colors.black.withValues(alpha: 0.10),
+                      Colors.black.withValues(alpha: 0.88),
                     ],
                   ),
                 ),
@@ -1293,7 +1311,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
 
           Positioned(
             right: 12,
-            bottom: 145,
+            bottom: 150,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1330,20 +1348,9 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
           Positioned(
             left: 15,
             right: 75,
-            bottom: 82,
+            bottom: 88,
             child: _buildBottomInformation(),
           ),
-
-          if (!_isPlaying && _isInitialized)
-            const Center(
-              child: IgnorePointer(
-                child: Icon(
-                  Icons.play_arrow,
-                  color: Colors.white,
-                  size: 76,
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -1448,7 +1455,8 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
                   const SizedBox(width: 9),
                   Flexible(
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment:
+                          CrossAxisAlignment.start,
                       children: [
                         Text(
                           _productName.isEmpty
@@ -1464,7 +1472,8 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
                         ),
                         if (_productPrice != null)
                           Padding(
-                            padding: const EdgeInsets.only(top: 3),
+                            padding:
+                                const EdgeInsets.only(top: 3),
                             child: Text(
                               '৳${_productPrice!.toStringAsFixed(0)}',
                               style: const TextStyle(
@@ -1690,7 +1699,8 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
               color: Colors.black.withValues(alpha: 0.38),
               shape: BoxShape.circle,
             ),
-            child: _isLoadingLike && icon == Icons.favorite_border
+            child: _isLoadingLike &&
+                    icon == Icons.favorite_border
                 ? const Padding(
                     padding: EdgeInsets.all(13),
                     child: CircularProgressIndicator(
@@ -1764,10 +1774,9 @@ class _CommentsSheetState extends State<_CommentsSheet> {
 
       final userData = userDoc.data() ?? {};
 
-      final name = (userData['name'] ??
-              user.displayName ??
-              'User')
-          .toString();
+      final name =
+          (userData['name'] ?? user.displayName ?? 'User')
+              .toString();
 
       final profileImageUrl =
           (userData['profileImageUrl'] ?? '').toString();
@@ -1776,13 +1785,13 @@ class _CommentsSheetState extends State<_CommentsSheet> {
           .collection('sellerVideos')
           .doc(widget.videoId);
 
-      final commentRef = videoRef
-          .collection('comments')
-          .doc();
+      final commentRef =
+          videoRef.collection('comments').doc();
 
       await FirebaseFirestore.instance.runTransaction(
         (transaction) async {
-          final videoSnapshot = await transaction.get(videoRef);
+          final videoSnapshot =
+              await transaction.get(videoRef);
 
           if (!videoSnapshot.exists) {
             throw Exception('Video not found');
@@ -1792,12 +1801,12 @@ class _CommentsSheetState extends State<_CommentsSheet> {
 
           int count = 0;
 
-          final currentCount = data['commentCount'];
-
-          if (currentCount is num) {
-            count = currentCount.toInt();
+          if (data['commentCount'] is num) {
+            count =
+                (data['commentCount'] as num).toInt();
           } else if (data['commentsCount'] is num) {
-            count = (data['commentsCount'] as num).toInt();
+            count =
+                (data['commentsCount'] as num).toInt();
           }
 
           transaction.set(commentRef, {
@@ -1865,7 +1874,8 @@ class _CommentsSheetState extends State<_CommentsSheet> {
             Container(
               width: 45,
               height: 5,
-              margin: const EdgeInsets.only(top: 10, bottom: 12),
+              margin:
+                  const EdgeInsets.only(top: 10, bottom: 12),
               decoration: BoxDecoration(
                 color: Colors.white30,
                 borderRadius: BorderRadius.circular(10),
@@ -1927,23 +1937,24 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                   }
 
                   return ListView.builder(
-                    reverse: false,
                     itemCount: docs.length,
                     itemBuilder: (context, index) {
                       final data = docs[index].data();
 
-                      final name = (data['userName'] ?? 'User')
-                          .toString();
+                      final name =
+                          (data['userName'] ?? 'User')
+                              .toString();
 
-                      final text = (data['text'] ?? '')
-                          .toString();
+                      final text =
+                          (data['text'] ?? '').toString();
 
                       final imageUrl =
                           (data['profileImageUrl'] ?? '')
                               .toString();
 
                       return Padding(
-                        padding: const EdgeInsets.symmetric(
+                        padding:
+                            const EdgeInsets.symmetric(
                           horizontal: 14,
                           vertical: 8,
                         ),
@@ -1955,7 +1966,8 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                             const SizedBox(width: 10),
                             Expanded(
                               child: Container(
-                                padding: const EdgeInsets.all(10),
+                                padding:
+                                    const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
                                   color: Colors.white10,
                                   borderRadius:
@@ -1967,7 +1979,8 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                                   children: [
                                     Text(
                                       name,
-                                      style: const TextStyle(
+                                      style:
+                                          const TextStyle(
                                         color: Colors.white,
                                         fontWeight:
                                             FontWeight.bold,
@@ -1977,7 +1990,8 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                                     const SizedBox(height: 4),
                                     Text(
                                       text,
-                                      style: const TextStyle(
+                                      style:
+                                          const TextStyle(
                                         color: Colors.white70,
                                         fontSize: 13,
                                       ),
@@ -2013,7 +2027,8 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: Colors.white10,
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius:
+                          BorderRadius.circular(14),
                     ),
                     child: const Center(
                       child: Text(
