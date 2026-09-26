@@ -22,7 +22,6 @@ class NewsFeedPage extends StatefulWidget {
 
 class _NewsFeedPageState extends State<NewsFeedPage> {
   final PageController _pageController = PageController();
-
   int _currentPage = 0;
 
   User? get currentUser => FirebaseAuth.instance.currentUser;
@@ -30,15 +29,12 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
   void _openLogin() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const LoginPage(),
-      ),
+      MaterialPageRoute(builder: (_) => const LoginPage()),
     );
   }
 
   void _openPostVideo() {
     final user = currentUser;
-
     if (user == null) {
       _openLogin();
       return;
@@ -46,18 +42,14 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
 
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const AddSellerVideoPage(),
-      ),
+      MaterialPageRoute(builder: (_) => const AddSellerVideoPage()),
     );
   }
 
   void _openWatchEarn() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const WatchEarnPage(),
-      ),
+      MaterialPageRoute(builder: (_) => const WatchEarnPage()),
     );
   }
 
@@ -70,9 +62,7 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
       case 1:
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (_) => const CategoriesPage(),
-          ),
+          MaterialPageRoute(builder: (_) => const CategoriesPage()),
         );
         break;
 
@@ -83,9 +73,7 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
       case 3:
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (_) => const CartPage(),
-          ),
+          MaterialPageRoute(builder: (_) => const CartPage()),
         );
         break;
 
@@ -98,9 +86,7 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => UserProfilePage(
-                userId: user.uid,
-              ),
+              builder: (_) => UserProfilePage(userId: user.uid),
             ),
           );
         }
@@ -154,22 +140,16 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
               .snapshots(),
           builder: (context, snapshot) {
             if (snapshot.hasError) {
-              return _buildErrorState(
-                snapshot.error.toString(),
-              );
+              return _buildErrorState(snapshot.error.toString());
             }
 
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                ),
+                child: CircularProgressIndicator(color: Colors.white),
               );
             }
 
-            final docs = _sortVideos(
-              snapshot.data?.docs ?? [],
-            );
+            final docs = _sortVideos(snapshot.data?.docs ?? []);
 
             if (docs.isEmpty) {
               return _buildEmptyState();
@@ -197,25 +177,26 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
                     );
                   },
                 ),
+
                 Positioned(
                   top: 12,
                   left: 12,
                   child: _watchEarnCircleButton(),
                 ),
+
                 Positioned(
                   top: 12,
                   right: 12,
                   child: _topButton(
                     icon: Icons.close,
-                    onTap: () {
-                      Navigator.pop(context);
-                    },
+                    onTap: () => Navigator.pop(context),
                   ),
                 ),
+
                 Positioned(
                   left: 0,
                   right: 0,
-                  bottom: MediaQuery.of(context).viewPadding.bottom + 2,
+                  bottom: MediaQuery.of(context).viewPadding.bottom,
                   child: _buildVideoBottomNavigation(),
                 ),
               ],
@@ -268,15 +249,13 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
           right: 12,
           child: _topButton(
             icon: Icons.close,
-            onTap: () {
-              Navigator.pop(context);
-            },
+            onTap: () => Navigator.pop(context),
           ),
         ),
         Positioned(
           left: 0,
           right: 0,
-          bottom: MediaQuery.of(context).viewPadding.bottom + 2,
+          bottom: MediaQuery.of(context).viewPadding.bottom,
           child: _buildVideoBottomNavigation(),
         ),
       ],
@@ -331,15 +310,13 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
           right: 12,
           child: _topButton(
             icon: Icons.close,
-            onTap: () {
-              Navigator.pop(context);
-            },
+            onTap: () => Navigator.pop(context),
           ),
         ),
         Positioned(
           left: 0,
           right: 0,
-          bottom: MediaQuery.of(context).viewPadding.bottom + 2,
+          bottom: MediaQuery.of(context).viewPadding.bottom,
           child: _buildVideoBottomNavigation(),
         ),
       ],
@@ -348,20 +325,9 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
 
   Widget _buildVideoBottomNavigation() {
     return Container(
-      height: 68,
-      margin: const EdgeInsets.symmetric(horizontal: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(0),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.20),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
+      height: 108,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      color: Colors.white,
       child: Row(
         children: [
           Expanded(
@@ -378,12 +344,11 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
               icon: Icons.grid_view_outlined,
               activeIcon: Icons.grid_view,
               label: 'Categories',
-              active: false,
               onTap: () => _onBottomNavigationTap(1),
             ),
           ),
           SizedBox(
-            width: 64,
+            width: 72,
             child: Center(
               child: _coloredPlusButton(),
             ),
@@ -393,7 +358,6 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
               icon: Icons.shopping_cart_outlined,
               activeIcon: Icons.shopping_cart,
               label: 'Cart',
-              active: false,
               onTap: () => _onBottomNavigationTap(3),
             ),
           ),
@@ -402,7 +366,6 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
               icon: Icons.person_outline,
               activeIcon: Icons.person,
               label: 'Profile',
-              active: false,
               onTap: () => _onBottomNavigationTap(4),
             ),
           ),
@@ -415,35 +378,30 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
     required IconData icon,
     required IconData activeIcon,
     required String label,
-    required bool active,
     required VoidCallback onTap,
+    bool active = false,
   }) {
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: SizedBox(
-        height: 68,
+        height: 108,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               active ? activeIcon : icon,
-              color: active
-                  ? Colors.redAccent
-                  : Colors.black54,
-              size: 23,
+              color: active ? const Color(0xFFFF5252) : Colors.grey,
+              size: 30,
             ),
-            const SizedBox(height: 3),
+            const SizedBox(height: 5),
             Text(
               label,
               style: TextStyle(
-                color: active
-                    ? Colors.redAccent
-                    : Colors.black54,
-                fontSize: 10,
-                fontWeight: active
-                    ? FontWeight.w600
-                    : FontWeight.w500,
+                color: active ? const Color(0xFFFF5252) : Colors.grey,
+                fontSize: 14,
+                fontWeight:
+                    active ? FontWeight.w600 : FontWeight.w500,
               ),
             ),
           ],
@@ -456,10 +414,10 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
     return GestureDetector(
       onTap: _openPostVideo,
       child: Container(
-        width: 50,
-        height: 40,
+        width: 92,
+        height: 58,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(16),
           gradient: const LinearGradient(
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
@@ -471,27 +429,27 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.cyanAccent.withValues(alpha: 0.22),
-              blurRadius: 7,
+              color: Colors.cyanAccent.withValues(alpha: 0.30),
+              blurRadius: 9,
               spreadRadius: 1,
             ),
             BoxShadow(
-              color: Colors.pinkAccent.withValues(alpha: 0.18),
-              blurRadius: 7,
+              color: Colors.pinkAccent.withValues(alpha: 0.25),
+              blurRadius: 9,
               spreadRadius: 1,
             ),
           ],
         ),
-        padding: const EdgeInsets.all(2),
+        padding: const EdgeInsets.all(3),
         child: Container(
           decoration: BoxDecoration(
             color: Colors.black,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(13),
           ),
           child: const Icon(
             Icons.add,
             color: Colors.white,
-            size: 28,
+            size: 38,
           ),
         ),
       ),
@@ -670,10 +628,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
     return null;
   }
 
-  int _readCounter(
-    String newKey,
-    String oldKey,
-  ) {
+  int _readCounter(String newKey, String oldKey) {
     final newValue = widget.data[newKey];
 
     if (newValue is num) {
@@ -1025,9 +980,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
           .collection('sellerVideos')
           .doc(widget.videoId);
 
-      final likeRef = videoRef
-          .collection('likes')
-          .doc(user.uid);
+      final likeRef = videoRef.collection('likes').doc(user.uid);
 
       await FirebaseFirestore.instance.runTransaction(
         (transaction) async {
@@ -1106,12 +1059,10 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
           .collection('sellerVideos')
           .doc(widget.videoId);
 
-      final viewId = user?.uid ??
-          'guest_${DateTime.now().millisecondsSinceEpoch}';
+      final viewId =
+          user?.uid ?? 'guest_${DateTime.now().millisecondsSinceEpoch}';
 
-      final viewRef = videoRef
-          .collection('views')
-          .doc(viewId);
+      final viewRef = videoRef.collection('views').doc(viewId);
 
       final viewSnapshot = await viewRef.get();
 
@@ -1221,8 +1172,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
 
       if (data['commentCount'] is num) {
         setState(() {
-          _commentCount =
-              (data['commentCount'] as num).toInt();
+          _commentCount = (data['commentCount'] as num).toInt();
         });
       }
     } catch (_) {}
@@ -1254,9 +1204,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
 
     await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const CartPage(),
-      ),
+      MaterialPageRoute(builder: (_) => const CartPage()),
     );
   }
 
@@ -1266,9 +1214,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-      ),
+      SnackBar(content: Text(message)),
     );
   }
 
@@ -1288,6 +1234,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
         fit: StackFit.expand,
         children: [
           _buildVideo(),
+
           Positioned(
             left: 0,
             right: 0,
@@ -1309,11 +1256,13 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
               ),
             ),
           ),
+
           Positioned(
             top: 68,
             left: 15,
             child: _buildRewardButton(),
           ),
+
           Positioned(
             right: 12,
             bottom: 150,
@@ -1349,6 +1298,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
               ],
             ),
           ),
+
           Positioned(
             left: 15,
             right: 75,
@@ -1363,9 +1313,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
   Widget _buildVideo() {
     if (_isLoadingVideo) {
       return const Center(
-        child: CircularProgressIndicator(
-          color: Colors.white,
-        ),
+        child: CircularProgressIndicator(color: Colors.white),
       );
     }
 
@@ -1439,16 +1387,12 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
           GestureDetector(
             onTap: _openProduct,
             child: Container(
-              constraints: const BoxConstraints(
-                maxWidth: 310,
-              ),
+              constraints: const BoxConstraints(maxWidth: 310),
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Colors.white24,
-                ),
+                border: Border.all(color: Colors.white24),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -1457,8 +1401,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
                   const SizedBox(width: 9),
                   Flexible(
                     child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           _productName.isEmpty
@@ -1474,8 +1417,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
                         ),
                         if (_productPrice != null)
                           Padding(
-                            padding:
-                                const EdgeInsets.only(top: 3),
+                            padding: const EdgeInsets.only(top: 3),
                             child: Text(
                               '৳${_productPrice!.toStringAsFixed(0)}',
                               style: const TextStyle(
@@ -1517,9 +1459,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
     return CircleAvatar(
       radius: 22,
       backgroundColor: Colors.white24,
-      backgroundImage: NetworkImage(
-        _sellerProfileImageUrl,
-      ),
+      backgroundImage: NetworkImage(_sellerProfileImageUrl),
     );
   }
 
@@ -1576,9 +1516,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.65),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: Colors.white24,
-          ),
+          border: Border.all(color: Colors.white24),
         ),
         child: const Row(
           mainAxisSize: MainAxisSize.min,
@@ -1657,9 +1595,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.white24,
-        ),
+        border: Border.all(color: Colors.white24),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1777,8 +1713,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
       final userData = userDoc.data() ?? {};
 
       final name =
-          (userData['name'] ?? user.displayName ?? 'User')
-              .toString();
+          (userData['name'] ?? user.displayName ?? 'User').toString();
 
       final profileImageUrl =
           (userData['profileImageUrl'] ?? '').toString();
@@ -1787,13 +1722,11 @@ class _CommentsSheetState extends State<_CommentsSheet> {
           .collection('sellerVideos')
           .doc(widget.videoId);
 
-      final commentRef =
-          videoRef.collection('comments').doc();
+      final commentRef = videoRef.collection('comments').doc();
 
       await FirebaseFirestore.instance.runTransaction(
         (transaction) async {
-          final videoSnapshot =
-              await transaction.get(videoRef);
+          final videoSnapshot = await transaction.get(videoRef);
 
           if (!videoSnapshot.exists) {
             throw Exception('Video not found');
@@ -1804,11 +1737,9 @@ class _CommentsSheetState extends State<_CommentsSheet> {
           int count = 0;
 
           if (data['commentCount'] is num) {
-            count =
-                (data['commentCount'] as num).toInt();
+            count = (data['commentCount'] as num).toInt();
           } else if (data['commentsCount'] is num) {
-            count =
-                (data['commentsCount'] as num).toInt();
+            count = (data['commentsCount'] as num).toInt();
           }
 
           transaction.set(commentRef, {
@@ -1852,9 +1783,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-      ),
+      SnackBar(content: Text(message)),
     );
   }
 
@@ -1876,8 +1805,10 @@ class _CommentsSheetState extends State<_CommentsSheet> {
             Container(
               width: 45,
               height: 5,
-              margin:
-                  const EdgeInsets.only(top: 10, bottom: 12),
+              margin: const EdgeInsets.only(
+                top: 10,
+                bottom: 12,
+              ),
               decoration: BoxDecoration(
                 color: Colors.white30,
                 borderRadius: BorderRadius.circular(10),
@@ -1944,19 +1875,16 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                       final data = docs[index].data();
 
                       final name =
-                          (data['userName'] ?? 'User')
-                              .toString();
+                          (data['userName'] ?? 'User').toString();
 
                       final text =
                           (data['text'] ?? '').toString();
 
                       final imageUrl =
-                          (data['profileImageUrl'] ?? '')
-                              .toString();
+                          (data['profileImageUrl'] ?? '').toString();
 
                       return Padding(
-                        padding:
-                            const EdgeInsets.symmetric(
+                        padding: const EdgeInsets.symmetric(
                           horizontal: 14,
                           vertical: 8,
                         ),
@@ -1968,8 +1896,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                             const SizedBox(width: 10),
                             Expanded(
                               child: Container(
-                                padding:
-                                    const EdgeInsets.all(10),
+                                padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
                                   color: Colors.white10,
                                   borderRadius:
@@ -1981,19 +1908,16 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                                   children: [
                                     Text(
                                       name,
-                                      style:
-                                          const TextStyle(
+                                      style: const TextStyle(
                                         color: Colors.white,
-                                        fontWeight:
-                                            FontWeight.bold,
+                                        fontWeight: FontWeight.bold,
                                         fontSize: 13,
                                       ),
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
                                       text,
-                                      style:
-                                          const TextStyle(
+                                      style: const TextStyle(
                                         color: Colors.white70,
                                         fontSize: 13,
                                       ),
@@ -2029,8 +1953,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: Colors.white10,
-                      borderRadius:
-                          BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(14),
                     ),
                     child: const Center(
                       child: Text(
@@ -2095,8 +2018,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                         child: _sending
                             ? const Padding(
                                 padding: EdgeInsets.all(12),
-                                child:
-                                    CircularProgressIndicator(
+                                child: CircularProgressIndicator(
                                   strokeWidth: 2,
                                   color: Colors.black,
                                 ),
