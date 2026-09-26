@@ -197,13 +197,11 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
                     );
                   },
                 ),
-
                 Positioned(
                   top: 12,
                   left: 12,
                   child: _watchEarnCircleButton(),
                 ),
-
                 Positioned(
                   top: 12,
                   right: 12,
@@ -214,11 +212,10 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
                     },
                   ),
                 ),
-
                 Positioned(
                   left: 0,
                   right: 0,
-                  bottom: 0,
+                  bottom: MediaQuery.of(context).viewPadding.bottom + 2,
                   child: _buildVideoBottomNavigation(),
                 ),
               ],
@@ -279,7 +276,7 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
         Positioned(
           left: 0,
           right: 0,
-          bottom: 0,
+          bottom: MediaQuery.of(context).viewPadding.bottom + 2,
           child: _buildVideoBottomNavigation(),
         ),
       ],
@@ -342,7 +339,7 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
         Positioned(
           left: 0,
           right: 0,
-          bottom: 0,
+          bottom: MediaQuery.of(context).viewPadding.bottom + 2,
           child: _buildVideoBottomNavigation(),
         ),
       ],
@@ -351,18 +348,19 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
 
   Widget _buildVideoBottomNavigation() {
     return Container(
-      height: 78,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
+      height: 68,
+      margin: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 2),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.black.withValues(alpha: 0.0),
-            Colors.black.withValues(alpha: 0.72),
-            Colors.black.withValues(alpha: 0.94),
-          ],
-        ),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(0),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.20),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -371,6 +369,7 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
               icon: Icons.home_outlined,
               activeIcon: Icons.home,
               label: 'Home',
+              active: true,
               onTap: () => _onBottomNavigationTap(0),
             ),
           ),
@@ -379,11 +378,12 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
               icon: Icons.grid_view_outlined,
               activeIcon: Icons.grid_view,
               label: 'Categories',
+              active: false,
               onTap: () => _onBottomNavigationTap(1),
             ),
           ),
           SizedBox(
-            width: 72,
+            width: 64,
             child: Center(
               child: _coloredPlusButton(),
             ),
@@ -393,6 +393,7 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
               icon: Icons.shopping_cart_outlined,
               activeIcon: Icons.shopping_cart,
               label: 'Cart',
+              active: false,
               onTap: () => _onBottomNavigationTap(3),
             ),
           ),
@@ -401,6 +402,7 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
               icon: Icons.person_outline,
               activeIcon: Icons.person,
               label: 'Profile',
+              active: false,
               onTap: () => _onBottomNavigationTap(4),
             ),
           ),
@@ -413,31 +415,37 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
     required IconData icon,
     required IconData activeIcon,
     required String label,
+    required bool active,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: SizedBox(
-        height: 70,
+        height: 68,
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.end,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              icon,
-              color: Colors.white,
-              size: 24,
+              active ? activeIcon : icon,
+              color: active
+                  ? Colors.redAccent
+                  : Colors.black54,
+              size: 23,
             ),
             const SizedBox(height: 3),
             Text(
               label,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: active
+                    ? Colors.redAccent
+                    : Colors.black54,
                 fontSize: 10,
-                fontWeight: FontWeight.w500,
+                fontWeight: active
+                    ? FontWeight.w600
+                    : FontWeight.w500,
               ),
             ),
-            const SizedBox(height: 8),
           ],
         ),
       ),
@@ -448,10 +456,10 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
     return GestureDetector(
       onTap: _openPostVideo,
       child: Container(
-        width: 52,
-        height: 42,
+        width: 50,
+        height: 40,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(11),
+          borderRadius: BorderRadius.circular(10),
           gradient: const LinearGradient(
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
@@ -463,13 +471,13 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.cyanAccent.withValues(alpha: 0.25),
-              blurRadius: 8,
+              color: Colors.cyanAccent.withValues(alpha: 0.22),
+              blurRadius: 7,
               spreadRadius: 1,
             ),
             BoxShadow(
-              color: Colors.pinkAccent.withValues(alpha: 0.20),
-              blurRadius: 8,
+              color: Colors.pinkAccent.withValues(alpha: 0.18),
+              blurRadius: 7,
               spreadRadius: 1,
             ),
           ],
@@ -478,12 +486,12 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
         child: Container(
           decoration: BoxDecoration(
             color: Colors.black,
-            borderRadius: BorderRadius.circular(9),
+            borderRadius: BorderRadius.circular(8),
           ),
           child: const Icon(
             Icons.add,
             color: Colors.white,
-            size: 30,
+            size: 28,
           ),
         ),
       ),
@@ -1280,7 +1288,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
         fit: StackFit.expand,
         children: [
           _buildVideo(),
-
           Positioned(
             left: 0,
             right: 0,
@@ -1302,13 +1309,11 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
               ),
             ),
           ),
-
           Positioned(
             top: 68,
             left: 15,
             child: _buildRewardButton(),
           ),
-
           Positioned(
             right: 12,
             bottom: 150,
@@ -1344,7 +1349,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
               ],
             ),
           ),
-
           Positioned(
             left: 15,
             right: 75,
@@ -1418,7 +1422,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
             ],
           ),
         ),
-
         if (_caption.isNotEmpty) ...[
           const SizedBox(height: 10),
           Text(
@@ -1431,7 +1434,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
             ),
           ),
         ],
-
         if (_productId.isNotEmpty || _productName.isNotEmpty) ...[
           const SizedBox(height: 12),
           GestureDetector(
