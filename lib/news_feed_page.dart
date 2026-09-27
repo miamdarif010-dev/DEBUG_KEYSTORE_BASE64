@@ -25,6 +25,11 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
 
   int _currentPage = 0;
 
+  // Tracks which video the user is actually watching, by document id,
+  // so we can keep them on the same video even if a new video gets
+  // inserted above it in the sorted list.
+  String? _currentVideoId;
+
   User? get currentUser => FirebaseAuth.instance.currentUser;
 
   void _openLogin() {
@@ -135,6 +140,58 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
     return sorted;
   }
 
+  // Keeps the PageView pointed at the same video the user was watching,
+  // even when the underlying (sorted) list changes order because a new
+  // video was inserted above it. Without this, the PageController stays
+  // on the same *index*, so a newly inserted video at index 0 silently
+  // replaces whatever the user was currently watching.
+  void _syncPageWithCurrentVideo(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) {
+    if (docs.isEmpty) {
+      _currentVideoId = null;
+      return;
+    }
+
+    // First time we get data: just remember what's on screen.
+    if (_currentVideoId == null) {
+      final initialIndex = _currentPage.clamp(0, docs.length - 1);
+      _currentVideoId = docs[initialIndex].id;
+      if (initialIndex != _currentPage) {
+        _currentPage = initialIndex;
+      }
+      return;
+    }
+
+    final newIndex = docs.indexWhere((doc) => doc.id == _currentVideoId);
+
+    if (newIndex == -1) {
+      // The video the user was watching is gone (deleted/unpublished).
+      // Fall back to clamping the current index into range.
+      final fallbackIndex = _currentPage.clamp(0, docs.length - 1);
+      _currentVideoId = docs[fallbackIndex].id;
+      if (fallbackIndex != _currentPage) {
+        _currentPage = fallbackIndex;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_pageController.hasClients) {
+            _pageController.jumpToPage(fallbackIndex);
+          }
+        });
+      }
+      return;
+    }
+
+    if (newIndex != _currentPage) {
+      _currentPage = newIndex;
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_pageController.hasClients) {
+          _pageController.jumpToPage(newIndex);
+        }
+      });
+    }
+  }
+
   @override
   void dispose() {
     _pageController.dispose();
@@ -172,8 +229,11 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
             );
 
             if (docs.isEmpty) {
+              _currentVideoId = null;
               return _buildEmptyState();
             }
+
+            _syncPageWithCurrentVideo(docs);
 
             return Stack(
               children: [
@@ -184,6 +244,7 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
                   onPageChanged: (index) {
                     setState(() {
                       _currentPage = index;
+                      _currentVideoId = docs[index].id;
                     });
                   },
                   itemBuilder: (context, index) {
@@ -350,7 +411,9 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
   }
 
   Widget _buildVideoBottomNavigation() {
-    return Container(
+    return SafeArea(
+      top: false,
+      child: Container(
       height: 78,
       padding: const EdgeInsets.symmetric(horizontal: 6),
       decoration: BoxDecoration(
@@ -405,6 +468,7 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
