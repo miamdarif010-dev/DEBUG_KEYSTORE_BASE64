@@ -92,9 +92,9 @@ class _MigrateSellerCodesPageState extends State<MigrateSellerCodesPage> {
     try {
       await _migrateSellers();
       await _migrateEntrepreneurs();
-      _addLog('âœ… Migration complete.');
+      _addLog('DONE: Migration complete.');
     } catch (e) {
-      _addLog('âŒ Migration failed: $e');
+      _addLog('ERROR: Migration failed: $e');
     }
 
     setState(() {
@@ -145,7 +145,7 @@ class _MigrateSellerCodesPageState extends State<MigrateSellerCodesPage> {
 
       if (existingCode.isNotEmpty &&
           _looksSequential(existingCode, 'SELL')) {
-        // Already migrated / already sequential â€” keep it, but make
+        // Already migrated / already sequential - keep it, but make
         // sure our running counter accounts for it.
         final num = int.tryParse(
               existingCode.replaceAll('SELL-', ''),
@@ -281,7 +281,7 @@ class _MigrateSellerCodesPageState extends State<MigrateSellerCodesPage> {
               child: const Text(
                 'One-time tool: converts old-style Seller/Entrepreneur '
                 'IDs to the new sequential format. Safe to run more '
-                'than once â€” already-migrated codes are skipped.',
+                'than once - already-migrated codes are skipped.',
               ),
             ),
             const SizedBox(height: 16),
