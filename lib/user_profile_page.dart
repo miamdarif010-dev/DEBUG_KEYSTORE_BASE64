@@ -41,6 +41,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
   String _entrepreneurStatus = '';
   String _role = '';
 
+  int _totalLikes = 0;
+  int _totalViews = 0;
+  int _totalShares = 0;
+  int _totalComments = 0;
+
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
       _userSub;
 
@@ -217,6 +222,16 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
 
+  int _readInt(Map<String, dynamic> map, String key) {
+    final value = map[key];
+
+    if (value is num) {
+      return value.toInt();
+    }
+
+    return 0;
+  }
+
   void _applyUserData(
     Map<String, dynamic>? data, {
     bool keepLoadingFalse = false,
@@ -269,8 +284,25 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
       _role = map['role']?.toString() ?? '';
 
+      _totalLikes = _readInt(map, 'totalLikes');
+      _totalViews = _readInt(map, 'totalViews');
+      _totalShares = _readInt(map, 'totalShares');
+      _totalComments = _readInt(map, 'totalComments');
+
       _isLoading = false;
     });
+  }
+
+  String _formatCount(int value) {
+    if (value >= 1000000) {
+      return '${(value / 1000000).toStringAsFixed(1)}M';
+    }
+
+    if (value >= 1000) {
+      return '${(value / 1000).toStringAsFixed(1)}K';
+    }
+
+    return value.toString();
   }
 
   void _push(Widget page) {
@@ -324,6 +356,85 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
     return NetworkImage(
       _profileImageUrl.trim(),
+    );
+  }
+
+  Widget _statItem({
+    required IconData icon,
+    required int value,
+    required String label,
+  }) {
+    return Expanded(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            color: Colors.redAccent,
+            size: 20,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _formatCount(value),
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              color: Colors.grey,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statsRow() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        vertical: 14,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          _statItem(
+            icon: Icons.visibility_outlined,
+            value: _totalViews,
+            label: 'Views',
+          ),
+          _statItem(
+            icon: Icons.favorite_border,
+            value: _totalLikes,
+            label: 'Likes',
+          ),
+          _statItem(
+            icon: Icons.comment_outlined,
+            value: _totalComments,
+            label: 'Comments',
+          ),
+          _statItem(
+            icon: Icons.share_outlined,
+            value: _totalShares,
+            label: 'Shares',
+          ),
+        ],
+      ),
     );
   }
 
@@ -593,6 +704,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     ),
                   ),
                   const SizedBox(height: 14),
+                  _statsRow(),
+                  const SizedBox(height: 14),
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
@@ -751,6 +864,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
                         ],
                       ),
                     ),
+                    const SizedBox(height: 14),
+                    _statsRow(),
                     const SizedBox(height: 14),
                     if (_isAdmin)
                       _sectionCard(
