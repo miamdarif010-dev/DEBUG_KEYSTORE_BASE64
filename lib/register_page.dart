@@ -57,7 +57,6 @@ class _RegisterPageState extends State<RegisterPage> {
 
   _PasswordStrength _passwordStrength = _PasswordStrength.empty;
 
-  XFile? _pickedImage;
   Uint8List? _pickedImageBytes;
   final ImagePicker _imagePicker = ImagePicker();
 
@@ -236,7 +235,6 @@ class _RegisterPageState extends State<RegisterPage> {
       if (!mounted) return;
 
       setState(() {
-        _pickedImage = image;
         _pickedImageBytes = bytes;
       });
     } catch (e) {
