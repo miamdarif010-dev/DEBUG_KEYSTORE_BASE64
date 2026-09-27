@@ -42,14 +42,64 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
     });
   }
 
-  String _generateSellerCode(String uid) {
-    final short = uid.length >= 6 ? uid.substring(0, 6) : uid;
-    return 'SELL-${short.toUpperCase()}';
+  // ============================================================
+  // SEQUENTIAL CODE GENERATION (FIXED)
+  // ============================================================
+  //
+  // Previously these two functions built the code from the first
+  // 6 characters of the Firebase UID (e.g. SELL-A1B2C3). That is
+  // not a counter at all â€” it never increments, so there was no
+  // way to tell how many sellers/entrepreneurs had been approved,
+  // and codes looked random instead of sequential.
+  //
+  // These now atomically increment a counter document inside a
+  // Firestore transaction, so codes come out as SELL-000001,
+  // SELL-000002, SELL-000003, ... and stay correct even if two
+  // approvals happen at the same time.
+
+  Future<String> _generateSequentialSellerCode() async {
+    final counterRef = _db.collection('counters').doc('sellerCounter');
+
+    return _db.runTransaction((transaction) async {
+      final snapshot = await transaction.get(counterRef);
+
+      final current =
+          (snapshot.data()?['value'] as num?)?.toInt() ?? 0;
+
+      final next = current + 1;
+
+      transaction.set(
+        counterRef,
+        {'value': next},
+        SetOptions(merge: true),
+      );
+
+      final padded = next.toString().padLeft(6, '0');
+      return 'SELL-$padded';
+    });
   }
 
-  String _generateEntrepreneurCode(String uid) {
-    final short = uid.length >= 6 ? uid.substring(0, 6) : uid;
-    return 'ENT-${short.toUpperCase()}';
+  Future<String> _generateSequentialEntrepreneurCode() async {
+    final counterRef =
+        _db.collection('counters').doc('entrepreneurCounter');
+
+    return _db.runTransaction((transaction) async {
+      final snapshot = await transaction.get(counterRef);
+
+      final current =
+          (snapshot.data()?['value'] as num?)?.toInt() ?? 0;
+
+      final next = current + 1;
+
+      transaction.set(
+        counterRef,
+        {'value': next},
+        SetOptions(merge: true),
+      );
+
+      final padded = next.toString().padLeft(6, '0');
+      return 'ENT-$padded';
+    });
   }
 
   // ============================================================
@@ -302,7 +352,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                       _adminMenuBox(
                         icon: Icons.sync_alt_outlined,
                         title: 'Relationships',
-                        subtitle: 'Seller ↔ Reseller products',
+                        subtitle: 'Seller â†” Reseller products',
                         onTap: () {
                           _openSection(
                             title: 'Relationships',
@@ -1009,7 +1059,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           children: [
             _summaryRow(
               'Cash Balance',
-              '৳${cash.toStringAsFixed(2)}',
+              'à§³${cash.toStringAsFixed(2)}',
             ),
             _summaryRow(
               'Points',
@@ -1090,10 +1140,10 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                                   .remove_circle_outline,
                         ),
                         title: Text(
-                          '৳${amount.toStringAsFixed(2)}',
+                          'à§³${amount.toStringAsFixed(2)}',
                         ),
                         subtitle: Text(
-                          '${tx['source'] ?? 'Transaction'} • $status',
+                          '${tx['source'] ?? 'Transaction'} â€¢ $status',
                         ),
                       );
                     },
@@ -1182,8 +1232,8 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                     .toString(),
               ),
               subtitle: Text(
-                'Supplier: ৳${_toDouble(data['supplierPrice']).toStringAsFixed(2)} • '
-                'Selling: ৳${_toDouble(data['sellingPrice']).toStringAsFixed(2)}',
+                'Supplier: à§³${_toDouble(data['supplierPrice']).toStringAsFixed(2)} â€¢ '
+                'Selling: à§³${_toDouble(data['sellingPrice']).toStringAsFixed(2)}',
               ),
             );
           },
@@ -1306,7 +1356,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                 'Order ${filtered[index].id}',
               ),
               subtitle: Text(
-                '৳${_toDouble(data['totalAmount'] ?? data['total']).toStringAsFixed(2)} • '
+                'à§³${_toDouble(data['totalAmount'] ?? data['total']).toStringAsFixed(2)} â€¢ '
                 '${data['status'] ?? 'Pending'}',
               ),
             );
@@ -1637,8 +1687,21 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
       };
 
       if (status == 'approved') {
-        updates['sellerCode'] =
-            _generateSellerCode(uid);
+        // Only assign a brand-new sequential code if this user
+        // doesn't already have one (e.g. they were rejected and
+        // re-approved later) â€” this avoids burning a new counter
+        // slot every time someone is re-approved.
+        final existingSnapshot =
+            await _db.collection('users').doc(uid).get();
+
+        final existingCode =
+            (existingSnapshot.data()?['sellerCode'] ?? '')
+                .toString();
+
+        updates['sellerCode'] = existingCode.isNotEmpty
+            ? existingCode
+            : await _generateSequentialSellerCode();
+
         updates['sellerApprovedAt'] =
             FieldValue.serverTimestamp();
       }
@@ -1730,8 +1793,17 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
       };
 
       if (status == 'approved') {
-        updates['entrepreneurCode'] =
-            _generateEntrepreneurCode(uid);
+        // Same re-approval safeguard as sellers above.
+        final existingSnapshot =
+            await _db.collection('users').doc(uid).get();
+
+        final existingCode =
+            (existingSnapshot.data()?['entrepreneurCode'] ?? '')
+                .toString();
+
+        updates['entrepreneurCode'] = existingCode.isNotEmpty
+            ? existingCode
+            : await _generateSequentialEntrepreneurCode();
 
         updates['entrepreneurApprovedAt'] =
             FieldValue.serverTimestamp();
@@ -1793,7 +1865,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         if (docs.isEmpty) {
           return const Center(
             child: Text(
-              'No Seller ↔ Reseller relationships found.',
+              'No Seller â†” Reseller relationships found.',
             ),
           );
         }
@@ -1838,15 +1910,15 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                     ),
                     _summaryRow(
                       'Supplier Price',
-                      '৳${_toDouble(data['supplierPrice']).toStringAsFixed(2)}',
+                      'à§³${_toDouble(data['supplierPrice']).toStringAsFixed(2)}',
                     ),
                     _summaryRow(
                       'Selling Price',
-                      '৳${_toDouble(data['sellingPrice']).toStringAsFixed(2)}',
+                      'à§³${_toDouble(data['sellingPrice']).toStringAsFixed(2)}',
                     ),
                     _summaryRow(
                       'Profit',
-                      '৳${(_toDouble(data['sellingPrice']) - _toDouble(data['supplierPrice'])).toStringAsFixed(2)}',
+                      'à§³${(_toDouble(data['sellingPrice']) - _toDouble(data['supplierPrice'])).toStringAsFixed(2)}',
                     ),
                   ],
                 ),
@@ -1925,7 +1997,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                   ),
                 ),
                 subtitle: Text(
-                  '৳${_toDouble(data['price']).toStringAsFixed(2)} • '
+                  'à§³${_toDouble(data['price']).toStringAsFixed(2)} â€¢ '
                   '${data['category'] ?? 'No Category'}',
                 ),
                 trailing: IconButton(
@@ -2073,7 +2145,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                     const SizedBox(height: 8),
                     _summaryRow(
                       'Total',
-                      '৳${total.toStringAsFixed(2)}',
+                      'à§³${total.toStringAsFixed(2)}',
                     ),
                     _summaryRow(
                       'Order Status',
@@ -2390,7 +2462,7 @@ class _AdminSectionPage extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  '🔔 $count $notificationLabel',
+                  'ðŸ”” $count $notificationLabel',
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
