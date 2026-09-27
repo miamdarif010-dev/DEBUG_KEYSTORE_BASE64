@@ -1021,6 +1021,14 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
           .collection('likes')
           .doc(user.uid);
 
+      final sellerId = _sellerId;
+
+      final sellerRef = sellerId.isEmpty
+          ? null
+          : FirebaseFirestore.instance
+              .collection('users')
+              .doc(sellerId);
+
       await FirebaseFirestore.instance.runTransaction(
         (transaction) async {
           final likeSnapshot = await transaction.get(likeRef);
@@ -1036,12 +1044,16 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
             count = (data['likesCount'] as num).toInt();
           }
 
+          bool isLiking = true;
+
           if (likeSnapshot.exists) {
             transaction.delete(likeRef);
 
             if (count > 0) {
               count--;
             }
+
+            isLiking = false;
           } else {
             transaction.set(likeRef, {
               'userId': user.uid,
@@ -1055,6 +1067,19 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
             'likeCount': count,
             'updatedAt': FieldValue.serverTimestamp(),
           });
+
+          if (sellerRef != null) {
+            transaction.set(
+              sellerRef,
+              {
+                'totalLikes': FieldValue.increment(
+                  isLiking ? 1 : -1,
+                ),
+                'updatedAt': FieldValue.serverTimestamp(),
+              },
+              SetOptions(merge: true),
+            );
+          }
         },
       );
 
@@ -1111,6 +1136,14 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
         return;
       }
 
+      final sellerId = _sellerId;
+
+      final sellerRef = sellerId.isEmpty
+          ? null
+          : FirebaseFirestore.instance
+              .collection('users')
+              .doc(sellerId);
+
       await FirebaseFirestore.instance.runTransaction(
         (transaction) async {
           final videoSnapshot = await transaction.get(videoRef);
@@ -1138,6 +1171,17 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
             'viewCount': count + 1,
             'updatedAt': FieldValue.serverTimestamp(),
           });
+
+          if (sellerRef != null) {
+            transaction.set(
+              sellerRef,
+              {
+                'totalViews': FieldValue.increment(1),
+                'updatedAt': FieldValue.serverTimestamp(),
+              },
+              SetOptions(merge: true),
+            );
+          }
         },
       );
 
@@ -1167,6 +1211,21 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
+      final sellerId = _sellerId;
+
+      if (sellerId.isNotEmpty) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(sellerId)
+            .set(
+          {
+            'totalShares': FieldValue.increment(1),
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+      }
+
       if (mounted) {
         setState(() {
           _shareCount++;
@@ -1190,6 +1249,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
       builder: (_) {
         return _CommentsSheet(
           videoId: widget.videoId,
+          sellerId: _sellerId,
           currentUser: user,
         );
       },
@@ -1731,10 +1791,12 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
 
 class _CommentsSheet extends StatefulWidget {
   final String videoId;
+  final String sellerId;
   final User? currentUser;
 
   const _CommentsSheet({
     required this.videoId,
+    required this.sellerId,
     required this.currentUser,
   });
 
@@ -1788,6 +1850,14 @@ class _CommentsSheetState extends State<_CommentsSheet> {
       final commentRef =
           videoRef.collection('comments').doc();
 
+      final sellerId = widget.sellerId;
+
+      final sellerRef = sellerId.isEmpty
+          ? null
+          : FirebaseFirestore.instance
+              .collection('users')
+              .doc(sellerId);
+
       await FirebaseFirestore.instance.runTransaction(
         (transaction) async {
           final videoSnapshot =
@@ -1823,6 +1893,17 @@ class _CommentsSheetState extends State<_CommentsSheet> {
             'commentCount': count + 1,
             'updatedAt': FieldValue.serverTimestamp(),
           });
+
+          if (sellerRef != null) {
+            transaction.set(
+              sellerRef,
+              {
+                'totalComments': FieldValue.increment(1),
+                'updatedAt': FieldValue.serverTimestamp(),
+              },
+              SetOptions(merge: true),
+            );
+          }
         },
       );
 
