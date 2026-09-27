@@ -35,6 +35,15 @@ class _LoginPageState extends State<LoginPage> {
   bool _isResendingVerification = false;
   bool _obscurePassword = true;
 
+  // Reused across calls instead of creating a new instance on every tap.
+  // signOut() is still called before signIn() below so the account picker
+  // always appears, letting the person switch Google accounts if needed.
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: <String>[
+      'email',
+    ],
+  );
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -87,6 +96,12 @@ class _LoginPageState extends State<LoginPage> {
         await FirebaseAuth.instance.signOut();
 
         if (!mounted) return;
+
+        // Stop the button spinner before the modal dialog goes up â€” it was
+        // still spinning underneath the dialog for no reason otherwise.
+        setState(() {
+          _isLoading = false;
+        });
 
         await _showVerificationDialog(email);
         return;
@@ -143,15 +158,9 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
-      final googleSignIn = GoogleSignIn(
-        scopes: <String>[
-          'email',
-        ],
-      );
+      await _googleSignIn.signOut();
 
-      await googleSignIn.signOut();
-
-      final googleUser = await googleSignIn.signIn();
+      final googleUser = await _googleSignIn.signIn();
 
       if (googleUser == null) {
         return;
@@ -238,13 +247,10 @@ class _LoginPageState extends State<LoginPage> {
 
       _showMessage(errorMessage);
     } catch (e) {
-      // TEMPORARY DEBUG LOGGING â€” remove once Google Sign-In is confirmed
-      // working. This prints the real underlying error (e.g. a
-      // PlatformException with a code like "sign_in_failed" or
-      // "ApiException: 10") to the debug console / logcat instead of
-      // hiding it behind a generic message.
+      // Logged for developers only; the person just sees a plain, friendly
+      // message instead of an internal exception string.
       debugPrint('Google Sign-In error: $e');
-      _showMessage('Google Sign-In was cancelled or failed. ($e)');
+      _showMessage('Google Sign-In was cancelled or failed.');
     } finally {
       if (mounted) {
         setState(() {
@@ -364,6 +370,7 @@ class _LoginPageState extends State<LoginPage> {
 
       _showMessage(errorMessage);
     } catch (e) {
+      debugPrint('Facebook Sign-In error: $e');
       _showMessage('Facebook Sign-In was cancelled or failed.');
     } finally {
       if (mounted) {
