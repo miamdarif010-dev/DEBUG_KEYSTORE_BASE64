@@ -14,7 +14,7 @@
 // Everything else (firebase_auth, cloud_firestore, flutter) was already in use.
 
 import 'dart:async';
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -58,7 +58,13 @@ class _RegisterPageState extends State<RegisterPage> {
   _PasswordStrength _passwordStrength = _PasswordStrength.empty;
 
   XFile? _pickedImage;
+  Uint8List? _pickedImageBytes;
   final ImagePicker _imagePicker = ImagePicker();
+
+  // Reused across calls instead of creating a new instance every sign-in
+  // attempt; GoogleSignIn keeps internal session state that is best kept
+  // alive for the lifetime of this widget.
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   static final RegExp _emailRegExp = RegExp(
     r"^[a-zA-Z0-9.a-zA-Z0-9!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$",
@@ -223,8 +229,15 @@ class _RegisterPageState extends State<RegisterPage> {
 
       if (image == null) return;
 
+      // Read bytes up front (instead of relying on dart:io File) so the
+      // preview and the upload both work on mobile, desktop, and web.
+      final bytes = await image.readAsBytes();
+
+      if (!mounted) return;
+
       setState(() {
         _pickedImage = image;
+        _pickedImageBytes = bytes;
       });
     } catch (e) {
       _showMessage('Unable to pick an image. Please try again.');
@@ -232,12 +245,19 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   Future<String?> _uploadProfileImage(String uid) async {
-    if (_pickedImage == null) return null;
+    final bytes = _pickedImageBytes;
+
+    if (bytes == null) return null;
 
     try {
       final ref =
           FirebaseStorage.instance.ref().child('profile_images/$uid.jpg');
-      await ref.putFile(File(_pickedImage!.path));
+
+      await ref.putData(
+        bytes,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+
       return await ref.getDownloadURL();
     } catch (e) {
       // Non-fatal: registration should still succeed without a profile photo.
@@ -384,6 +404,15 @@ class _RegisterPageState extends State<RegisterPage> {
       if (!mounted) return;
 
       await FirebaseAuth.instance.signOut();
+
+      if (!mounted) return;
+
+      // Registration + verification is done and the user has been signed
+      // out on purpose (so they log in fresh with their new account).
+      // Without this, the person was left stranded on RegisterPage with
+      // no way back to Login.
+      _showSuccessMessage('Account created. Please login to continue.');
+      Navigator.of(context).pop();
     } on FirebaseAuthException catch (e) {
       String errorMessage = 'Unable to create your account.';
 
@@ -466,8 +495,7 @@ class _RegisterPageState extends State<RegisterPage> {
     });
 
     try {
-      final GoogleSignInAccount? googleUser =
-          await GoogleSignIn().signIn();
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
 
       if (googleUser == null) {
         // User cancelled the sign-in flow.
@@ -602,7 +630,6 @@ class _RegisterPageState extends State<RegisterPage> {
       MaterialPageRoute(
         builder: (context) => EmailVerificationPage(
           email: email,
-          password: _passwordController.text,
         ),
       ),
     );
@@ -655,10 +682,10 @@ class _RegisterPageState extends State<RegisterPage> {
                       CircleAvatar(
                         radius: 44,
                         backgroundColor: const Color(0xFFDCE8F8),
-                        backgroundImage: _pickedImage != null
-                            ? FileImage(File(_pickedImage!.path))
+                        backgroundImage: _pickedImageBytes != null
+                            ? MemoryImage(_pickedImageBytes!)
                             : null,
-                        child: _pickedImage == null
+                        child: _pickedImageBytes == null
                             ? const Icon(
                                 Icons.person_add_alt_1,
                                 size: 40,
@@ -1028,12 +1055,10 @@ class _RegisterPageState extends State<RegisterPage> {
 
 class EmailVerificationPage extends StatefulWidget {
   final String email;
-  final String password;
 
   const EmailVerificationPage({
     super.key,
     required this.email,
-    required this.password,
   });
 
   @override
