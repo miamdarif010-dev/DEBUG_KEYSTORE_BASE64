@@ -7,6 +7,12 @@
 // Facebook sign-in needs a Facebook App ID configured in
 // AndroidManifest.xml / Info.plist per the flutter_facebook_auth setup guide,
 // and Facebook must be enabled as a sign-in provider in the Firebase console.
+//
+// Email verification has been intentionally removed: logging in with a
+// correct email/password takes the person straight into HomePage, with no
+// "verify your email" gate. If you want it back later, check
+// `user.emailVerified` after sign-in and re-add a verification-required
+// dialog similar to what used to be here.
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -32,7 +38,6 @@ class _LoginPageState extends State<LoginPage> {
   bool _isGoogleLoading = false;
   bool _isFacebookLoading = false;
   bool _isResettingPassword = false;
-  bool _isResendingVerification = false;
   bool _obscurePassword = true;
 
   // Reused across calls instead of creating a new instance on every tap.
@@ -80,30 +85,6 @@ class _LoginPageState extends State<LoginPage> {
 
       if (user == null) {
         _showMessage('Unable to login. Please try again.');
-        return;
-      }
-
-      await user.reload();
-
-      final refreshedUser = FirebaseAuth.instance.currentUser;
-
-      if (refreshedUser == null) {
-        _showMessage('Unable to verify your account.');
-        return;
-      }
-
-      if (!refreshedUser.emailVerified) {
-        await FirebaseAuth.instance.signOut();
-
-        if (!mounted) return;
-
-        // Stop the button spinner before the modal dialog goes up â€” it was
-        // still spinning underneath the dialog for no reason otherwise.
-        setState(() {
-          _isLoading = false;
-        });
-
-        await _showVerificationDialog(email);
         return;
       }
 
@@ -248,7 +229,11 @@ class _LoginPageState extends State<LoginPage> {
       _showMessage(errorMessage);
     } catch (e) {
       // Logged for developers only; the person just sees a plain, friendly
-      // message instead of an internal exception string.
+      // message instead of an internal exception string. Check this line
+      // in `adb logcat` or your IDE's debug console when Google Sign-In
+      // fails, to see the real underlying error code (e.g. ApiException: 10
+      // usually means the app's SHA-1/SHA-256 fingerprint isn't registered
+      // in the Firebase console for the keystore this build was signed with).
       debugPrint('Google Sign-In error: $e');
       _showMessage('Google Sign-In was cancelled or failed.');
     } finally {
@@ -370,127 +355,15 @@ class _LoginPageState extends State<LoginPage> {
 
       _showMessage(errorMessage);
     } catch (e) {
+      // Logged for developers only. Check this in logcat/debug console â€”
+      // a common cause is the Facebook key hash for this build's keystore
+      // not being registered in the Facebook Developer Console.
       debugPrint('Facebook Sign-In error: $e');
       _showMessage('Facebook Sign-In was cancelled or failed.');
     } finally {
       if (mounted) {
         setState(() {
           _isFacebookLoading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _showVerificationDialog(String email) async {
-    if (!mounted) return;
-
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Email Verification Required'),
-          content: Text(
-            'Please verify your email address before logging in.\n\n'
-            'Verification email: $email',
-          ),
-          actions: [
-            TextButton(
-              onPressed: _isResendingVerification
-                  ? null
-                  : () {
-                      Navigator.of(dialogContext).pop();
-                    },
-              child: const Text('Close'),
-            ),
-            TextButton(
-              onPressed: _isResendingVerification
-                  ? null
-                  : () async {
-                      await _resendVerificationEmail(
-                        email,
-                        dialogContext,
-                      );
-                    },
-              child: _isResendingVerification
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : const Text('Resend Email'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _resendVerificationEmail(
-    String email,
-    BuildContext dialogContext,
-  ) async {
-    setState(() {
-      _isResendingVerification = true;
-    });
-
-    try {
-      final credential =
-          await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email,
-        password: _passwordController.text,
-      );
-
-      final user = credential.user;
-
-      if (user == null) {
-        throw FirebaseAuthException(
-          code: 'verification-failed',
-        );
-      }
-
-      await user.sendEmailVerification();
-
-      await FirebaseAuth.instance.signOut();
-
-      if (!mounted) return;
-
-      Navigator.of(dialogContext).pop();
-
-      _showMessage(
-        'A new verification email has been sent.',
-        isError: false,
-      );
-    } on FirebaseAuthException catch (e) {
-      String errorMessage = 'Unable to resend verification email.';
-
-      switch (e.code) {
-        case 'invalid-email':
-          errorMessage = 'Please enter a valid email address.';
-          break;
-        case 'wrong-password':
-          errorMessage = 'The password is incorrect.';
-          break;
-        case 'invalid-credential':
-          errorMessage = 'Invalid email or password.';
-          break;
-        case 'too-many-requests':
-          errorMessage = 'Too many requests. Please try again later.';
-          break;
-        case 'network-request-failed':
-          errorMessage = 'Network error. Please check your connection.';
-          break;
-      }
-
-      if (mounted) {
-        _showMessage(errorMessage);
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isResendingVerification = false;
         });
       }
     }
@@ -580,8 +453,7 @@ class _LoginPageState extends State<LoginPage> {
     final isBusy = _isLoading ||
         _isGoogleLoading ||
         _isFacebookLoading ||
-        _isResettingPassword ||
-        _isResendingVerification;
+        _isResettingPassword;
 
     return Scaffold(
       body: SafeArea(
