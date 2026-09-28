@@ -11,6 +11,7 @@ import 'seller_information_page.dart';
 import 'seller_stock_page.dart';
 import 'seller_views_page.dart';
 import 'seller_analytics_page.dart';
+import 'seller_code_helper.dart';
 
 class SellerPage extends StatelessWidget {
   const SellerPage({super.key});
@@ -449,6 +450,19 @@ class SellerPage extends StatelessWidget {
 
               final isApproved =
                   sellerStatus == 'approved';
+
+              // Approved seller without an ID: assign one
+              // automatically. The dashboard refreshes by itself
+              // once Firestore has the new sellerCode.
+              if (isApproved &&
+                  (userData['sellerCode'] ?? '')
+                      .toString()
+                      .isEmpty) {
+                WidgetsBinding.instance
+                    .addPostFrameCallback((_) {
+                  ensureSellerCode(user.uid);
+                });
+              }
 
               final statusColor =
                   _statusColor(sellerStatus);
