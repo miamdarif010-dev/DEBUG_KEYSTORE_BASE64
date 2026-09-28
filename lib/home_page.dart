@@ -19,7 +19,8 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage>
+    with SingleTickerProviderStateMixin {
   int _selectedIndex = 0;
   int _selectedCategory = 0;
 
@@ -27,6 +28,9 @@ class _HomePageState extends State<HomePage> {
       TextEditingController();
 
   String _searchQuery = '';
+
+  late AnimationController _couponAnimationController;
+  late Animation<double> _couponOpacity;
 
   final List<String> categories = [
     'All',
@@ -45,11 +49,36 @@ class _HomePageState extends State<HomePage> {
   ];
 
   // =========================================================
+  // INIT STATE
+  // =========================================================
+
+  @override
+  void initState() {
+    super.initState();
+
+    _couponAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat(reverse: true);
+
+    _couponOpacity = Tween<double>(
+      begin: 0.35,
+      end: 1.0,
+    ).animate(
+      CurvedAnimation(
+        parent: _couponAnimationController,
+        curve: Curves.easeInOut,
+      ),
+    );
+  }
+
+  // =========================================================
   // DISPOSE
   // =========================================================
 
   @override
   void dispose() {
+    _couponAnimationController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -97,13 +126,10 @@ class _HomePageState extends State<HomePage> {
             .trim()
             .toUpperCase();
 
-    // New products are already stored as BDT.
     if (currency == 'BDT') {
       return rawPrice;
     }
 
-    // Legacy products without currency are treated
-    // as the previous KRW-based products.
     return rawPrice * 0.09;
   }
 
@@ -254,6 +280,38 @@ class _HomePageState extends State<HomePage> {
   }
 
   // =========================================================
+  // OPEN CAMERA SEARCH
+  // =========================================================
+
+  void _openCameraSearch() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Camera search will be available soon.',
+        ),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 1),
+      ),
+    );
+  }
+
+  // =========================================================
+  // OPEN COUPON
+  // =========================================================
+
+  void _openCoupon() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Coupons will be available soon.',
+        ),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 1),
+      ),
+    );
+  }
+
+  // =========================================================
   // BOTTOM NAVIGATION
   // =========================================================
 
@@ -397,6 +455,87 @@ class _HomePageState extends State<HomePage> {
         ),
       );
     }
+  }
+
+  // =========================================================
+  // BUYNOVA BRAND
+  // =========================================================
+
+  Widget _buildBuyNovaLogo() {
+    return RichText(
+      text: const TextSpan(
+        style: TextStyle(
+          fontSize: 21,
+          fontWeight: FontWeight.w900,
+          letterSpacing: -0.4,
+        ),
+        children: [
+          TextSpan(
+            text: 'B',
+            style: TextStyle(
+              color: Colors.white,
+            ),
+          ),
+          TextSpan(
+            text: 'u',
+            style: TextStyle(
+              color: Colors.yellow,
+            ),
+          ),
+          TextSpan(
+            text: 'y',
+            style: TextStyle(
+              color: Colors.orange,
+            ),
+          ),
+          TextSpan(
+            text: 'N',
+            style: TextStyle(
+              color: Colors.greenAccent,
+            ),
+          ),
+          TextSpan(
+            text: 'o',
+            style: TextStyle(
+              color: Colors.lightBlueAccent,
+            ),
+          ),
+          TextSpan(
+            text: 'v',
+            style: TextStyle(
+              color: Colors.purpleAccent,
+            ),
+          ),
+          TextSpan(
+            text: 'a',
+            style: TextStyle(
+              color: Colors.pinkAccent,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =========================================================
+  // GET COUPON
+  // =========================================================
+
+  Widget _buildGetCoupon() {
+    return FadeTransition(
+      opacity: _couponOpacity,
+      child: GestureDetector(
+        onTap: _openCoupon,
+        child: const Text(
+          'Get Coupon',
+          style: TextStyle(
+            color: Colors.yellowAccent,
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
   }
 
   // =========================================================
@@ -639,21 +778,31 @@ class _HomePageState extends State<HomePage> {
               },
             ),
 
-            title: const Text(
-              'BuyNova',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight:
-                    FontWeight.bold,
-                fontSize: 20,
-              ),
+            titleSpacing: 0,
+
+            title: Row(
+              children: [
+                _buildBuyNovaLogo(),
+
+                const SizedBox(width: 10),
+
+                _buildGetCoupon(),
+              ],
             ),
 
-            actions: [
-              // =================================================
-              // GLOBAL NOTIFICATION
-              // =================================================
+            // =================================================
+            // IMPORTANT:
+            // TOP CART REMOVED.
+            //
+            // Notification is intentionally placed in the
+            // right-most position — the position previously
+            // occupied by the top Cart icon.
+            //
+            // The old Notification position is therefore not
+            // occupied by another icon.
+            // =================================================
 
+            actions: [
               if (user == null)
                 IconButton(
                   icon: const Icon(
@@ -785,106 +934,6 @@ class _HomePageState extends State<HomePage> {
                     );
                   },
                 ),
-
-              // =================================================
-              // CART
-              // =================================================
-
-              StreamBuilder<QuerySnapshot>(
-                stream: user == null
-                    ? null
-                    : FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(user.uid)
-                        .collection('cart')
-                        .snapshots(),
-
-                builder: (
-                  context,
-                  cartSnapshot,
-                ) {
-                  int cartCount = 0;
-
-                  for (final doc
-                      in cartSnapshot
-                              .data
-                              ?.docs ??
-                          []) {
-                    final data =
-                        doc.data()
-                            as Map<String, dynamic>;
-
-                    final qty =
-                        data['quantity']
-                                is num
-                            ? (data['quantity']
-                                    as num)
-                                .toInt()
-                            : 1;
-
-                    cartCount += qty;
-                  }
-
-                  return Stack(
-                    clipBehavior:
-                        Clip.none,
-                    children: [
-                      IconButton(
-                        icon: const Icon(
-                          Icons
-                              .shopping_cart_outlined,
-                          color: Colors.white,
-                        ),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (context) =>
-                                      const CartPage(),
-                            ),
-                          );
-                        },
-                      ),
-
-                      if (cartCount > 0)
-                        Positioned(
-                          right: 6,
-                          top: 6,
-                          child: Container(
-                            padding:
-                                const EdgeInsets
-                                    .all(3),
-                            decoration:
-                                const BoxDecoration(
-                              color: Colors.white,
-                              shape:
-                                  BoxShape.circle,
-                            ),
-                            constraints:
-                                const BoxConstraints(
-                              minWidth: 16,
-                              minHeight: 16,
-                            ),
-                            child: Text(
-                              '$cartCount',
-                              textAlign:
-                                  TextAlign.center,
-                              style:
-                                  const TextStyle(
-                                color: Colors
-                                    .redAccent,
-                                fontSize: 10,
-                                fontWeight:
-                                    FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  );
-                },
-              ),
             ],
           ),
 
@@ -936,26 +985,49 @@ class _HomePageState extends State<HomePage> {
                         Icons.search,
                         color: Colors.grey,
                       ),
-                      suffixIcon:
-                          _searchQuery.isNotEmpty
-                              ? IconButton(
-                                  icon:
-                                      const Icon(
-                                    Icons.clear,
-                                    color:
-                                        Colors.grey,
-                                  ),
-                                  onPressed: () {
-                                    _searchController
-                                        .clear();
 
-                                    setState(() {
-                                      _searchQuery =
-                                          '';
-                                    });
-                                  },
-                                )
-                              : null,
+                      // =================================================
+                      // SEARCH CAMERA + CLEAR
+                      // =================================================
+
+                      suffixIcon: Row(
+                        mainAxisSize:
+                            MainAxisSize.min,
+                        children: [
+                          if (_searchQuery
+                              .isNotEmpty)
+                            IconButton(
+                              icon:
+                                  const Icon(
+                                Icons.clear,
+                                color:
+                                    Colors.grey,
+                              ),
+                              onPressed: () {
+                                _searchController
+                                    .clear();
+
+                                setState(() {
+                                  _searchQuery =
+                                      '';
+                                });
+                              },
+                            ),
+
+                          IconButton(
+                            icon:
+                                const Icon(
+                              Icons
+                                  .camera_alt_outlined,
+                              color:
+                                  Colors.grey,
+                            ),
+                            onPressed:
+                                _openCameraSearch,
+                          ),
+                        ],
+                      ),
+
                       border:
                           InputBorder.none,
                       contentPadding:
@@ -1482,8 +1554,6 @@ class _HomePageState extends State<HomePage> {
                                                     return;
                                                   }
 
-                                                  // Product price is
-                                                  // passed to Cart in BDT.
                                                   final bdtPrice =
                                                       _displayBdtPrice(
                                                     data,
