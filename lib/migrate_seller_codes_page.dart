@@ -41,7 +41,6 @@ class _MigrateSellerCodesPageState extends State<MigrateSellerCodesPage> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   bool _running = false;
-  bool _done = false;
   final List<String> _log = [];
 
   void _addLog(String line) {
@@ -85,7 +84,6 @@ class _MigrateSellerCodesPageState extends State<MigrateSellerCodesPage> {
 
     setState(() {
       _running = true;
-      _done = false;
       _log.clear();
     });
 
@@ -99,7 +97,6 @@ class _MigrateSellerCodesPageState extends State<MigrateSellerCodesPage> {
 
     setState(() {
       _running = false;
-      _done = true;
     });
   }
 
