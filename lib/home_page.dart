@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -99,16 +101,14 @@ class _HomePageState extends State<HomePage>
   double _displayBdtPrice(
     Map<String, dynamic> productData,
   ) {
-    final rawPrice =
-        productData['price'] is num
-            ? (productData['price'] as num).toDouble()
-            : 0.0;
+    final rawPrice = productData['price'] is num
+        ? (productData['price'] as num).toDouble()
+        : 0.0;
 
-    final currency =
-        productData['currency']
-            ?.toString()
-            .trim()
-            .toUpperCase();
+    final currency = productData['currency']
+        ?.toString()
+        .trim()
+        .toUpperCase();
 
     if (currency == 'BDT') {
       return rawPrice;
@@ -165,8 +165,7 @@ class _HomePageState extends State<HomePage>
         );
       } else {
         final name =
-            productData['name']?.toString() ??
-                'Unnamed Product';
+            productData['name']?.toString() ?? 'Unnamed Product';
 
         final imageUrl =
             productData['imageUrl']?.toString() ?? '';
@@ -243,6 +242,10 @@ class _HomePageState extends State<HomePage>
     }
   }
 
+  // ------------------------------------------------------------
+  // CAMERA SEARCH
+  // ------------------------------------------------------------
+
   Future<void> _openCameraSearch() async {
     try {
       final picker = ImagePicker();
@@ -257,14 +260,116 @@ class _HomePageState extends State<HomePage>
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Photo captured successfully. Product search will be added next.',
-          ),
-          behavior: SnackBarBehavior.floating,
-          duration: Duration(seconds: 2),
-        ),
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) {
+          return SafeArea(
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(
+                  top: Radius.circular(24),
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 42,
+                    height: 4,
+                    margin: const EdgeInsets.only(
+                      bottom: 16,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Search by Image',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Image.file(
+                      File(image.path),
+                      width: double.infinity,
+                      height: 300,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.redAccent,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(context);
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Image product search will be connected next.',
+                            ),
+                            behavior: SnackBarBehavior.floating,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                      icon: const Icon(
+                        Icons.search,
+                      ),
+                      label: const Text(
+                        'Search Products',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                      child: const Text(
+                        'Cancel',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       );
     } catch (e) {
       if (!mounted) return;
@@ -538,6 +643,7 @@ class _HomePageState extends State<HomePage>
                       ],
                     ),
                   ),
+
                   ListTile(
                     leading: const Icon(
                       Icons.person_outline,
@@ -550,6 +656,7 @@ class _HomePageState extends State<HomePage>
                       _openAccount(isLoggedIn);
                     },
                   ),
+
                   ListTile(
                     leading: const Icon(
                       Icons.home_outlined,
@@ -564,6 +671,7 @@ class _HomePageState extends State<HomePage>
                       });
                     },
                   ),
+
                   ListTile(
                     leading: const Icon(
                       Icons.category_outlined,
@@ -596,6 +704,7 @@ class _HomePageState extends State<HomePage>
                       }
                     },
                   ),
+
                   if (isLoggedIn)
                     ListTile(
                       leading: const Icon(
@@ -616,6 +725,7 @@ class _HomePageState extends State<HomePage>
                         );
                       },
                     ),
+
                   ListTile(
                     leading: const Icon(
                       Icons.video_library_outlined,
@@ -631,6 +741,7 @@ class _HomePageState extends State<HomePage>
                       _openVideos();
                     },
                   ),
+
                   ListTile(
                     leading: const Icon(
                       Icons.shopping_cart_outlined,
@@ -650,6 +761,7 @@ class _HomePageState extends State<HomePage>
                       );
                     },
                   ),
+
                   ListTile(
                     leading: const Icon(
                       Icons.settings_outlined,
@@ -669,6 +781,7 @@ class _HomePageState extends State<HomePage>
                       );
                     },
                   ),
+
                   if (isLoggedIn)
                     ListTile(
                       leading: const Icon(
@@ -687,6 +800,7 @@ class _HomePageState extends State<HomePage>
               ),
             ),
           ),
+
           appBar: AppBar(
             backgroundColor: Colors.redAccent,
             elevation: 0,
@@ -740,9 +854,7 @@ class _HomePageState extends State<HomePage>
                       stream: FirebaseFirestore.instance
                           .collection('users')
                           .doc(user.uid)
-                          .collection(
-                            'globalNotificationReads',
-                          )
+                          .collection('globalNotificationReads')
                           .snapshots(),
                       builder: (
                         context,
@@ -777,6 +889,7 @@ class _HomePageState extends State<HomePage>
                               onPressed:
                                   _openGlobalNotifications,
                             ),
+
                             if (unreadCount > 0)
                               Positioned(
                                 right: 4,
@@ -819,6 +932,7 @@ class _HomePageState extends State<HomePage>
                 ),
             ],
           ),
+
           body: Column(
             children: [
               Container(
@@ -833,8 +947,7 @@ class _HomePageState extends State<HomePage>
                   height: 48,
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius:
-                        BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(24),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withValues(
@@ -847,8 +960,7 @@ class _HomePageState extends State<HomePage>
                   ),
                   child: TextField(
                     controller: _searchController,
-                    textInputAction:
-                        TextInputAction.search,
+                    textInputAction: TextInputAction.search,
                     onChanged: (value) {
                       setState(() {
                         _searchQuery =
@@ -862,8 +974,8 @@ class _HomePageState extends State<HomePage>
                         fontSize: 14,
                         fontWeight: FontWeight.w400,
                       ),
-                      prefixIcon: Padding(
-                        padding: const EdgeInsets.only(
+                      prefixIcon: const Padding(
+                        padding: EdgeInsets.only(
                           left: 4,
                           right: 2,
                         ),
@@ -898,11 +1010,13 @@ class _HomePageState extends State<HomePage>
                                 });
                               },
                             ),
+
                           Container(
                             height: 26,
                             width: 1,
                             color: Colors.grey.shade300,
                           ),
+
                           IconButton(
                             tooltip: 'Search by camera',
                             splashRadius: 20,
@@ -913,6 +1027,7 @@ class _HomePageState extends State<HomePage>
                             ),
                             onPressed: _openCameraSearch,
                           ),
+
                           const SizedBox(width: 4),
                         ],
                       ),
@@ -933,6 +1048,7 @@ class _HomePageState extends State<HomePage>
                   ),
                 ),
               ),
+
               Container(
                 height: 58,
                 color: Colors.white,
@@ -958,12 +1074,10 @@ class _HomePageState extends State<HomePage>
                       child: AnimatedContainer(
                         duration:
                             const Duration(milliseconds: 200),
-                        margin:
-                            const EdgeInsets.symmetric(
+                        margin: const EdgeInsets.symmetric(
                           horizontal: 5,
                         ),
-                        padding:
-                            const EdgeInsets.symmetric(
+                        padding: const EdgeInsets.symmetric(
                           horizontal: 17,
                           vertical: 8,
                         ),
@@ -998,6 +1112,7 @@ class _HomePageState extends State<HomePage>
                   },
                 ),
               ),
+
               Expanded(
                 child: StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
@@ -1029,30 +1144,31 @@ class _HomePageState extends State<HomePage>
                     final allDocs =
                         snapshot.data?.docs ?? [];
 
-                    final filteredDocs =
-                        allDocs.where((doc) {
-                      final data =
-                          doc.data()
-                              as Map<String, dynamic>;
+                    final filteredDocs = allDocs.where(
+                      (doc) {
+                        final data =
+                            doc.data()
+                                as Map<String, dynamic>;
 
-                      if (!_matchesCategory(data)) {
-                        return false;
-                      }
+                        if (!_matchesCategory(data)) {
+                          return false;
+                        }
 
-                      if (_searchQuery.isEmpty) {
-                        return true;
-                      }
+                        if (_searchQuery.isEmpty) {
+                          return true;
+                        }
 
-                      final productName =
-                          data['name']
-                                  ?.toString()
-                                  .toLowerCase() ??
-                              '';
+                        final productName =
+                            data['name']
+                                    ?.toString()
+                                    .toLowerCase() ??
+                                '';
 
-                      return productName.contains(
-                        _searchQuery,
-                      );
-                    }).toList();
+                        return productName.contains(
+                          _searchQuery,
+                        );
+                      },
+                    ).toList();
 
                     if (filteredDocs.isEmpty) {
                       return Center(
@@ -1086,11 +1202,8 @@ class _HomePageState extends State<HomePage>
                         final favoriteIds = <String>{};
 
                         for (final favoriteDoc
-                            in favoriteSnapshot.data?.docs ??
-                                []) {
-                          favoriteIds.add(
-                            favoriteDoc.id,
-                          );
+                            in favoriteSnapshot.data?.docs ?? []) {
+                          favoriteIds.add(favoriteDoc.id);
                         }
 
                         return GridView.builder(
@@ -1103,10 +1216,8 @@ class _HomePageState extends State<HomePage>
                             crossAxisSpacing: 8,
                             mainAxisSpacing: 8,
                           ),
-                          itemCount:
-                              filteredDocs.length,
-                          itemBuilder:
-                              (context, index) {
+                          itemCount: filteredDocs.length,
+                          itemBuilder: (context, index) {
                             final productDoc =
                                 filteredDocs[index];
 
@@ -1118,16 +1229,14 @@ class _HomePageState extends State<HomePage>
                                 productDoc.id;
 
                             final name =
-                                data['name']
-                                        ?.toString() ??
+                                data['name']?.toString() ??
                                     'Unnamed Product';
 
                             final displayPrice =
                                 _formatBdtPrice(data);
 
                             final imageUrl =
-                                data['imageUrl']
-                                    ?.toString();
+                                data['imageUrl']?.toString();
 
                             final isFavorite =
                                 favoriteIds.contains(
@@ -1165,36 +1274,24 @@ class _HomePageState extends State<HomePage>
                                               color:
                                                   Colors.grey[300],
                                             ),
-                                            child:
-                                                imageUrl !=
-                                                            null &&
-                                                        imageUrl
-                                                            .isNotEmpty
-                                                    ? Image.network(
-                                                        imageUrl,
-                                                        fit: BoxFit.cover,
-                                                        width:
-                                                            double.infinity,
-                                                        height:
-                                                            double.infinity,
-                                                        errorBuilder:
-                                                            (
-                                                          context,
-                                                          error,
-                                                          stackTrace,
-                                                        ) {
-                                                          return const Center(
-                                                            child:
-                                                                Icon(
-                                                              Icons.image,
-                                                              size: 50,
-                                                              color:
-                                                                  Colors.grey,
-                                                            ),
-                                                          );
-                                                        },
-                                                      )
-                                                    : const Center(
+                                            child: imageUrl !=
+                                                        null &&
+                                                    imageUrl
+                                                        .isNotEmpty
+                                                ? Image.network(
+                                                    imageUrl,
+                                                    fit: BoxFit.cover,
+                                                    width:
+                                                        double.infinity,
+                                                    height:
+                                                        double.infinity,
+                                                    errorBuilder:
+                                                        (
+                                                      context,
+                                                      error,
+                                                      stackTrace,
+                                                    ) {
+                                                      return const Center(
                                                         child:
                                                             Icon(
                                                           Icons.image,
@@ -1202,22 +1299,32 @@ class _HomePageState extends State<HomePage>
                                                           color:
                                                               Colors.grey,
                                                         ),
-                                                      ),
+                                                      );
+                                                    },
+                                                  )
+                                                : const Center(
+                                                    child:
+                                                        Icon(
+                                                      Icons.image,
+                                                      size: 50,
+                                                      color:
+                                                          Colors.grey,
+                                                    ),
+                                                  ),
                                           ),
+
                                           Positioned(
                                             top: 8,
                                             right: 8,
                                             child: Material(
-                                              color:
-                                                  Colors.white,
+                                              color: Colors.white,
                                               shape:
                                                   const CircleBorder(),
                                               elevation: 2,
                                               child: InkWell(
                                                 customBorder:
                                                     const CircleBorder(),
-                                                onTap:
-                                                    () async {
+                                                onTap: () async {
                                                   final currentUser =
                                                       user;
 
@@ -1245,18 +1352,15 @@ class _HomePageState extends State<HomePage>
                                                 },
                                                 child: Padding(
                                                   padding:
-                                                      const EdgeInsets.all(
-                                                    7,
-                                                  ),
+                                                      const EdgeInsets
+                                                          .all(7),
                                                   child: Icon(
                                                     isFavorite
                                                         ? Icons.favorite
-                                                        : Icons
-                                                            .favorite_border,
-                                                    color:
-                                                        isFavorite
-                                                            ? Colors.redAccent
-                                                            : Colors.grey,
+                                                        : Icons.favorite_border,
+                                                    color: isFavorite
+                                                        ? Colors.redAccent
+                                                        : Colors.grey,
                                                     size: 21,
                                                   ),
                                                 ),
@@ -1266,6 +1370,7 @@ class _HomePageState extends State<HomePage>
                                         ],
                                       ),
                                     ),
+
                                     Padding(
                                       padding:
                                           const EdgeInsets.all(8),
@@ -1284,9 +1389,11 @@ class _HomePageState extends State<HomePage>
                                             overflow:
                                                 TextOverflow.ellipsis,
                                           ),
+
                                           const SizedBox(
                                             height: 4,
                                           ),
+
                                           Row(
                                             mainAxisAlignment:
                                                 MainAxisAlignment
@@ -1308,16 +1415,17 @@ class _HomePageState extends State<HomePage>
                                                       TextOverflow.ellipsis,
                                                 ),
                                               ),
+
                                               const SizedBox(
                                                 width: 5,
                                               ),
+
                                               InkWell(
                                                 borderRadius:
                                                     BorderRadius.circular(
                                                   20,
                                                 ),
-                                                onTap:
-                                                    () async {
+                                                onTap: () async {
                                                   final currentUser =
                                                       user;
 
@@ -1356,8 +1464,7 @@ class _HomePageState extends State<HomePage>
                                                       .of(context)
                                                       .showSnackBar(
                                                     SnackBar(
-                                                      content:
-                                                          Text(
+                                                      content: Text(
                                                         '$name added to cart',
                                                       ),
                                                       behavior:
@@ -1388,7 +1495,8 @@ class _HomePageState extends State<HomePage>
                                                     Icons
                                                         .add_shopping_cart,
                                                     size: 16,
-                                                    color: Colors.white,
+                                                    color:
+                                                        Colors.white,
                                                   ),
                                                 ),
                                               ),
@@ -1410,12 +1518,12 @@ class _HomePageState extends State<HomePage>
               ),
             ],
           ),
+
           bottomSheet: isLoggedIn
               ? null
               : Container(
                   color: Colors.orangeAccent,
-                  padding:
-                      const EdgeInsets.symmetric(
+                  padding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 8,
                   ),
@@ -1432,9 +1540,9 @@ class _HomePageState extends State<HomePage>
                           ),
                         ),
                       ),
+
                       ElevatedButton(
-                        style:
-                            ElevatedButton.styleFrom(
+                        style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
                           foregroundColor:
                               Colors.orangeAccent,
@@ -1455,15 +1563,16 @@ class _HomePageState extends State<HomePage>
                     ],
                   ),
                 ),
+
           bottomNavigationBar:
               BottomNavigationBar(
             currentIndex: _selectedIndex,
             onTap: _onNavTap,
             selectedItemColor:
                 Colors.redAccent,
-            unselectedItemColor: Colors.grey,
-            type:
-                BottomNavigationBarType.fixed,
+            unselectedItemColor:
+                Colors.grey,
+            type: BottomNavigationBarType.fixed,
             items: const [
               BottomNavigationBarItem(
                 icon: Icon(Icons.home),
@@ -1474,9 +1583,7 @@ class _HomePageState extends State<HomePage>
                 label: 'Categories',
               ),
               BottomNavigationBarItem(
-                icon: Icon(
-                  Icons.video_library,
-                ),
+                icon: Icon(Icons.video_library),
                 label: 'Videos',
               ),
               BottomNavigationBarItem(
