@@ -15,6 +15,7 @@ import 'categories_page.dart';
 import 'news_feed_page.dart';
 import 'product_details_page.dart';
 import 'global_notifications_page.dart';
+import 'coupon_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -727,7 +728,8 @@ class _HomePageState extends State<HomePage>
                           itemBuilder: (context, index) {
                             final doc = products[index];
 
-                            final data = doc.data() as Map<String, dynamic>;
+                            final data =
+                                doc.data() as Map<String, dynamic>;
 
                             final name =
                                 data['name']?.toString() ?? 'Unnamed Product';
@@ -822,11 +824,10 @@ class _HomePageState extends State<HomePage>
   // ------------------------------------------------------------
 
   void _openCoupon() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Coupons will be available soon.'),
-        behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: 1),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const CouponPage(),
       ),
     );
   }
@@ -1000,12 +1001,31 @@ class _HomePageState extends State<HomePage>
       opacity: _couponOpacity,
       child: GestureDetector(
         onTap: _openCoupon,
-        child: const Text(
-          'Get Coupon',
-          style: TextStyle(
-            color: Colors.yellowAccent,
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 9,
+            vertical: 5,
+          ),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Colors.yellowAccent.withValues(alpha: 0.16),
+                Colors.white.withValues(alpha: 0.10),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(
+              color: Colors.yellowAccent.withValues(alpha: 0.75),
+              width: 1,
+            ),
+          ),
+          child: const Text(
+            'Get Coupon',
+            style: TextStyle(
+              color: Colors.yellowAccent,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
       ),
@@ -1844,3 +1864,4 @@ class _HomePageState extends State<HomePage>
     );
   }
 }
+
