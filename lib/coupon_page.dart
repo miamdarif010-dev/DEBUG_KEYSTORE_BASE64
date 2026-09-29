@@ -57,6 +57,10 @@ class _CouponPageState extends State<CouponPage> {
       final document = snapshot.docs.first;
       final data = document.data();
 
+      // =====================================================
+      // ACTIVE CHECK
+      // =====================================================
+
       final bool isActive =
           data['isActive'] == true;
 
@@ -78,27 +82,32 @@ class _CouponPageState extends State<CouponPage> {
       final expiresAt =
           data['expiresAt'];
 
-      if (expiresAt is Timestamp) {
-        if (expiresAt.toDate().isBefore(
-              DateTime.now(),
-            )) {
-          _showCouponResult(
-            title: 'Coupon Expired',
-            message:
-                'This coupon has expired.',
-            icon:
-                Icons.event_busy_outlined,
-            color: Colors.red,
-          );
-          return;
-        }
+      final expiryDate =
+          _getExpiryDate(expiresAt);
+
+      if (expiryDate != null &&
+          expiryDate.isBefore(DateTime.now())) {
+        _showCouponResult(
+          title: 'Coupon Expired',
+          message:
+              'This coupon has expired.',
+          icon:
+              Icons.event_busy_outlined,
+          color: Colors.red,
+        );
+        return;
       }
+
+      // =====================================================
+      // COUPON VALUES
+      // =====================================================
 
       final discountType =
           data['discountType']
-              ?.toString()
-              .toLowerCase() ??
-          'fixed';
+                  ?.toString()
+                  .toLowerCase()
+                  .trim() ??
+              'fixed';
 
       final double discountValue =
           _toDouble(
@@ -123,18 +132,18 @@ class _CouponPageState extends State<CouponPage> {
 
         if (maximumDiscount > 0) {
           discountText +=
-              ' • Up to ₩${maximumDiscount.toStringAsFixed(0)}';
+              ' • Up to ৳${maximumDiscount.toStringAsFixed(0)}';
         }
       } else {
         discountText =
-            '₩${discountValue.toStringAsFixed(0)} OFF';
+            '৳${discountValue.toStringAsFixed(0)} OFF';
       }
 
       String minimumText = '';
 
       if (minimumOrder > 0) {
         minimumText =
-            'Minimum order: ₩${minimumOrder.toStringAsFixed(0)}';
+            'Minimum order: ৳${minimumOrder.toStringAsFixed(0)}';
       }
 
       _showCouponResult(
@@ -174,6 +183,43 @@ class _CouponPageState extends State<CouponPage> {
           value?.toString() ?? '',
         ) ??
         0;
+  }
+
+  // =========================================================
+  // GET EXPIRATION DATE
+  // =========================================================
+
+  DateTime? _getExpiryDate(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate();
+    }
+
+    if (value is DateTime) {
+      return value;
+    }
+
+    if (value is String) {
+      return DateTime.tryParse(value);
+    }
+
+    return null;
+  }
+
+  // =========================================================
+  // CHECK IF EXPIRED
+  // =========================================================
+
+  bool _isExpired(dynamic value) {
+    final expiryDate =
+        _getExpiryDate(value);
+
+    if (expiryDate == null) {
+      return false;
+    }
+
+    return expiryDate.isBefore(
+      DateTime.now(),
+    );
   }
 
   // =========================================================
@@ -246,11 +292,12 @@ class _CouponPageState extends State<CouponPage> {
   // =========================================================
 
   String _formatDate(dynamic value) {
-    if (value is! Timestamp) {
+    final date =
+        _getExpiryDate(value);
+
+    if (date == null) {
       return 'No expiry date';
     }
-
-    final date = value.toDate();
 
     final day =
         date.day.toString().padLeft(2, '0');
@@ -274,7 +321,8 @@ class _CouponPageState extends State<CouponPage> {
     final type =
         data['discountType']
                 ?.toString()
-                .toLowerCase() ??
+                .toLowerCase()
+                .trim() ??
             'fixed';
 
     final value =
@@ -286,7 +334,7 @@ class _CouponPageState extends State<CouponPage> {
       return '${value.toStringAsFixed(0)}% OFF';
     }
 
-    return '₩${value.toStringAsFixed(0)} OFF';
+    return '৳${value.toStringAsFixed(0)} OFF';
   }
 
   // =========================================================
@@ -316,8 +364,14 @@ class _CouponPageState extends State<CouponPage> {
     final expiresAt =
         data['expiresAt'];
 
-    final isActive =
+    final bool firestoreActive =
         data['isActive'] == true;
+
+    final bool expired =
+        _isExpired(expiresAt);
+
+    final bool available =
+        firestoreActive && !expired;
 
     return Card(
       margin:
@@ -411,7 +465,7 @@ class _CouponPageState extends State<CouponPage> {
                   ),
                   decoration:
                       BoxDecoration(
-                    color: isActive
+                    color: available
                         ? Colors.green
                             .withValues(
                             alpha: 0.10,
@@ -427,11 +481,13 @@ class _CouponPageState extends State<CouponPage> {
                     ),
                   ),
                   child: Text(
-                    isActive
+                    available
                         ? 'Active'
-                        : 'Inactive',
+                        : expired
+                            ? 'Expired'
+                            : 'Inactive',
                     style: TextStyle(
-                      color: isActive
+                      color: available
                           ? Colors.green
                           : Colors.red,
                       fontSize: 11,
@@ -452,7 +508,7 @@ class _CouponPageState extends State<CouponPage> {
                 Icons
                     .shopping_cart_outlined,
                 'Minimum order',
-                '₩${minimumOrder.toStringAsFixed(0)}',
+                '৳${minimumOrder.toStringAsFixed(0)}',
               ),
 
             if (maximumDiscount > 0)
@@ -460,7 +516,7 @@ class _CouponPageState extends State<CouponPage> {
                 Icons
                     .discount_outlined,
                 'Maximum discount',
-                '₩${maximumDiscount.toStringAsFixed(0)}',
+                '৳${maximumDiscount.toStringAsFixed(0)}',
               ),
 
             _infoRow(
@@ -482,7 +538,7 @@ class _CouponPageState extends State<CouponPage> {
               child:
                   OutlinedButton.icon(
                 onPressed:
-                    isActive
+                    available
                         ? () {
                             _codeController
                                 .text = code;
@@ -498,8 +554,10 @@ class _CouponPageState extends State<CouponPage> {
                       .content_copy_outlined,
                 ),
                 label:
-                    const Text(
-                  'Use This Coupon',
+                    Text(
+                  expired
+                      ? 'Coupon Expired'
+                      : 'Use This Coupon',
                 ),
               ),
             ),
@@ -796,7 +854,23 @@ class _CouponPageState extends State<CouponPage> {
                     snapshot.data?.docs ??
                         [];
 
-                if (documents
+                // ------------------------------------------------
+                // REMOVE EXPIRED COUPONS FROM AVAILABLE LIST
+                // ------------------------------------------------
+
+                final availableDocuments =
+                    documents.where(
+                  (document) {
+                    final data =
+                        document.data();
+
+                    return !_isExpired(
+                      data['expiresAt'],
+                    );
+                  },
+                ).toList();
+
+                if (availableDocuments
                     .isEmpty) {
                   return Center(
                     child:
@@ -856,7 +930,7 @@ class _CouponPageState extends State<CouponPage> {
                 }
 
                 final sorted =
-                    [...documents];
+                    [...availableDocuments];
 
                 sorted.sort(
                   (a, b) {
