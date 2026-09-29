@@ -660,7 +660,7 @@ class _HomePageState extends State<HomePage>
 
       for (final doc in snapshot.docs) {
         final data =
-            doc.data() as Map<String, dynamic>;
+            final data = doc.data();
 
         final productName =
             data['name']
