@@ -503,7 +503,7 @@ class _HomePageState extends State<HomePage>
           TextSpan(
             text: 'v',
             style: TextStyle(
-              color: Colors.purpleAccent,
+              color: Colors.white,
             ),
           ),
           TextSpan(
@@ -790,18 +790,6 @@ class _HomePageState extends State<HomePage>
               ],
             ),
 
-            // =================================================
-            // IMPORTANT:
-            // TOP CART REMOVED.
-            //
-            // Notification is intentionally placed in the
-            // right-most position — the position previously
-            // occupied by the top Cart icon.
-            //
-            // The old Notification position is therefore not
-            // occupied by another icon.
-            // =================================================
-
             actions: [
               if (user == null)
                 IconButton(
@@ -945,95 +933,125 @@ class _HomePageState extends State<HomePage>
             children: [
               // =================================================
               // SEARCH
+              // UPDATED PREMIUM SEARCH BAR
               // =================================================
 
               Container(
                 color: Colors.redAccent,
-                padding:
-                    const EdgeInsets.fromLTRB(
-                  16,
-                  0,
-                  16,
+                padding: const EdgeInsets.fromLTRB(
+                  14,
+                  2,
+                  14,
                   12,
                 ),
                 child: Container(
-                  height: 42,
-                  decoration:
-                      BoxDecoration(
+                  height: 48,
+                  decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius:
-                        BorderRadius.circular(
-                      21,
-                    ),
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.12),
+                        blurRadius: 7,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
                   child: TextField(
-                    controller:
-                        _searchController,
+                    controller: _searchController,
+                    textInputAction: TextInputAction.search,
                     onChanged: (value) {
                       setState(() {
                         _searchQuery =
-                            value.trim()
-                                .toLowerCase();
+                            value.trim().toLowerCase();
                       });
                     },
-                    decoration:
-                        InputDecoration(
-                      hintText:
-                          'Search products...',
-                      prefixIcon:
-                          const Icon(
-                        Icons.search,
-                        color: Colors.grey,
+                    decoration: InputDecoration(
+                      hintText: 'Search products...',
+                      hintStyle: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w400,
+                      ),
+
+                      prefixIcon: Padding(
+                        padding: const EdgeInsets.only(
+                          left: 4,
+                          right: 2,
+                        ),
+                        child: Icon(
+                          Icons.search_rounded,
+                          color: Colors.redAccent,
+                          size: 24,
+                        ),
+                      ),
+
+                      prefixIconConstraints:
+                          const BoxConstraints(
+                        minWidth: 46,
+                        minHeight: 48,
                       ),
 
                       // =================================================
-                      // SEARCH CAMERA + CLEAR
+                      // CLEAR + CAMERA
                       // =================================================
 
                       suffixIcon: Row(
-                        mainAxisSize:
-                            MainAxisSize.min,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (_searchQuery
-                              .isNotEmpty)
+                          if (_searchQuery.isNotEmpty)
                             IconButton(
-                              icon:
-                                  const Icon(
-                                Icons.clear,
-                                color:
-                                    Colors.grey,
+                              tooltip: 'Clear',
+                              splashRadius: 20,
+                              icon: Icon(
+                                Icons.close_rounded,
+                                color: Colors.grey.shade600,
+                                size: 20,
                               ),
                               onPressed: () {
-                                _searchController
-                                    .clear();
+                                _searchController.clear();
 
                                 setState(() {
-                                  _searchQuery =
-                                      '';
+                                  _searchQuery = '';
                                 });
                               },
                             ),
 
-                          IconButton(
-                            icon:
-                                const Icon(
-                              Icons
-                                  .camera_alt_outlined,
-                              color:
-                                  Colors.grey,
-                            ),
-                            onPressed:
-                                _openCameraSearch,
+                          Container(
+                            height: 26,
+                            width: 1,
+                            color: Colors.grey.shade300,
                           ),
+
+                          IconButton(
+                            tooltip: 'Search by camera',
+                            splashRadius: 20,
+                            icon: Icon(
+                              Icons.camera_alt_outlined,
+                              color: Colors.grey.shade700,
+                              size: 21,
+                            ),
+                            onPressed: _openCameraSearch,
+                          ),
+
+                          const SizedBox(width: 4),
                         ],
                       ),
 
-                      border:
-                          InputBorder.none,
+                      suffixIconConstraints:
+                          const BoxConstraints(
+                        minWidth: 0,
+                        minHeight: 48,
+                      ),
+
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+
                       contentPadding:
-                          const EdgeInsets
-                              .symmetric(
-                        vertical: 8,
+                          const EdgeInsets.symmetric(
+                        vertical: 13,
+                        horizontal: 4,
                       ),
                     ),
                   ),
