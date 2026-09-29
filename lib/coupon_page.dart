@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -35,26 +36,53 @@ class _CouponPageState extends State<CouponPage> {
     });
 
     try {
-      final snapshot = await FirebaseFirestore.instance
+      final firestore =
+          FirebaseFirestore.instance;
+
+      DocumentSnapshot<Map<String, dynamic>>? couponDocument;
+
+      // First try to find the coupon by its "code" field.
+      final querySnapshot = await firestore
           .collection('coupons')
           .where('code', isEqualTo: code)
           .limit(1)
           .get();
 
+      if (querySnapshot.docs.isNotEmpty) {
+        couponDocument = querySnapshot.docs.first;
+      } else {
+        // Fallback: try the coupon document ID.
+        final documentSnapshot = await firestore
+            .collection('coupons')
+            .doc(code)
+            .get();
+
+        if (documentSnapshot.exists) {
+          couponDocument = documentSnapshot;
+        }
+      }
+
       if (!mounted) return;
 
-      if (snapshot.docs.isEmpty) {
+      if (couponDocument == null ||
+          !couponDocument.exists) {
+        final projectId =
+            Firebase.app().options.projectId;
+
         _showCouponResult(
           title: 'Coupon Not Found',
-          message: 'This coupon code does not exist.',
+          message:
+              'This coupon code does not exist.\n\n'
+              'Firebase Project: $projectId',
           icon: Icons.error_outline,
           color: Colors.red,
         );
         return;
       }
 
-      final document = snapshot.docs.first;
-      final data = document.data();
+      final data =
+          couponDocument.data() ??
+              <String, dynamic>{};
 
       final bool isActive =
           data['isActive'] == true;
@@ -62,14 +90,16 @@ class _CouponPageState extends State<CouponPage> {
       if (!isActive) {
         _showCouponResult(
           title: 'Coupon Inactive',
-          message: 'This coupon is no longer active.',
+          message:
+              'This coupon is no longer active.',
           icon: Icons.block_outlined,
           color: Colors.orange,
         );
         return;
       }
 
-      final expiresAt = data['expiresAt'];
+      final expiresAt =
+          data['expiresAt'];
 
       final expiryDate =
           _getExpiryDate(expiresAt);
@@ -78,7 +108,8 @@ class _CouponPageState extends State<CouponPage> {
           expiryDate.isBefore(DateTime.now())) {
         _showCouponResult(
           title: 'Coupon Expired',
-          message: 'This coupon has expired.',
+          message:
+              'This coupon has expired.',
           icon: Icons.event_busy_outlined,
           color: Colors.red,
         );
@@ -93,13 +124,19 @@ class _CouponPageState extends State<CouponPage> {
               'fixed';
 
       final double discountValue =
-          _toDouble(data['discountValue']);
+          _toDouble(
+        data['discountValue'],
+      );
 
       final double minimumOrder =
-          _toDouble(data['minimumOrder']);
+          _toDouble(
+        data['minimumOrder'],
+      );
 
       final double maximumDiscount =
-          _toDouble(data['maximumDiscount']);
+          _toDouble(
+        data['maximumDiscount'],
+      );
 
       String discountText;
 
@@ -131,11 +168,26 @@ class _CouponPageState extends State<CouponPage> {
         icon: Icons.local_offer_outlined,
         color: Colors.green,
       );
-    } catch (_) {
+    } on FirebaseException catch (error) {
       if (!mounted) return;
 
-      _showMessage(
-        'Could not check coupon. Please try again.',
+      _showCouponResult(
+        title: 'Coupon Check Error',
+        message:
+            'Firebase error: ${error.code}\n\n'
+            '${error.message ?? 'Unknown Firebase error.'}',
+        icon: Icons.error_outline,
+        color: Colors.red,
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      _showCouponResult(
+        title: 'Coupon Check Error',
+        message:
+            'Unexpected error:\n$error',
+        icon: Icons.error_outline,
+        color: Colors.red,
       );
     } finally {
       if (mounted) {
@@ -229,7 +281,8 @@ class _CouponPageState extends State<CouponPage> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(
+          shape:
+              RoundedRectangleBorder(
             borderRadius:
                 BorderRadius.circular(18),
           ),
@@ -305,7 +358,9 @@ class _CouponPageState extends State<CouponPage> {
             'fixed';
 
     final value =
-        _toDouble(data['discountValue']);
+        _toDouble(
+      data['discountValue'],
+    );
 
     if (type == 'percentage') {
       return '${value.toStringAsFixed(0)}% OFF';
@@ -315,8 +370,8 @@ class _CouponPageState extends State<CouponPage> {
   }
 
   Widget _couponCard(
-    QueryDocumentSnapshot<Map<String, dynamic>>
-        document,
+    QueryDocumentSnapshot<
+        Map<String, dynamic>> document,
   ) {
     final data =
         document.data();
@@ -325,10 +380,14 @@ class _CouponPageState extends State<CouponPage> {
         data['code']?.toString() ?? '';
 
     final minimumOrder =
-        _toDouble(data['minimumOrder']);
+        _toDouble(
+      data['minimumOrder'],
+    );
 
     final maximumDiscount =
-        _toDouble(data['maximumDiscount']);
+        _toDouble(
+      data['maximumDiscount'],
+    );
 
     final expiresAt =
         data['expiresAt'];
@@ -368,7 +427,8 @@ class _CouponPageState extends State<CouponPage> {
                   decoration:
                       BoxDecoration(
                     color:
-                        Colors.redAccent.withValues(
+                        Colors.redAccent
+                            .withValues(
                       alpha: 0.10,
                     ),
                     borderRadius:
@@ -424,10 +484,12 @@ class _CouponPageState extends State<CouponPage> {
                   decoration:
                       BoxDecoration(
                     color: available
-                        ? Colors.green.withValues(
+                        ? Colors.green
+                            .withValues(
                             alpha: 0.10,
                           )
-                        : Colors.red.withValues(
+                        : Colors.red
+                            .withValues(
                             alpha: 0.10,
                           ),
                     borderRadius:
@@ -719,6 +781,20 @@ class _CouponPageState extends State<CouponPage> {
                             'Could not load coupons.',
                             textAlign:
                                 TextAlign.center,
+                          ),
+                          const SizedBox(
+                            height: 6,
+                          ),
+                          Text(
+                            '${snapshot.error}',
+                            textAlign:
+                                TextAlign.center,
+                            style:
+                                TextStyle(
+                              fontSize: 12,
+                              color:
+                                  Colors.grey.shade600,
+                            ),
                           ),
                         ],
                       ),
