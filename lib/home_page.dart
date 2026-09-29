@@ -659,7 +659,7 @@ class _HomePageState extends State<HomePage>
           <QueryDocumentSnapshot>[];
 
       for (final doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
+         as Map<String, dynamic>;
 
         final productName =
             data['name']
