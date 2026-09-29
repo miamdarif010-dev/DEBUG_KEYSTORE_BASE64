@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'login_page.dart';
 import 'user_profile_page.dart';
@@ -48,10 +49,6 @@ class _HomePageState extends State<HomePage>
     'Grocery',
   ];
 
-  // =========================================================
-  // INIT STATE
-  // =========================================================
-
   @override
   void initState() {
     super.initState();
@@ -72,10 +69,6 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  // =========================================================
-  // DISPOSE
-  // =========================================================
-
   @override
   void dispose() {
     _couponAnimationController.dispose();
@@ -83,15 +76,10 @@ class _HomePageState extends State<HomePage>
     super.dispose();
   }
 
-  // =========================================================
-  // CATEGORY MATCH
-  // =========================================================
-
   bool _matchesCategory(
     Map<String, dynamic> productData,
   ) {
-    final selectedCategory =
-        categories[_selectedCategory];
+    final selectedCategory = categories[_selectedCategory];
 
     if (selectedCategory == 'All') {
       return true;
@@ -107,10 +95,6 @@ class _HomePageState extends State<HomePage>
     return productCategory.toLowerCase() ==
         selectedCategory.toLowerCase();
   }
-
-  // =========================================================
-  // BDT PRICE
-  // =========================================================
 
   double _displayBdtPrice(
     Map<String, dynamic> productData,
@@ -136,15 +120,10 @@ class _HomePageState extends State<HomePage>
   String _formatBdtPrice(
     Map<String, dynamic> productData,
   ) {
-    final bdtPrice =
-        _displayBdtPrice(productData);
+    final bdtPrice = _displayBdtPrice(productData);
 
     return '৳${bdtPrice.toStringAsFixed(2)}';
   }
-
-  // =========================================================
-  // FAVORITE REFERENCE
-  // =========================================================
 
   DocumentReference<Map<String, dynamic>> _favoriteReference(
     String userId,
@@ -157,10 +136,6 @@ class _HomePageState extends State<HomePage>
         .doc(productId);
   }
 
-  // =========================================================
-  // ADD / REMOVE FAVORITE
-  // =========================================================
-
   Future<void> _toggleFavorite({
     required User user,
     required String productId,
@@ -172,8 +147,7 @@ class _HomePageState extends State<HomePage>
     );
 
     try {
-      final favoriteSnapshot =
-          await favoriteRef.get();
+      final favoriteSnapshot = await favoriteRef.get();
 
       if (favoriteSnapshot.exists) {
         await favoriteRef.delete();
@@ -200,8 +174,7 @@ class _HomePageState extends State<HomePage>
         final category =
             productData['category']?.toString() ?? '';
 
-        final price =
-            _displayBdtPrice(productData);
+        final price = _displayBdtPrice(productData);
 
         await favoriteRef.set({
           'productId': productId,
@@ -212,8 +185,7 @@ class _HomePageState extends State<HomePage>
           'currency': 'BDT',
           'currencySymbol': '৳',
           'userId': user.uid,
-          'createdAt':
-              FieldValue.serverTimestamp(),
+          'createdAt': FieldValue.serverTimestamp(),
         });
 
         if (!mounted) return;
@@ -242,10 +214,6 @@ class _HomePageState extends State<HomePage>
     }
   }
 
-  // =========================================================
-  // OPEN PRODUCT DETAILS
-  // =========================================================
-
   void _openProductDetails({
     required String productId,
     required Map<String, dynamic> product,
@@ -261,10 +229,6 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  // =========================================================
-  // OPEN GLOBAL NOTIFICATIONS
-  // =========================================================
-
   Future<void> _openGlobalNotifications() async {
     await Navigator.push(
       context,
@@ -279,25 +243,42 @@ class _HomePageState extends State<HomePage>
     }
   }
 
-  // =========================================================
-  // OPEN CAMERA SEARCH
-  // =========================================================
+  Future<void> _openCameraSearch() async {
+    try {
+      final picker = ImagePicker();
 
-  void _openCameraSearch() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Camera search will be available soon.',
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 85,
+        maxWidth: 1600,
+      );
+
+      if (image == null || !mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Photo captured successfully. Product search will be added next.',
+          ),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 2),
         ),
-        behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: 1),
-      ),
-    );
-  }
+      );
+    } catch (e) {
+      if (!mounted) return;
 
-  // =========================================================
-  // OPEN COUPON
-  // =========================================================
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not open camera: $e',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
 
   void _openCoupon() {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -310,10 +291,6 @@ class _HomePageState extends State<HomePage>
       ),
     );
   }
-
-  // =========================================================
-  // BOTTOM NAVIGATION
-  // =========================================================
 
   Future<void> _onNavTap(int index) async {
     setState(() {
@@ -334,8 +311,7 @@ class _HomePageState extends State<HomePage>
       );
 
       if (result != null && mounted) {
-        final matchIndex =
-            categories.indexOf(result);
+        final matchIndex = categories.indexOf(result);
 
         if (matchIndex != -1) {
           setState(() {
@@ -419,10 +395,6 @@ class _HomePageState extends State<HomePage>
     }
   }
 
-  // =========================================================
-  // OPEN VIDEOS
-  // =========================================================
-
   void _openVideos() {
     Navigator.push(
       context,
@@ -432,10 +404,6 @@ class _HomePageState extends State<HomePage>
       ),
     );
   }
-
-  // =========================================================
-  // OPEN ACCOUNT
-  // =========================================================
 
   void _openAccount(bool isLoggedIn) {
     if (isLoggedIn) {
@@ -456,10 +424,6 @@ class _HomePageState extends State<HomePage>
       );
     }
   }
-
-  // =========================================================
-  // BUYNOVA BRAND
-  // =========================================================
 
   Widget _buildBuyNovaLogo() {
     return RichText(
@@ -517,10 +481,6 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  // =========================================================
-  // GET COUPON
-  // =========================================================
-
   Widget _buildGetCoupon() {
     return FadeTransition(
       opacity: _couponOpacity,
@@ -538,15 +498,10 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  // =========================================================
-  // BUILD
-  // =========================================================
-
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance
-          .authStateChanges(),
+      stream: FirebaseAuth.instance.authStateChanges(),
       builder: (
         context,
         authSnapshot,
@@ -555,10 +510,6 @@ class _HomePageState extends State<HomePage>
         final isLoggedIn = user != null;
 
         return Scaffold(
-          // =================================================
-          // DRAWER
-          // =================================================
-
           drawer: Drawer(
             child: SafeArea(
               child: ListView(
@@ -581,14 +532,12 @@ class _HomePageState extends State<HomePage>
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 24,
-                            fontWeight:
-                                FontWeight.bold,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                       ],
                     ),
                   ),
-
                   ListTile(
                     leading: const Icon(
                       Icons.person_outline,
@@ -598,12 +547,9 @@ class _HomePageState extends State<HomePage>
                     ),
                     onTap: () {
                       Navigator.pop(context);
-                      _openAccount(
-                        isLoggedIn,
-                      );
+                      _openAccount(isLoggedIn);
                     },
                   ),
-
                   ListTile(
                     leading: const Icon(
                       Icons.home_outlined,
@@ -613,13 +559,11 @@ class _HomePageState extends State<HomePage>
                     ),
                     onTap: () {
                       Navigator.pop(context);
-
                       setState(() {
                         _selectedIndex = 0;
                       });
                     },
                   ),
-
                   ListTile(
                     leading: const Icon(
                       Icons.category_outlined,
@@ -639,12 +583,9 @@ class _HomePageState extends State<HomePage>
                         ),
                       );
 
-                      if (result != null &&
-                          mounted) {
+                      if (result != null && mounted) {
                         final matchIndex =
-                            categories.indexOf(
-                          result,
-                        );
+                            categories.indexOf(result);
 
                         if (matchIndex != -1) {
                           setState(() {
@@ -655,7 +596,6 @@ class _HomePageState extends State<HomePage>
                       }
                     },
                   ),
-
                   if (isLoggedIn)
                     ListTile(
                       leading: const Icon(
@@ -676,7 +616,6 @@ class _HomePageState extends State<HomePage>
                         );
                       },
                     ),
-
                   ListTile(
                     leading: const Icon(
                       Icons.video_library_outlined,
@@ -692,7 +631,6 @@ class _HomePageState extends State<HomePage>
                       _openVideos();
                     },
                   ),
-
                   ListTile(
                     leading: const Icon(
                       Icons.shopping_cart_outlined,
@@ -712,7 +650,6 @@ class _HomePageState extends State<HomePage>
                       );
                     },
                   ),
-
                   ListTile(
                     leading: const Icon(
                       Icons.settings_outlined,
@@ -732,7 +669,6 @@ class _HomePageState extends State<HomePage>
                       );
                     },
                   ),
-
                   if (isLoggedIn)
                     ListTile(
                       leading: const Icon(
@@ -744,25 +680,16 @@ class _HomePageState extends State<HomePage>
                       onTap: () async {
                         Navigator.pop(context);
 
-                        await FirebaseAuth
-                            .instance
-                            .signOut();
+                        await FirebaseAuth.instance.signOut();
                       },
                     ),
                 ],
               ),
             ),
           ),
-
-          // =================================================
-          // APP BAR
-          // =================================================
-
           appBar: AppBar(
-            backgroundColor:
-                Colors.redAccent,
+            backgroundColor: Colors.redAccent,
             elevation: 0,
-
             leading: Builder(
               builder: (context) {
                 return IconButton(
@@ -771,25 +698,19 @@ class _HomePageState extends State<HomePage>
                     color: Colors.white,
                   ),
                   onPressed: () {
-                    Scaffold.of(context)
-                        .openDrawer();
+                    Scaffold.of(context).openDrawer();
                   },
                 );
               },
             ),
-
             titleSpacing: 0,
-
             title: Row(
               children: [
                 _buildBuyNovaLogo(),
-
                 const SizedBox(width: 10),
-
                 _buildGetCoupon(),
               ],
             ),
-
             actions: [
               if (user == null)
                 IconButton(
@@ -797,57 +718,41 @@ class _HomePageState extends State<HomePage>
                     Icons.notifications_outlined,
                     color: Colors.white,
                   ),
-                  onPressed:
-                      _openGlobalNotifications,
+                  onPressed: _openGlobalNotifications,
                 )
               else
                 StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore
-                      .instance
-                      .collection(
-                        'global_notifications',
-                      )
+                  stream: FirebaseFirestore.instance
+                      .collection('global_notifications')
                       .where(
                         'active',
                         isEqualTo: true,
                       )
                       .snapshots(),
-
                   builder: (
                     context,
                     notificationSnapshot,
                   ) {
                     final notifications =
-                        notificationSnapshot
-                                .data
-                                ?.docs ??
-                            [];
+                        notificationSnapshot.data?.docs ?? [];
 
                     return StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore
-                          .instance
+                      stream: FirebaseFirestore.instance
                           .collection('users')
                           .doc(user.uid)
                           .collection(
                             'globalNotificationReads',
                           )
                           .snapshots(),
-
                       builder: (
                         context,
                         readSnapshot,
                       ) {
-                        final readIds =
-                            <String>{};
+                        final readIds = <String>{};
 
                         for (final readDoc
-                            in readSnapshot
-                                    .data
-                                    ?.docs ??
-                                []) {
-                          readIds.add(
-                            readDoc.id,
-                          );
+                            in readSnapshot.data?.docs ?? []) {
+                          readIds.add(readDoc.id);
                         }
 
                         int unreadCount = 0;
@@ -862,28 +767,23 @@ class _HomePageState extends State<HomePage>
                         }
 
                         return Stack(
-                          clipBehavior:
-                              Clip.none,
+                          clipBehavior: Clip.none,
                           children: [
                             IconButton(
                               icon: const Icon(
-                                Icons
-                                    .notifications_outlined,
-                                color:
-                                    Colors.white,
+                                Icons.notifications_outlined,
+                                color: Colors.white,
                               ),
                               onPressed:
                                   _openGlobalNotifications,
                             ),
-
                             if (unreadCount > 0)
                               Positioned(
                                 right: 4,
                                 top: 4,
                                 child: Container(
                                   padding:
-                                      const EdgeInsets
-                                          .symmetric(
+                                      const EdgeInsets.symmetric(
                                     horizontal: 4,
                                     vertical: 2,
                                   ),
@@ -895,23 +795,18 @@ class _HomePageState extends State<HomePage>
                                   decoration:
                                       const BoxDecoration(
                                     color: Colors.white,
-                                    shape: BoxShape
-                                        .circle,
+                                    shape: BoxShape.circle,
                                   ),
                                   child: Text(
                                     unreadCount > 99
                                         ? '99+'
                                         : '$unreadCount',
-                                    textAlign:
-                                        TextAlign.center,
-                                    style:
-                                        const TextStyle(
-                                      color: Colors
-                                          .redAccent,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      color: Colors.redAccent,
                                       fontSize: 9,
                                       fontWeight:
-                                          FontWeight
-                                              .bold,
+                                          FontWeight.bold,
                                     ),
                                   ),
                                 ),
@@ -924,18 +819,8 @@ class _HomePageState extends State<HomePage>
                 ),
             ],
           ),
-
-          // =================================================
-          // BODY
-          // =================================================
-
           body: Column(
             children: [
-              // =================================================
-              // SEARCH
-              // UPDATED PREMIUM SEARCH BAR
-              // =================================================
-
               Container(
                 color: Colors.redAccent,
                 padding: const EdgeInsets.fromLTRB(
@@ -948,10 +833,13 @@ class _HomePageState extends State<HomePage>
                   height: 48,
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius:
+                        BorderRadius.circular(24),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.12),
+                        color: Colors.black.withValues(
+                          alpha: 0.12,
+                        ),
                         blurRadius: 7,
                         offset: const Offset(0, 2),
                       ),
@@ -959,7 +847,8 @@ class _HomePageState extends State<HomePage>
                   ),
                   child: TextField(
                     controller: _searchController,
-                    textInputAction: TextInputAction.search,
+                    textInputAction:
+                        TextInputAction.search,
                     onChanged: (value) {
                       setState(() {
                         _searchQuery =
@@ -973,7 +862,6 @@ class _HomePageState extends State<HomePage>
                         fontSize: 14,
                         fontWeight: FontWeight.w400,
                       ),
-
                       prefixIcon: Padding(
                         padding: const EdgeInsets.only(
                           left: 4,
@@ -985,17 +873,11 @@ class _HomePageState extends State<HomePage>
                           size: 24,
                         ),
                       ),
-
                       prefixIconConstraints:
                           const BoxConstraints(
                         minWidth: 46,
                         minHeight: 48,
                       ),
-
-                      // =================================================
-                      // CLEAR + CAMERA
-                      // =================================================
-
                       suffixIcon: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -1016,13 +898,11 @@ class _HomePageState extends State<HomePage>
                                 });
                               },
                             ),
-
                           Container(
                             height: 26,
                             width: 1,
                             color: Colors.grey.shade300,
                           ),
-
                           IconButton(
                             tooltip: 'Search by camera',
                             splashRadius: 20,
@@ -1033,21 +913,17 @@ class _HomePageState extends State<HomePage>
                             ),
                             onPressed: _openCameraSearch,
                           ),
-
                           const SizedBox(width: 4),
                         ],
                       ),
-
                       suffixIconConstraints:
                           const BoxConstraints(
                         minWidth: 0,
                         minHeight: 48,
                       ),
-
                       border: InputBorder.none,
                       enabledBorder: InputBorder.none,
                       focusedBorder: InputBorder.none,
-
                       contentPadding:
                           const EdgeInsets.symmetric(
                         vertical: 13,
@@ -1057,74 +933,50 @@ class _HomePageState extends State<HomePage>
                   ),
                 ),
               ),
-
-              // =================================================
-              // CATEGORIES
-              // =================================================
-
               Container(
                 height: 58,
                 color: Colors.white,
                 child: ListView.builder(
-                  scrollDirection:
-                      Axis.horizontal,
+                  scrollDirection: Axis.horizontal,
                   physics:
                       const BouncingScrollPhysics(),
-                  padding:
-                      const EdgeInsets.symmetric(
+                  padding: const EdgeInsets.symmetric(
                     horizontal: 10,
                     vertical: 9,
                   ),
-                  itemCount:
-                      categories.length,
-                  itemBuilder:
-                      (context, index) {
+                  itemCount: categories.length,
+                  itemBuilder: (context, index) {
                     final isSelected =
-                        _selectedCategory ==
-                            index;
+                        _selectedCategory == index;
 
                     return GestureDetector(
                       onTap: () {
                         setState(() {
-                          _selectedCategory =
-                              index;
+                          _selectedCategory = index;
                         });
                       },
-                      child:
-                          AnimatedContainer(
+                      child: AnimatedContainer(
                         duration:
-                            const Duration(
-                          milliseconds: 200,
-                        ),
+                            const Duration(milliseconds: 200),
                         margin:
-                            const EdgeInsets
-                                .symmetric(
+                            const EdgeInsets.symmetric(
                           horizontal: 5,
                         ),
                         padding:
-                            const EdgeInsets
-                                .symmetric(
+                            const EdgeInsets.symmetric(
                           horizontal: 17,
                           vertical: 8,
                         ),
-                        decoration:
-                            BoxDecoration(
+                        decoration: BoxDecoration(
                           color: isSelected
                               ? Colors.redAccent
-                              : Colors.grey
-                                  .shade100,
+                              : Colors.grey.shade100,
                           borderRadius:
-                              BorderRadius
-                                  .circular(
-                            20,
-                          ),
-                          border:
-                              Border.all(
+                              BorderRadius.circular(20),
+                          border: Border.all(
                             color: isSelected
-                                ? Colors
-                                    .redAccent
-                                : Colors.grey
-                                    .shade300,
+                                ? Colors.redAccent
+                                : Colors.grey.shade300,
                           ),
                         ),
                         child: Center(
@@ -1133,14 +985,10 @@ class _HomePageState extends State<HomePage>
                             style: TextStyle(
                               color: isSelected
                                   ? Colors.white
-                                  : Colors
-                                      .black87,
-                              fontWeight:
-                                  isSelected
-                                      ? FontWeight
-                                          .bold
-                                      : FontWeight
-                                          .w500,
+                                  : Colors.black87,
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.w500,
                               fontSize: 14,
                             ),
                           ),
@@ -1150,20 +998,11 @@ class _HomePageState extends State<HomePage>
                   },
                 ),
               ),
-
-              // =================================================
-              // PRODUCTS
-              // =================================================
-
               Expanded(
-                child:
-                    StreamBuilder<QuerySnapshot>(
-                  stream:
-                      FirebaseFirestore.instance
-                          .collection(
-                              'products')
-                          .snapshots(),
-
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('products')
+                      .snapshots(),
                   builder: (
                     context,
                     snapshot,
@@ -1172,108 +1011,82 @@ class _HomePageState extends State<HomePage>
                       return const Center(
                         child: Text(
                           'Failed to load products',
-                          style:
-                              TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
-                            color:
-                                Colors.grey,
+                            color: Colors.grey,
                           ),
                         ),
                       );
                     }
 
-                    if (snapshot
-                            .connectionState ==
-                        ConnectionState
-                            .waiting) {
+                    if (snapshot.connectionState ==
+                        ConnectionState.waiting) {
                       return const Center(
-                        child:
-                            CircularProgressIndicator(),
+                        child: CircularProgressIndicator(),
                       );
                     }
 
                     final allDocs =
-                        snapshot.data?.docs ??
-                            [];
+                        snapshot.data?.docs ?? [];
 
                     final filteredDocs =
-                        allDocs.where(
-                      (doc) {
-                        final data =
-                            doc.data()
-                                as Map<String,
-                                    dynamic>;
+                        allDocs.where((doc) {
+                      final data =
+                          doc.data()
+                              as Map<String, dynamic>;
 
-                        if (!_matchesCategory(
-                            data)) {
-                          return false;
-                        }
+                      if (!_matchesCategory(data)) {
+                        return false;
+                      }
 
-                        if (_searchQuery
-                            .isEmpty) {
-                          return true;
-                        }
+                      if (_searchQuery.isEmpty) {
+                        return true;
+                      }
 
-                        final productName =
-                            data['name']
-                                    ?.toString()
-                                    .toLowerCase() ??
-                                '';
+                      final productName =
+                          data['name']
+                                  ?.toString()
+                                  .toLowerCase() ??
+                              '';
 
-                        return productName
-                            .contains(
-                          _searchQuery,
-                        );
-                      },
-                    ).toList();
+                      return productName.contains(
+                        _searchQuery,
+                      );
+                    }).toList();
 
-                    if (filteredDocs
-                        .isEmpty) {
+                    if (filteredDocs.isEmpty) {
                       return Center(
                         child: Text(
-                          _searchQuery
-                                  .isNotEmpty
+                          _searchQuery.isNotEmpty
                               ? 'No products found for "$_searchQuery"'
-                              : _selectedCategory ==
-                                      0
+                              : _selectedCategory == 0
                                   ? 'No products found yet'
                                   : 'No products found in ${categories[_selectedCategory]}',
-                          textAlign:
-                              TextAlign.center,
-                          style:
-                              const TextStyle(
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
                             fontSize: 16,
-                            color:
-                                Colors.grey,
+                            color: Colors.grey,
                           ),
                         ),
                       );
                     }
 
-                    return StreamBuilder<
-                        QuerySnapshot>(
+                    return StreamBuilder<QuerySnapshot>(
                       stream: user == null
                           ? null
-                          : FirebaseFirestore
-                              .instance
-                              .collection(
-                                  'users')
+                          : FirebaseFirestore.instance
+                              .collection('users')
                               .doc(user.uid)
-                              .collection(
-                                  'favorites')
+                              .collection('favorites')
                               .snapshots(),
-
                       builder: (
                         context,
                         favoriteSnapshot,
                       ) {
-                        final favoriteIds =
-                            <String>{};
+                        final favoriteIds = <String>{};
 
                         for (final favoriteDoc
-                            in favoriteSnapshot
-                                    .data
-                                    ?.docs ??
+                            in favoriteSnapshot.data?.docs ??
                                 []) {
                           favoriteIds.add(
                             favoriteDoc.id,
@@ -1282,31 +1095,24 @@ class _HomePageState extends State<HomePage>
 
                         return GridView.builder(
                           padding:
-                              const EdgeInsets
-                                  .all(8),
-
+                              const EdgeInsets.all(8),
                           gridDelegate:
                               const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
-                            childAspectRatio:
-                                0.75,
+                            childAspectRatio: 0.75,
                             crossAxisSpacing: 8,
                             mainAxisSpacing: 8,
                           ),
-
                           itemCount:
                               filteredDocs.length,
-
                           itemBuilder:
                               (context, index) {
                             final productDoc =
-                                filteredDocs[
-                                    index];
+                                filteredDocs[index];
 
                             final data =
                                 productDoc.data()
-                                    as Map<String,
-                                        dynamic>;
+                                    as Map<String, dynamic>;
 
                             final productId =
                                 productDoc.id;
@@ -1317,17 +1123,14 @@ class _HomePageState extends State<HomePage>
                                     'Unnamed Product';
 
                             final displayPrice =
-                                _formatBdtPrice(
-                              data,
-                            );
+                                _formatBdtPrice(data);
 
                             final imageUrl =
                                 data['imageUrl']
                                     ?.toString();
 
                             final isFavorite =
-                                favoriteIds
-                                    .contains(
+                                favoriteIds.contains(
                               productId,
                             );
 
@@ -1338,97 +1141,79 @@ class _HomePageState extends State<HomePage>
                               shape:
                                   RoundedRectangleBorder(
                                 borderRadius:
-                                    BorderRadius
-                                        .circular(
-                                  10,
-                                ),
+                                    BorderRadius.circular(10),
                               ),
-                              child:
-                                  InkWell(
+                              child: InkWell(
                                 onTap: () {
                                   _openProductDetails(
-                                    productId:
-                                        productId,
-                                    product:
-                                        data,
+                                    productId: productId,
+                                    product: data,
                                   );
                                 },
-                                child:
-                                    Column(
+                                child: Column(
                                   crossAxisAlignment:
-                                      CrossAxisAlignment
-                                          .start,
+                                      CrossAxisAlignment.start,
                                   children: [
                                     Expanded(
-                                      child:
-                                          Stack(
+                                      child: Stack(
                                         children: [
                                           Container(
-                                            width: double
-                                                .infinity,
+                                            width:
+                                                double.infinity,
                                             decoration:
                                                 BoxDecoration(
-                                              color: Colors
-                                                  .grey[300],
+                                              color:
+                                                  Colors.grey[300],
                                             ),
-                                            child: imageUrl !=
-                                                        null &&
-                                                    imageUrl
-                                                        .isNotEmpty
-                                                ? Image
-                                                    .network(
-                                                    imageUrl,
-                                                    fit: BoxFit
-                                                        .cover,
-                                                    width:
-                                                        double.infinity,
-                                                    height:
-                                                        double.infinity,
-                                                    errorBuilder:
-                                                        (
-                                                      context,
-                                                      error,
-                                                      stackTrace,
-                                                    ) {
-                                                      return const Center(
+                                            child:
+                                                imageUrl !=
+                                                            null &&
+                                                        imageUrl
+                                                            .isNotEmpty
+                                                    ? Image.network(
+                                                        imageUrl,
+                                                        fit: BoxFit.cover,
+                                                        width:
+                                                            double.infinity,
+                                                        height:
+                                                            double.infinity,
+                                                        errorBuilder:
+                                                            (
+                                                          context,
+                                                          error,
+                                                          stackTrace,
+                                                        ) {
+                                                          return const Center(
+                                                            child:
+                                                                Icon(
+                                                              Icons.image,
+                                                              size: 50,
+                                                              color:
+                                                                  Colors.grey,
+                                                            ),
+                                                          );
+                                                        },
+                                                      )
+                                                    : const Center(
                                                         child:
                                                             Icon(
-                                                          Icons
-                                                              .image,
-                                                          size:
-                                                              50,
+                                                          Icons.image,
+                                                          size: 50,
                                                           color:
                                                               Colors.grey,
                                                         ),
-                                                      );
-                                                    },
-                                                  )
-                                                : const Center(
-                                                    child:
-                                                        Icon(
-                                                      Icons
-                                                          .image,
-                                                      size:
-                                                          50,
-                                                      color:
-                                                          Colors.grey,
-                                                    ),
-                                                  ),
+                                                      ),
                                           ),
-
                                           Positioned(
                                             top: 8,
                                             right: 8,
-                                            child:
-                                                Material(
-                                              color: Colors
-                                                  .white,
+                                            child: Material(
+                                              color:
+                                                  Colors.white,
                                               shape:
                                                   const CircleBorder(),
-                                              elevation:
-                                                  2,
-                                              child:
-                                                  InkWell(
+                                              elevation: 2,
+                                              child: InkWell(
                                                 customBorder:
                                                     const CircleBorder(),
                                                 onTap:
@@ -1438,8 +1223,7 @@ class _HomePageState extends State<HomePage>
 
                                                   if (currentUser ==
                                                       null) {
-                                                    await Navigator
-                                                        .push(
+                                                    await Navigator.push(
                                                       context,
                                                       MaterialPageRoute(
                                                         builder:
@@ -1459,25 +1243,21 @@ class _HomePageState extends State<HomePage>
                                                         data,
                                                   );
                                                 },
-                                                child:
-                                                    Padding(
+                                                child: Padding(
                                                   padding:
                                                       const EdgeInsets.all(
                                                     7,
                                                   ),
-                                                  child:
-                                                      Icon(
+                                                  child: Icon(
                                                     isFavorite
-                                                        ? Icons
-                                                            .favorite
+                                                        ? Icons.favorite
                                                         : Icons
                                                             .favorite_border,
                                                     color:
                                                         isFavorite
                                                             ? Colors.redAccent
                                                             : Colors.grey,
-                                                    size:
-                                                        21,
+                                                    size: 21,
                                                   ),
                                                 ),
                                               ),
@@ -1486,18 +1266,12 @@ class _HomePageState extends State<HomePage>
                                         ],
                                       ),
                                     ),
-
                                     Padding(
                                       padding:
-                                          const EdgeInsets
-                                              .all(
-                                        8,
-                                      ),
-                                      child:
-                                          Column(
+                                          const EdgeInsets.all(8),
+                                      child: Column(
                                         crossAxisAlignment:
-                                            CrossAxisAlignment
-                                                .start,
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             name,
@@ -1506,25 +1280,20 @@ class _HomePageState extends State<HomePage>
                                               fontWeight:
                                                   FontWeight.bold,
                                             ),
-                                            maxLines:
-                                                1,
+                                            maxLines: 1,
                                             overflow:
-                                                TextOverflow
-                                                    .ellipsis,
+                                                TextOverflow.ellipsis,
                                           ),
-
                                           const SizedBox(
                                             height: 4,
                                           ),
-
                                           Row(
                                             mainAxisAlignment:
                                                 MainAxisAlignment
                                                     .spaceBetween,
                                             children: [
                                               Flexible(
-                                                child:
-                                                    Text(
+                                                child: Text(
                                                   displayPrice,
                                                   style:
                                                       const TextStyle(
@@ -1532,22 +1301,16 @@ class _HomePageState extends State<HomePage>
                                                         Colors.redAccent,
                                                     fontWeight:
                                                         FontWeight.bold,
-                                                    fontSize:
-                                                        16,
+                                                    fontSize: 16,
                                                   ),
-                                                  maxLines:
-                                                      1,
+                                                  maxLines: 1,
                                                   overflow:
-                                                      TextOverflow
-                                                          .ellipsis,
+                                                      TextOverflow.ellipsis,
                                                 ),
                                               ),
-
                                               const SizedBox(
-                                                width:
-                                                    5,
+                                                width: 5,
                                               ),
-
                                               InkWell(
                                                 borderRadius:
                                                     BorderRadius.circular(
@@ -1560,8 +1323,7 @@ class _HomePageState extends State<HomePage>
 
                                                   if (currentUser ==
                                                       null) {
-                                                    await Navigator
-                                                        .push(
+                                                    await Navigator.push(
                                                       context,
                                                       MaterialPageRoute(
                                                         builder:
@@ -1579,25 +1341,20 @@ class _HomePageState extends State<HomePage>
 
                                                   await CartService
                                                       .addItem(
-                                                    id:
-                                                        productId,
-                                                    name:
-                                                        name,
-                                                    price:
-                                                        bdtPrice,
+                                                    id: productId,
+                                                    name: name,
+                                                    price: bdtPrice,
                                                     imageUrl:
                                                         imageUrl,
                                                   );
 
-                                                  if (!context
-                                                      .mounted) {
+                                                  if (!context.mounted) {
                                                     return;
                                                   }
 
                                                   ScaffoldMessenger
-                                                      .of(
-                                                    context,
-                                                  ).showSnackBar(
+                                                      .of(context)
+                                                      .showSnackBar(
                                                     SnackBar(
                                                       content:
                                                           Text(
@@ -1608,14 +1365,12 @@ class _HomePageState extends State<HomePage>
                                                               .floating,
                                                       duration:
                                                           const Duration(
-                                                        seconds:
-                                                            1,
+                                                        seconds: 1,
                                                       ),
                                                     ),
                                                   );
                                                 },
-                                                child:
-                                                    Container(
+                                                child: Container(
                                                   padding:
                                                       const EdgeInsets.all(
                                                     6,
@@ -1629,14 +1384,11 @@ class _HomePageState extends State<HomePage>
                                                       20,
                                                     ),
                                                   ),
-                                                  child:
-                                                      const Icon(
+                                                  child: const Icon(
                                                     Icons
                                                         .add_shopping_cart,
-                                                    size:
-                                                        16,
-                                                    color:
-                                                        Colors.white,
+                                                    size: 16,
+                                                    color: Colors.white,
                                                   ),
                                                 ),
                                               ),
@@ -1658,44 +1410,34 @@ class _HomePageState extends State<HomePage>
               ),
             ],
           ),
-
-          // =================================================
-          // SIGN IN BANNER
-          // =================================================
-
           bottomSheet: isLoggedIn
               ? null
               : Container(
                   color: Colors.orangeAccent,
                   padding:
-                      const EdgeInsets
-                          .symmetric(
+                      const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 8,
                   ),
                   child: Row(
                     mainAxisAlignment:
-                        MainAxisAlignment
-                            .spaceBetween,
+                        MainAxisAlignment.spaceBetween,
                     children: [
                       const Expanded(
                         child: Text(
                           'Sign in for best experience!',
                           style: TextStyle(
                             color: Colors.white,
-                            fontWeight:
-                                FontWeight.bold,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
                       ElevatedButton(
                         style:
                             ElevatedButton.styleFrom(
-                          backgroundColor:
-                              Colors.white,
+                          backgroundColor: Colors.white,
                           foregroundColor:
-                              Colors
-                                  .orangeAccent,
+                              Colors.orangeAccent,
                         ),
                         onPressed: () {
                           Navigator.push(
@@ -1706,40 +1448,29 @@ class _HomePageState extends State<HomePage>
                             ),
                           );
                         },
-                        child:
-                            const Text(
+                        child: const Text(
                           'Sign In',
                         ),
                       ),
                     ],
                   ),
                 ),
-
-          // =================================================
-          // BOTTOM NAVIGATION
-          // =================================================
-
           bottomNavigationBar:
               BottomNavigationBar(
-            currentIndex:
-                _selectedIndex,
+            currentIndex: _selectedIndex,
             onTap: _onNavTap,
             selectedItemColor:
                 Colors.redAccent,
-            unselectedItemColor:
-                Colors.grey,
+            unselectedItemColor: Colors.grey,
             type:
                 BottomNavigationBarType.fixed,
-
             items: const [
               BottomNavigationBarItem(
-                icon:
-                    Icon(Icons.home),
+                icon: Icon(Icons.home),
                 label: 'Home',
               ),
               BottomNavigationBarItem(
-                icon:
-                    Icon(Icons.category),
+                icon: Icon(Icons.category),
                 label: 'Categories',
               ),
               BottomNavigationBarItem(
@@ -1750,14 +1481,12 @@ class _HomePageState extends State<HomePage>
               ),
               BottomNavigationBarItem(
                 icon: Icon(
-                  Icons
-                      .shopping_cart_outlined,
+                  Icons.shopping_cart_outlined,
                 ),
                 label: 'Cart',
               ),
               BottomNavigationBarItem(
-                icon:
-                    Icon(Icons.person),
+                icon: Icon(Icons.person),
                 label: 'Profile',
               ),
             ],
