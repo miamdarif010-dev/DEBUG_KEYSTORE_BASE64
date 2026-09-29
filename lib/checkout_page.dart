@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'my_orders_page.dart';
 import 'address_book_page.dart';
@@ -129,12 +130,45 @@ class _CheckoutPageState extends State<CheckoutPage> {
     super.initState();
     _loadDefaultAddress();
     _loadWalletBalance();
+    _loadSavedCoupon();
   }
 
   @override
   void dispose() {
     _couponController.dispose();
     super.dispose();
+  }
+
+  // ============================================================
+  // LOAD SAVED COUPON
+  // ============================================================
+
+  Future<void> _loadSavedCoupon() async {
+    try {
+      final prefs =
+          await SharedPreferences.getInstance();
+
+      final savedCode =
+          prefs.getString('buynova_pending_coupon');
+
+      if (savedCode == null ||
+          savedCode.trim().isEmpty) {
+        return;
+      }
+
+      await prefs.remove(
+        'buynova_pending_coupon',
+      );
+
+      if (!mounted) return;
+
+      _couponController.text =
+          savedCode.trim().toUpperCase();
+
+      await _checkCoupon();
+    } catch (_) {
+      // Coupon loading is optional.
+    }
   }
 
   // ============================================================
@@ -219,19 +253,22 @@ class _CheckoutPageState extends State<CheckoutPage> {
         if (!mounted) return;
 
         setState(() {
-          _selectedAddress = defaultSnapshot.docs.first.data();
+          _selectedAddress =
+              defaultSnapshot.docs.first.data();
         });
 
         return;
       }
 
-      final anySnapshot = await addressesRef.limit(1).get();
+      final anySnapshot =
+          await addressesRef.limit(1).get();
 
       if (anySnapshot.docs.isNotEmpty) {
         if (!mounted) return;
 
         setState(() {
-          _selectedAddress = anySnapshot.docs.first.data();
+          _selectedAddress =
+              anySnapshot.docs.first.data();
         });
 
         return;
@@ -252,7 +289,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
         if (!mounted) return;
 
         setState(() {
-          _selectedAddress = Map<String, dynamic>.from(address);
+          _selectedAddress =
+              Map<String, dynamic>.from(address);
         });
       }
     } catch (_) {}
@@ -314,7 +352,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
     if (code.isEmpty) {
       if (mounted && showMessage) {
         setState(() {
-          _couponMessage = 'Please enter a coupon code.';
+          _couponMessage =
+              'Please enter a coupon code.';
           _discount = 0;
           _couponCode = null;
         });
@@ -336,7 +375,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
     try {
       final snapshot = await _firestore
           .collection('coupons')
-          .where('code', isEqualTo: code)
+          .where(
+            'code',
+            isEqualTo: code,
+          )
           .limit(1)
           .get();
 
@@ -353,11 +395,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
         return false;
       }
 
-      final data = snapshot.docs.first.data();
+      final data =
+          snapshot.docs.first.data();
 
       // --------------------------------------------------------
       // ACTIVE CHECK
-      // CouponPage uses "isActive", so Checkout must also use it.
       // --------------------------------------------------------
 
       final bool isActive =
@@ -381,10 +423,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
       // --------------------------------------------------------
 
       final expiresAt =
-          _couponExpiry(data['expiresAt']);
+          _couponExpiry(
+        data['expiresAt'],
+      );
 
       if (expiresAt != null &&
-          expiresAt.isBefore(DateTime.now())) {
+          expiresAt.isBefore(
+            DateTime.now(),
+          )) {
         if (mounted) {
           setState(() {
             _discount = 0;
@@ -408,16 +454,22 @@ class _CheckoutPageState extends State<CheckoutPage> {
               .trim();
 
       final double discountValue =
-          _toDouble(data['discountValue']);
+          _toDouble(
+        data['discountValue'],
+      );
 
       final double minimumOrder =
-          _toDouble(data['minimumOrder']);
+          _toDouble(
+        data['minimumOrder'],
+      );
 
       final double maximumDiscount =
-          _toDouble(data['maximumDiscount']);
+          _toDouble(
+        data['maximumDiscount'],
+      );
 
       // --------------------------------------------------------
-      // MINIMUM ORDER CHECK
+      // MINIMUM ORDER
       // --------------------------------------------------------
 
       if (minimumOrder > 0 &&
@@ -445,28 +497,29 @@ class _CheckoutPageState extends State<CheckoutPage> {
         calculatedDiscount =
             subtotal * discountValue / 100;
 
-        // Maximum discount applies to percentage coupons.
         if (maximumDiscount > 0 &&
-            calculatedDiscount > maximumDiscount) {
-          calculatedDiscount = maximumDiscount;
+            calculatedDiscount >
+                maximumDiscount) {
+          calculatedDiscount =
+              maximumDiscount;
         }
       } else {
-        calculatedDiscount = discountValue;
+        calculatedDiscount =
+            discountValue;
       }
 
-      // Never allow a negative discount.
       if (calculatedDiscount < 0) {
         calculatedDiscount = 0;
       }
 
-      // Discount cannot exceed subtotal.
       if (calculatedDiscount > subtotal) {
         calculatedDiscount = subtotal;
       }
 
       if (mounted) {
         setState(() {
-          _discount = calculatedDiscount;
+          _discount =
+              calculatedDiscount;
           _couponCode = code;
           _couponMessage =
               calculatedDiscount > 0
@@ -521,7 +574,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () =>
+                  Navigator.pop(context),
               child: const Text('OK'),
             ),
           ],
@@ -581,14 +635,16 @@ class _CheckoutPageState extends State<CheckoutPage> {
       // REVALIDATE COUPON
       // --------------------------------------------------------
 
-      if (_couponController.text.trim().isNotEmpty) {
-        final couponValid = await _checkCoupon();
+      if (_couponController.text
+          .trim()
+          .isNotEmpty) {
+        final couponValid =
+            await _checkCoupon();
 
         if (!couponValid) {
           return;
         }
       } else {
-        // No coupon entered.
         _discount = 0;
         _couponCode = null;
       }
@@ -597,7 +653,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
       // WALLET BALANCE
       // --------------------------------------------------------
 
-      if (_paymentMethod == 'BuyNova Wallet') {
+      if (_paymentMethod ==
+          'BuyNova Wallet') {
         final enough =
             await _validateWalletBeforeOrder();
 
@@ -615,7 +672,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
       final orderId = orderRef.id;
 
-      final List<Map<String, dynamic>> orderItems = [];
+      final List<Map<String, dynamic>>
+          orderItems = [];
 
       for (final item in widget.items) {
         orderItems.add({
@@ -639,7 +697,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
         });
       }
 
-      final Map<String, dynamic> orderData = {
+      final Map<String, dynamic>
+          orderData = {
         'orderId': orderId,
         'userId': user.uid,
         'customerId': user.uid,
@@ -652,7 +711,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
         'grandTotal': grandTotal,
         'currency': 'BDT',
         'couponCode': _couponCode,
-        'paymentMethod': _paymentMethod,
+        'paymentMethod':
+            _paymentMethod,
         'paymentStatus': 'pending',
         'orderStatus': 'placed',
         'address': _selectedAddress,
@@ -666,36 +726,47 @@ class _CheckoutPageState extends State<CheckoutPage> {
       // GROUP SELLER ORDERS
       // --------------------------------------------------------
 
-      final Map<String, List<CheckoutItem>>
+      final Map<String,
+              List<CheckoutItem>>
           sellerGroups = {};
 
       for (final item in widget.items) {
-        if (item.isResellerProduct) continue;
+        if (item.isResellerProduct) {
+          continue;
+        }
 
-        String? sellerId = item.sellerId;
+        String? sellerId =
+            item.sellerId;
 
-        if (sellerId == null || sellerId.isEmpty) {
+        if (sellerId == null ||
+            sellerId.isEmpty) {
           try {
-            final productDoc = await _firestore
-                .collection('products')
-                .doc(item.id)
-                .get();
+            final productDoc =
+                await _firestore
+                    .collection(
+                        'products')
+                    .doc(item.id)
+                    .get();
 
             if (productDoc.exists) {
               final productData =
                   productDoc.data();
 
               sellerId =
-                  productData?['sellerId']
+                  productData?[
+                              'sellerId']
                           ?.toString() ??
-                      productData?['ownerId']
+                      productData?[
+                              'ownerId']
                           ?.toString();
             }
           } catch (_) {}
         }
 
-        if (sellerId == null || sellerId.isEmpty) {
-          sellerId = 'unknown_seller';
+        if (sellerId == null ||
+            sellerId.isEmpty) {
+          sellerId =
+              'unknown_seller';
         }
 
         sellerGroups.putIfAbsent(
@@ -703,24 +774,30 @@ class _CheckoutPageState extends State<CheckoutPage> {
           () => [],
         );
 
-        sellerGroups[sellerId]!.add(item);
+        sellerGroups[sellerId]!
+            .add(item);
       }
 
       // --------------------------------------------------------
       // GROUP RESELLER ORDERS
       // --------------------------------------------------------
 
-      final Map<String, List<CheckoutItem>>
+      final Map<String,
+              List<CheckoutItem>>
           resellerGroups = {};
 
       for (final item in widget.items) {
-        if (!item.isResellerProduct) continue;
+        if (!item.isResellerProduct) {
+          continue;
+        }
 
         final entrepreneurUid =
-            item.entrepreneurUid ?? user.uid;
+            item.entrepreneurUid ??
+                user.uid;
 
         final sellerId =
-            item.sellerId ?? 'unknown_seller';
+            item.sellerId ??
+                'unknown_seller';
 
         final groupKey =
             '${entrepreneurUid}_$sellerId';
@@ -730,7 +807,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
           () => [],
         );
 
-        resellerGroups[groupKey]!.add(item);
+        resellerGroups[groupKey]!
+            .add(item);
       }
 
       final WriteBatch batch =
@@ -748,18 +826,23 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
       for (final entry
           in sellerGroups.entries) {
-        final sellerId = entry.key;
-        final items = entry.value;
+        final sellerId =
+            entry.key;
+
+        final items =
+            entry.value;
 
         final sellerSubtotal =
             items.fold<double>(
           0,
-          (sum, item) => sum + item.total,
+          (sum, item) =>
+              sum + item.total,
         );
 
         final sellerOrderRef =
             _firestore
-                .collection('seller_orders')
+                .collection(
+                    'seller_orders')
                 .doc();
 
         batch.set(
@@ -772,26 +855,38 @@ class _CheckoutPageState extends State<CheckoutPage> {
             'buyerId': user.uid,
             'customerId': user.uid,
             'userId': user.uid,
-            'items': items.map((item) {
-              return {
-                'productId': item.id,
-                'name': item.name,
-                'price': item.price,
-                'quantity': item.quantity,
-                'total': item.total,
-                'imageUrl': item.imageUrl,
-              };
-            }).toList(),
-            'subtotal': sellerSubtotal,
+            'items': items.map(
+              (item) {
+                return {
+                  'productId':
+                      item.id,
+                  'name': item.name,
+                  'price':
+                      item.price,
+                  'quantity':
+                      item.quantity,
+                  'total':
+                      item.total,
+                  'imageUrl':
+                      item.imageUrl,
+                };
+              },
+            ).toList(),
+            'subtotal':
+                sellerSubtotal,
             'currency': 'BDT',
             'paymentMethod':
                 _paymentMethod,
-            'paymentStatus': 'pending',
-            'orderStatus': 'placed',
+            'paymentStatus':
+                'pending',
+            'orderStatus':
+                'placed',
             'createdAt':
-                FieldValue.serverTimestamp(),
+                FieldValue
+                    .serverTimestamp(),
             'updatedAt':
-                FieldValue.serverTimestamp(),
+                FieldValue
+                    .serverTimestamp(),
           },
         );
       }
@@ -802,12 +897,16 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
       for (final entry
           in resellerGroups.entries) {
-        final items = entry.value;
+        final items =
+            entry.value;
 
-        if (items.isEmpty) continue;
+        if (items.isEmpty) {
+          continue;
+        }
 
         final entrepreneurUid =
-            items.first.entrepreneurUid ??
+            items.first
+                    .entrepreneurUid ??
                 user.uid;
 
         final sellerId =
@@ -817,7 +916,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
         final sellingTotal =
             items.fold<double>(
           0,
-          (sum, item) => sum + item.total,
+          (sum, item) =>
+              sum + item.total,
         );
 
         final supplierTotal =
@@ -825,19 +925,23 @@ class _CheckoutPageState extends State<CheckoutPage> {
           0,
           (sum, item) {
             final supplierPrice =
-                item.supplierPrice ?? 0;
+                item.supplierPrice ??
+                    0;
 
             return sum +
-                (supplierPrice * item.quantity);
+                (supplierPrice *
+                    item.quantity);
           },
         );
 
         final resellerProfit =
-            sellingTotal - supplierTotal;
+            sellingTotal -
+                supplierTotal;
 
         final resellerOrderRef =
             _firestore
-                .collection('reseller_orders')
+                .collection(
+                    'reseller_orders')
                 .doc();
 
         batch.set(
@@ -853,35 +957,46 @@ class _CheckoutPageState extends State<CheckoutPage> {
             'userId': user.uid,
             'sellerId': sellerId,
             'customerName':
-                _selectedAddress?['name']
+                _selectedAddress?[
+                            'name']
                         ?.toString() ??
                     '',
             'customerPhone':
-                _selectedAddress?['phone']
+                _selectedAddress?[
+                            'phone']
                         ?.toString() ??
                     '',
             'address':
-                _selectedAddress?['address']
+                _selectedAddress?[
+                            'address']
                         ?.toString() ??
                     '',
             'deliveryZone':
                 _deliveryZone,
-            'items': items.map((item) {
-              return {
-                'productId': item.id,
-                'name': item.name,
-                'price': item.price,
-                'quantity': item.quantity,
-                'total': item.total,
-                'imageUrl': item.imageUrl,
-                'supplierProductId':
-                    item.supplierProductId,
-                'supplierPrice':
-                    item.supplierPrice,
-                'resellerProfit':
-                    item.resellerProfit,
-              };
-            }).toList(),
+            'items': items.map(
+              (item) {
+                return {
+                  'productId':
+                      item.id,
+                  'name':
+                      item.name,
+                  'price':
+                      item.price,
+                  'quantity':
+                      item.quantity,
+                  'total':
+                      item.total,
+                  'imageUrl':
+                      item.imageUrl,
+                  'supplierProductId':
+                      item.supplierProductId,
+                  'supplierPrice':
+                      item.supplierPrice,
+                  'resellerProfit':
+                      item.resellerProfit,
+                };
+              },
+            ).toList(),
             'sellingTotal':
                 sellingTotal,
             'supplierTotal':
@@ -893,12 +1008,16 @@ class _CheckoutPageState extends State<CheckoutPage> {
             'currency': 'BDT',
             'paymentMethod':
                 _paymentMethod,
-            'paymentStatus': 'pending',
-            'orderStatus': 'placed',
+            'paymentStatus':
+                'pending',
+            'orderStatus':
+                'placed',
             'createdAt':
-                FieldValue.serverTimestamp(),
+                FieldValue
+                    .serverTimestamp(),
             'updatedAt':
-                FieldValue.serverTimestamp(),
+                FieldValue
+                    .serverTimestamp(),
           },
         );
       }
@@ -916,8 +1035,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
       if (_paymentMethod ==
           'BuyNova Wallet') {
         final callable =
-            FirebaseFunctions.instanceFor(
-          region: 'asia-northeast3',
+            FirebaseFunctions
+                .instanceFor(
+          region:
+              'asia-northeast3',
         ).httpsCallable(
           'placeWalletOrder',
         );
@@ -933,8 +1054,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
         );
 
         final bool success =
-            resultData['success'] == true ||
-                resultData['alreadyPaid'] ==
+            resultData['success'] ==
+                    true ||
+                resultData[
+                        'alreadyPaid'] ==
                     true;
 
         if (!success) {
@@ -956,8 +1079,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
       await showDialog(
         context: context,
-        barrierDismissible: false,
-        builder: (_) => AlertDialog(
+        barrierDismissible:
+            false,
+        builder: (_) =>
+            AlertDialog(
           title: const Row(
             children: [
               Icon(
@@ -977,10 +1102,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
           actions: [
             ElevatedButton(
               onPressed: () {
-                Navigator.pop(context);
+                Navigator.pop(
+                  context,
+                );
               },
               child:
-                  const Text('Continue'),
+                  const Text(
+                'Continue',
+              ),
             ),
           ],
         ),
@@ -1001,7 +1130,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
       String message =
           'Something went wrong. Please try again.';
 
-      final errorText = e.toString();
+      final errorText =
+          e.toString();
 
       if (errorText.contains(
               'insufficient') ||
@@ -1011,19 +1141,24 @@ class _CheckoutPageState extends State<CheckoutPage> {
             'Your BuyNova Wallet balance is not enough for this order.';
       } else if (errorText.contains(
           'unauthenticated')) {
-        message = 'Please login again.';
+        message =
+            'Please login again.';
       } else if (errorText.contains(
           'not-found')) {
         message =
             'Order or Wallet service was not found.';
       }
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(
         SnackBar(
-          content: Text(message),
+          content:
+              Text(message),
           duration:
-              const Duration(seconds: 4),
+              const Duration(
+            seconds: 4,
+          ),
         ),
       );
     } finally {
@@ -1039,22 +1174,29 @@ class _CheckoutPageState extends State<CheckoutPage> {
   // CLEAR CART
   // ============================================================
 
-  Future<void> _clearCart(String uid) async {
+  Future<void> _clearCart(
+    String uid,
+  ) async {
     try {
-      final cartSnapshot = await _firestore
-          .collection('users')
-          .doc(uid)
-          .collection('cart')
-          .get();
+      final cartSnapshot =
+          await _firestore
+              .collection('users')
+              .doc(uid)
+              .collection('cart')
+              .get();
 
       if (cartSnapshot.docs.isEmpty) {
         return;
       }
 
-      final batch = _firestore.batch();
+      final batch =
+          _firestore.batch();
 
-      for (final doc in cartSnapshot.docs) {
-        batch.delete(doc.reference);
+      for (final doc
+          in cartSnapshot.docs) {
+        batch.delete(
+          doc.reference,
+        );
       }
 
       await batch.commit();
@@ -1067,13 +1209,17 @@ class _CheckoutPageState extends State<CheckoutPage> {
   // HELPERS
   // ============================================================
 
-  void _showMessage(String message) {
+  void _showMessage(
+    String message,
+  ) {
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(
       SnackBar(
-        content: Text(message),
+        content:
+            Text(message),
       ),
     );
   }
@@ -1085,21 +1231,26 @@ class _CheckoutPageState extends State<CheckoutPage> {
             const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment:
-              CrossAxisAlignment.start,
+              CrossAxisAlignment
+                  .start,
           children: [
             Row(
               children: [
                 const Icon(
                   Icons.location_on,
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(
+                  width: 8,
+                ),
                 const Expanded(
                   child: Text(
                     'Delivery Address',
-                    style: TextStyle(
+                    style:
+                        TextStyle(
                       fontSize: 17,
                       fontWeight:
-                          FontWeight.bold,
+                          FontWeight
+                              .bold,
                     ),
                   ),
                 ),
@@ -1115,8 +1266,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            if (_selectedAddress == null)
+            const SizedBox(
+              height: 8,
+            ),
+            if (_selectedAddress ==
+                null)
               const Text(
                 'No delivery address selected.',
                 style: TextStyle(
@@ -1136,11 +1290,13 @@ class _CheckoutPageState extends State<CheckoutPage> {
         _selectedAddress!;
 
     final name =
-        address['name']?.toString() ??
+        address['name']
+                ?.toString() ??
             '';
 
     final phone =
-        address['phone']?.toString() ??
+        address['phone']
+                ?.toString() ??
             '';
 
     final line1 =
@@ -1151,7 +1307,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
             '';
 
     final city =
-        address['city']?.toString() ??
+        address['city']
+                ?.toString() ??
             '';
 
     final postalCode =
@@ -1172,7 +1329,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
     return Column(
       crossAxisAlignment:
-          CrossAxisAlignment.start,
+          CrossAxisAlignment
+              .start,
       children: [
         if (name.isNotEmpty)
           Text(
@@ -1189,7 +1347,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 const EdgeInsets.only(
               top: 3,
             ),
-            child: Text(phone),
+            child:
+                Text(phone),
           ),
         if (line1.isNotEmpty)
           Padding(
@@ -1197,7 +1356,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 const EdgeInsets.only(
               top: 3,
             ),
-            child: Text(line1),
+            child:
+                Text(line1),
           ),
         if (city.isNotEmpty ||
             postalCode.isNotEmpty)
@@ -1221,11 +1381,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 ? 'Delivery area not set. Tap Change, then edit '
                     'this address and choose Inside/Outside Dhaka.'
                 : zoneText,
-            style: TextStyle(
+            style:
+                TextStyle(
               fontSize: 12,
-              color: zoneText.isEmpty
-                  ? Colors.orange.shade800
-                  : Colors.grey.shade600,
+              color: zoneText
+                  .isEmpty
+                  ? Colors.orange
+                      .shade800
+                  : Colors.grey
+                      .shade600,
             ),
           ),
         ),
@@ -1240,18 +1404,21 @@ class _CheckoutPageState extends State<CheckoutPage> {
             const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment:
-              CrossAxisAlignment.start,
+              CrossAxisAlignment
+                  .start,
           children: [
             const Text(
               'Payment Method',
-              style: TextStyle(
+              style:
+                  TextStyle(
                 fontSize: 18,
                 fontWeight:
                     FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 10),
-
+            const SizedBox(
+              height: 10,
+            ),
             RadioGroup<String>(
               groupValue:
                   _paymentMethod,
@@ -1273,10 +1440,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
               },
               child: Column(
                 children: [
-                  RadioListTile<String>(
+                  RadioListTile<
+                      String>(
                     value:
                         'Cash on Delivery',
-                    title: const Text(
+                    title:
+                        const Text(
                       'Cash on Delivery',
                     ),
                     subtitle:
@@ -1289,10 +1458,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
                           .local_shipping,
                     ),
                   ),
-                  RadioListTile<String>(
+                  RadioListTile<
+                      String>(
                     value:
                         'BuyNova Wallet',
-                    title: const Text(
+                    title:
+                        const Text(
                       'BuyNova Wallet',
                     ),
                     subtitle:
@@ -1308,7 +1479,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
                                   color:
                                       Colors.green,
                                   fontWeight:
-                                      FontWeight.w600,
+                                      FontWeight
+                                          .w600,
                                 ),
                               ),
                     secondary:
@@ -1320,10 +1492,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 ],
               ),
             ),
-
             if (_paymentMethod ==
                 'BuyNova Wallet') ...[
-              const SizedBox(height: 6),
+              const SizedBox(
+                height: 6,
+              ),
               Container(
                 width:
                     double.infinity,
@@ -1334,7 +1507,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 decoration:
                     BoxDecoration(
                   borderRadius:
-                      BorderRadius.circular(
+                      BorderRadius
+                          .circular(
                     12,
                   ),
                   color:
@@ -1368,7 +1542,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
                         _walletHasEnoughBalance
                             ? 'Wallet balance is enough for this order.'
                             : 'Insufficient Wallet balance. Please add money before paying.',
-                        style: TextStyle(
+                        style:
+                            TextStyle(
                           color:
                               _walletHasEnoughBalance
                                   ? Colors.green
@@ -1396,17 +1571,21 @@ class _CheckoutPageState extends State<CheckoutPage> {
             const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment:
-              CrossAxisAlignment.start,
+              CrossAxisAlignment
+                  .start,
           children: [
             const Text(
               'Coupon',
-              style: TextStyle(
+              style:
+                  TextStyle(
                 fontSize: 18,
                 fontWeight:
                     FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(
+              height: 10,
+            ),
             Row(
               children: [
                 Expanded(
@@ -1457,10 +1636,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
               ),
               Text(
                 _couponMessage!,
-                style: TextStyle(
-                  color: _discount > 0
-                      ? Colors.green
-                      : Colors.red,
+                style:
+                    TextStyle(
+                  color:
+                      _discount > 0
+                          ? Colors.green
+                          : Colors.red,
                 ),
               ),
             ],
@@ -1477,11 +1658,13 @@ class _CheckoutPageState extends State<CheckoutPage> {
             const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment:
-              CrossAxisAlignment.start,
+              CrossAxisAlignment
+                  .start,
           children: [
             const Text(
               'Order Items',
-              style: TextStyle(
+              style:
+                  TextStyle(
                 fontSize: 18,
                 fontWeight:
                     FontWeight.bold,
@@ -1494,7 +1677,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
               (item) {
                 return Padding(
                   padding:
-                      const EdgeInsets.only(
+                      const EdgeInsets
+                          .only(
                     bottom: 12,
                   ),
                   child: Row(
@@ -1629,7 +1813,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
               _summaryRow(
                 'Discount',
                 -_discount,
-                color: Colors.green,
+                color:
+                    Colors.green,
               ),
             ],
             const Divider(
@@ -1642,7 +1827,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
               children: [
                 const Text(
                   'Grand Total',
-                  style: TextStyle(
+                  style:
+                      TextStyle(
                     fontSize: 18,
                     fontWeight:
                         FontWeight.bold,
@@ -1681,7 +1867,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
         Text(title),
         Text(
           '$prefix৳${value.abs().toStringAsFixed(2)}',
-          style: TextStyle(
+          style:
+              TextStyle(
             color: color,
             fontWeight:
                 color != null
@@ -1694,7 +1881,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Scaffold(
       appBar: AppBar(
         title:
@@ -1707,20 +1896,25 @@ class _CheckoutPageState extends State<CheckoutPage> {
               const EdgeInsets.all(12),
           children: [
             _buildAddressCard(),
-            const SizedBox(height: 12),
-
+            const SizedBox(
+              height: 12,
+            ),
             _buildOrderItems(),
-            const SizedBox(height: 12),
-
+            const SizedBox(
+              height: 12,
+            ),
             _buildCouponSection(),
-            const SizedBox(height: 12),
-
+            const SizedBox(
+              height: 12,
+            ),
             _buildPaymentSection(),
-            const SizedBox(height: 12),
-
+            const SizedBox(
+              height: 12,
+            ),
             _buildSummary(),
-            const SizedBox(height: 20),
-
+            const SizedBox(
+              height: 20,
+            ),
             SizedBox(
               height: 54,
               child: ElevatedButton(
@@ -1728,33 +1922,35 @@ class _CheckoutPageState extends State<CheckoutPage> {
                     _placingOrder
                         ? null
                         : _placeOrder,
-                child: _placingOrder
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child:
-                            CircularProgressIndicator(
-                          strokeWidth:
-                              2.5,
-                          color:
-                              Colors.white,
-                        ),
-                      )
-                    : Text(
-                        _paymentMethod ==
-                                'BuyNova Wallet'
-                            ? 'Pay ৳${grandTotal.toStringAsFixed(2)} with Wallet'
-                            : 'Place Order',
-                        style:
-                            const TextStyle(
-                          fontSize: 16,
-                          fontWeight:
-                              FontWeight.bold,
-                        ),
-                      ),
+                child:
+                    _placingOrder
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child:
+                                CircularProgressIndicator(
+                              strokeWidth:
+                                  2.5,
+                              color:
+                                  Colors.white,
+                            ),
+                          )
+                        : Text(
+                            _paymentMethod ==
+                                    'BuyNova Wallet'
+                                ? 'Pay ৳${grandTotal.toStringAsFixed(2)} with Wallet'
+                                : 'Place Order',
+                            style:
+                                const TextStyle(
+                              fontSize:
+                                  16,
+                              fontWeight:
+                                  FontWeight
+                                      .bold,
+                            ),
+                          ),
               ),
             ),
-
             const SizedBox(
               height: 30,
             ),
