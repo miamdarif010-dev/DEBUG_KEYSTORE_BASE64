@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:google_mlkit_image_labeling/google_mlkit_image_labeling.dart';
 
 import 'login_page.dart';
 import 'user_profile_page.dart';
@@ -243,11 +244,12 @@ class _HomePageState extends State<HomePage>
   }
 
   // ------------------------------------------------------------
-  // CAMERA / GALLERY SEARCH
+  // CAMERA / GALLERY IMAGE SEARCH
   // ------------------------------------------------------------
 
   Future<void> _openCameraSearch() async {
-    final ImageSource? source = await showModalBottomSheet<ImageSource>(
+    final ImageSource? source =
+        await showModalBottomSheet<ImageSource>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (context) {
@@ -276,7 +278,8 @@ class _HomePageState extends State<HomePage>
                   ),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius:
+                        BorderRadius.circular(10),
                   ),
                 ),
 
@@ -299,10 +302,12 @@ class _HomePageState extends State<HomePage>
                     width: 48,
                     height: 48,
                     decoration: BoxDecoration(
-                      color: Colors.redAccent.withValues(
+                      color:
+                          Colors.redAccent.withValues(
                         alpha: 0.10,
                       ),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius:
+                          BorderRadius.circular(14),
                     ),
                     child: const Icon(
                       Icons.camera_alt_outlined,
@@ -334,10 +339,12 @@ class _HomePageState extends State<HomePage>
                     width: 48,
                     height: 48,
                     decoration: BoxDecoration(
-                      color: Colors.blueAccent.withValues(
+                      color:
+                          Colors.blueAccent.withValues(
                         alpha: 0.10,
                       ),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius:
+                          BorderRadius.circular(14),
                     ),
                     child: const Icon(
                       Icons.photo_library_outlined,
@@ -389,7 +396,8 @@ class _HomePageState extends State<HomePage>
     try {
       final picker = ImagePicker();
 
-      final XFile? image = await picker.pickImage(
+      final XFile? image =
+          await picker.pickImage(
         source: source,
         imageQuality: 85,
         maxWidth: 1600,
@@ -414,7 +422,13 @@ class _HomePageState extends State<HomePage>
     }
   }
 
-  Future<void> _showImagePreview(XFile image) async {
+  // ------------------------------------------------------------
+  // IMAGE PREVIEW
+  // ------------------------------------------------------------
+
+  Future<void> _showImagePreview(
+    XFile image,
+  ) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -440,7 +454,8 @@ class _HomePageState extends State<HomePage>
                   ),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius:
+                        BorderRadius.circular(10),
                   ),
                 ),
 
@@ -458,7 +473,8 @@ class _HomePageState extends State<HomePage>
                 const SizedBox(height: 12),
 
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius:
+                      BorderRadius.circular(16),
                   child: Image.file(
                     File(image.path),
                     width: double.infinity,
@@ -479,9 +495,12 @@ class _HomePageState extends State<HomePage>
                           side: const BorderSide(
                             color: Colors.redAccent,
                           ),
-                          shape: RoundedRectangleBorder(
+                          shape:
+                              RoundedRectangleBorder(
                             borderRadius:
-                                BorderRadius.circular(14),
+                                BorderRadius.circular(
+                              14,
+                            ),
                           ),
                         ),
                         onPressed: () async {
@@ -497,7 +516,8 @@ class _HomePageState extends State<HomePage>
                           'Choose Again',
                           style: TextStyle(
                             color: Colors.redAccent,
-                            fontWeight: FontWeight.bold,
+                            fontWeight:
+                                FontWeight.bold,
                           ),
                         ),
                       ),
@@ -507,40 +527,37 @@ class _HomePageState extends State<HomePage>
 
                     Expanded(
                       child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
+                        style:
+                            ElevatedButton.styleFrom(
                           backgroundColor:
                               Colors.redAccent,
-                          foregroundColor: Colors.white,
+                          foregroundColor:
+                              Colors.white,
                           minimumSize:
                               const Size.fromHeight(50),
-                          shape: RoundedRectangleBorder(
+                          shape:
+                              RoundedRectangleBorder(
                             borderRadius:
-                                BorderRadius.circular(14),
+                                BorderRadius.circular(
+                              14,
+                            ),
                           ),
                         ),
-                        onPressed: () {
+                        onPressed: () async {
                           Navigator.pop(context);
 
-                          ScaffoldMessenger.of(context)
-                              .showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Photo selected successfully.',
-                              ),
-                              behavior:
-                                  SnackBarBehavior.floating,
-                              duration:
-                                  Duration(seconds: 2),
-                            ),
+                          await _findProductsFromImage(
+                            image,
                           );
                         },
                         icon: const Icon(
-                          Icons.check,
+                          Icons.search,
                         ),
                         label: const Text(
                           'Use Photo',
                           style: TextStyle(
-                            fontWeight: FontWeight.bold,
+                            fontWeight:
+                                FontWeight.bold,
                           ),
                         ),
                       ),
@@ -570,6 +587,509 @@ class _HomePageState extends State<HomePage>
     );
   }
 
+  // ------------------------------------------------------------
+  // IMAGE ANALYSIS + FIRESTORE PRODUCT MATCHING
+  // ------------------------------------------------------------
+
+  Future<void> _findProductsFromImage(
+    XFile image,
+  ) async {
+    if (!mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return const AlertDialog(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                ),
+              ),
+              SizedBox(width: 18),
+              Expanded(
+                child: Text(
+                  'Analyzing image...',
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    ImageLabeler? imageLabeler;
+
+    try {
+      final inputImage =
+          InputImage.fromFilePath(image.path);
+
+      imageLabeler = ImageLabeler(
+        options: ImageLabelerOptions(
+          confidenceThreshold: 0.45,
+        ),
+      );
+
+      final labels =
+          await imageLabeler.processImage(
+        inputImage,
+      );
+
+      final detectedLabels = labels
+          .map(
+            (label) =>
+                label.label.trim().toLowerCase(),
+          )
+          .where(
+            (label) => label.isNotEmpty,
+          )
+          .toSet()
+          .toList();
+
+      final snapshot =
+          await FirebaseFirestore.instance
+              .collection('products')
+              .get();
+
+      final matchedProducts =
+          <QueryDocumentSnapshot>[];
+
+      for (final doc in snapshot.docs) {
+        final data =
+            doc.data() as Map<String, dynamic>;
+
+        final productName =
+            data['name']
+                    ?.toString()
+                    .toLowerCase() ??
+                '';
+
+        final category =
+            data['category']
+                    ?.toString()
+                    .toLowerCase() ??
+                '';
+
+        final description =
+            data['description']
+                    ?.toString()
+                    .toLowerCase() ??
+                '';
+
+        final searchText =
+            '$productName $category $description';
+
+        bool matched = false;
+
+        for (final label in detectedLabels) {
+          if (searchText.contains(label)) {
+            matched = true;
+            break;
+          }
+
+          final words = label
+              .split(
+                RegExp(r'[\s\-_]+'),
+              )
+              .where(
+                (word) => word.length >= 3,
+              );
+
+          for (final word in words) {
+            if (searchText.contains(word)) {
+              matched = true;
+              break;
+            }
+          }
+
+          if (matched) {
+            break;
+          }
+        }
+
+        if (matched) {
+          matchedProducts.add(doc);
+        }
+      }
+
+      if (!mounted) return;
+
+      Navigator.of(context).pop();
+
+      await imageLabeler.close();
+      imageLabeler = null;
+
+      await _showImageSearchResults(
+        image: image,
+        detectedLabels: detectedLabels,
+        products: matchedProducts,
+      );
+    } catch (e) {
+      if (imageLabeler != null) {
+        await imageLabeler.close();
+      }
+
+      if (!mounted) return;
+
+      Navigator.of(context).pop();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Image search failed: $e',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  // ------------------------------------------------------------
+  // IMAGE SEARCH RESULTS
+  // ------------------------------------------------------------
+
+  Future<void> _showImageSearchResults({
+    required XFile image,
+    required List<String> detectedLabels,
+    required List<QueryDocumentSnapshot> products,
+  }) async {
+    if (!mounted) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return SafeArea(
+          child: Container(
+            height:
+                MediaQuery.of(context).size.height *
+                    0.82,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+            ),
+            child: Column(
+              children: [
+                const SizedBox(height: 10),
+
+                Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius:
+                        BorderRadius.circular(10),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                const Padding(
+                  padding:
+                      EdgeInsets.symmetric(
+                    horizontal: 16,
+                  ),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Image Search Results',
+                      style: TextStyle(
+                        fontSize: 21,
+                        fontWeight:
+                            FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(
+                    horizontal: 16,
+                  ),
+                  child: Row(
+                    children: [
+                      ClipRRect(
+                        borderRadius:
+                            BorderRadius.circular(
+                          12,
+                        ),
+                        child: Image.file(
+                          File(image.path),
+                          width: 70,
+                          height: 70,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+
+                      const SizedBox(width: 12),
+
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Detected:',
+                              style: TextStyle(
+                                fontWeight:
+                                    FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(
+                              height: 4,
+                            ),
+                            Text(
+                              detectedLabels.isEmpty
+                                  ? 'No clear object detected'
+                                  : detectedLabels
+                                      .take(5)
+                                      .join(', '),
+                              maxLines: 2,
+                              overflow:
+                                  TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors
+                                    .grey.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                const Divider(height: 1),
+
+                Expanded(
+                  child: products.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding:
+                                const EdgeInsets.all(
+                              30,
+                            ),
+                            child: Column(
+                              mainAxisSize:
+                                  MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons
+                                      .search_off_rounded,
+                                  size: 60,
+                                  color: Colors
+                                      .grey.shade400,
+                                ),
+
+                                const SizedBox(
+                                  height: 14,
+                                ),
+
+                                const Text(
+                                  'No matching products found',
+                                  textAlign:
+                                      TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight:
+                                        FontWeight.bold,
+                                  ),
+                                ),
+
+                                const SizedBox(
+                                  height: 8,
+                                ),
+
+                                Text(
+                                  'Try another photo with the product clearly visible.',
+                                  textAlign:
+                                      TextAlign.center,
+                                  style: TextStyle(
+                                    color: Colors
+                                        .grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
+                          padding:
+                              const EdgeInsets.all(
+                            12,
+                          ),
+                          itemCount:
+                              products.length,
+                          itemBuilder:
+                              (context, index) {
+                            final doc =
+                                products[index];
+
+                            final data =
+                                doc.data()
+                                    as Map<String,
+                                        dynamic>;
+
+                            final name =
+                                data['name']
+                                        ?.toString() ??
+                                    'Unnamed Product';
+
+                            final imageUrl =
+                                data['imageUrl']
+                                    ?.toString();
+
+                            final price =
+                                _formatBdtPrice(data);
+
+                            return Card(
+                              elevation: 2,
+                              margin:
+                                  const EdgeInsets
+                                      .only(
+                                bottom: 10,
+                              ),
+                              shape:
+                                  RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius
+                                        .circular(
+                                  14,
+                                ),
+                              ),
+                              child: ListTile(
+                                contentPadding:
+                                    const EdgeInsets
+                                        .all(
+                                  8,
+                                ),
+                                leading: ClipRRect(
+                                  borderRadius:
+                                      BorderRadius
+                                          .circular(
+                                    10,
+                                  ),
+                                  child: imageUrl !=
+                                              null &&
+                                          imageUrl
+                                              .isNotEmpty
+                                      ? Image.network(
+                                          imageUrl,
+                                          width: 65,
+                                          height: 65,
+                                          fit: BoxFit
+                                              .cover,
+                                          errorBuilder:
+                                              (
+                                            context,
+                                            error,
+                                            stackTrace,
+                                          ) {
+                                            return Container(
+                                              width: 65,
+                                              height: 65,
+                                              color: Colors
+                                                  .grey
+                                                  .shade200,
+                                              child:
+                                                  const Icon(
+                                                Icons
+                                                    .image,
+                                              ),
+                                            );
+                                          },
+                                        )
+                                      : Container(
+                                          width: 65,
+                                          height: 65,
+                                          color: Colors
+                                              .grey
+                                              .shade200,
+                                          child:
+                                              const Icon(
+                                            Icons.image,
+                                          ),
+                                        ),
+                                ),
+                                title: Text(
+                                  name,
+                                  maxLines: 2,
+                                  overflow:
+                                      TextOverflow
+                                          .ellipsis,
+                                  style:
+                                      const TextStyle(
+                                    fontWeight:
+                                        FontWeight
+                                            .bold,
+                                  ),
+                                ),
+                                subtitle:
+                                    Padding(
+                                  padding:
+                                      const EdgeInsets
+                                          .only(
+                                    top: 5,
+                                  ),
+                                  child: Text(
+                                    price,
+                                    style:
+                                        const TextStyle(
+                                      color: Colors
+                                          .redAccent,
+                                      fontWeight:
+                                          FontWeight
+                                              .bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ),
+                                trailing:
+                                    const Icon(
+                                  Icons
+                                      .arrow_forward_ios,
+                                  size: 16,
+                                ),
+                                onTap: () {
+                                  Navigator.pop(
+                                    context,
+                                  );
+
+                                  _openProductDetails(
+                                    productId:
+                                        doc.id,
+                                    product: data,
+                                  );
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ------------------------------------------------------------
+  // COUPON
+  // ------------------------------------------------------------
+
   void _openCoupon() {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -582,6 +1102,10 @@ class _HomePageState extends State<HomePage>
     );
   }
 
+  // ------------------------------------------------------------
+  // BOTTOM NAVIGATION
+  // ------------------------------------------------------------
+
   Future<void> _onNavTap(int index) async {
     setState(() {
       _selectedIndex = index;
@@ -592,7 +1116,8 @@ class _HomePageState extends State<HomePage>
     }
 
     if (index == 1) {
-      final result = await Navigator.push<String>(
+      final result =
+          await Navigator.push<String>(
         context,
         MaterialPageRoute(
           builder: (context) =>
@@ -601,11 +1126,13 @@ class _HomePageState extends State<HomePage>
       );
 
       if (result != null && mounted) {
-        final matchIndex = categories.indexOf(result);
+        final matchIndex =
+            categories.indexOf(result);
 
         if (matchIndex != -1) {
           setState(() {
-            _selectedCategory = matchIndex;
+            _selectedCategory =
+                matchIndex;
           });
         }
       }
@@ -685,6 +1212,10 @@ class _HomePageState extends State<HomePage>
     }
   }
 
+  // ------------------------------------------------------------
+  // VIDEOS
+  // ------------------------------------------------------------
+
   void _openVideos() {
     Navigator.push(
       context,
@@ -694,6 +1225,10 @@ class _HomePageState extends State<HomePage>
       ),
     );
   }
+
+  // ------------------------------------------------------------
+  // ACCOUNT
+  // ------------------------------------------------------------
 
   void _openAccount(bool isLoggedIn) {
     if (isLoggedIn) {
@@ -714,6 +1249,10 @@ class _HomePageState extends State<HomePage>
       );
     }
   }
+
+  // ------------------------------------------------------------
+  // BUYNOVA LOGO
+  // ------------------------------------------------------------
 
   Widget _buildBuyNovaLogo() {
     return RichText(
@@ -788,10 +1327,15 @@ class _HomePageState extends State<HomePage>
     );
   }
 
+  // ------------------------------------------------------------
+  // BUILD
+  // ------------------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
+      stream:
+          FirebaseAuth.instance.authStateChanges(),
       builder: (
         context,
         authSnapshot,
@@ -800,13 +1344,17 @@ class _HomePageState extends State<HomePage>
         final isLoggedIn = user != null;
 
         return Scaffold(
+          // ----------------------------------------------------
+          // DRAWER
+          // ----------------------------------------------------
           drawer: Drawer(
             child: SafeArea(
               child: ListView(
                 padding: EdgeInsets.zero,
                 children: [
                   DrawerHeader(
-                    decoration: const BoxDecoration(
+                    decoration:
+                        const BoxDecoration(
                       color: Colors.redAccent,
                     ),
                     child: Row(
@@ -816,13 +1364,16 @@ class _HomePageState extends State<HomePage>
                           color: Colors.white,
                           size: 32,
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(
+                          width: 12,
+                        ),
                         const Text(
                           'BuyNova',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 24,
-                            fontWeight: FontWeight.bold,
+                            fontWeight:
+                                FontWeight.bold,
                           ),
                         ),
                       ],
@@ -838,7 +1389,9 @@ class _HomePageState extends State<HomePage>
                     ),
                     onTap: () {
                       Navigator.pop(context);
-                      _openAccount(isLoggedIn);
+                      _openAccount(
+                        isLoggedIn,
+                      );
                     },
                   ),
 
@@ -851,6 +1404,7 @@ class _HomePageState extends State<HomePage>
                     ),
                     onTap: () {
                       Navigator.pop(context);
+
                       setState(() {
                         _selectedIndex = 0;
                       });
@@ -868,7 +1422,8 @@ class _HomePageState extends State<HomePage>
                       Navigator.pop(context);
 
                       final result =
-                          await Navigator.push<String>(
+                          await Navigator
+                              .push<String>(
                         context,
                         MaterialPageRoute(
                           builder: (context) =>
@@ -876,9 +1431,11 @@ class _HomePageState extends State<HomePage>
                         ),
                       );
 
-                      if (result != null && mounted) {
+                      if (result != null &&
+                          mounted) {
                         final matchIndex =
-                            categories.indexOf(result);
+                            categories
+                                .indexOf(result);
 
                         if (matchIndex != -1) {
                           setState(() {
@@ -893,7 +1450,8 @@ class _HomePageState extends State<HomePage>
                   if (isLoggedIn)
                     ListTile(
                       leading: const Icon(
-                        Icons.add_circle_outline,
+                        Icons
+                            .add_circle_outline,
                       ),
                       title: const Text(
                         'Add Product',
@@ -913,7 +1471,8 @@ class _HomePageState extends State<HomePage>
 
                   ListTile(
                     leading: const Icon(
-                      Icons.video_library_outlined,
+                      Icons
+                          .video_library_outlined,
                     ),
                     title: const Text(
                       'Videos',
@@ -929,7 +1488,8 @@ class _HomePageState extends State<HomePage>
 
                   ListTile(
                     leading: const Icon(
-                      Icons.shopping_cart_outlined,
+                      Icons
+                          .shopping_cart_outlined,
                     ),
                     title: const Text(
                       'Cart',
@@ -978,7 +1538,9 @@ class _HomePageState extends State<HomePage>
                       onTap: () async {
                         Navigator.pop(context);
 
-                        await FirebaseAuth.instance.signOut();
+                        await FirebaseAuth
+                            .instance
+                            .signOut();
                       },
                     ),
                 ],
@@ -986,8 +1548,12 @@ class _HomePageState extends State<HomePage>
             ),
           ),
 
+          // ----------------------------------------------------
+          // APP BAR
+          // ----------------------------------------------------
           appBar: AppBar(
-            backgroundColor: Colors.redAccent,
+            backgroundColor:
+                Colors.redAccent,
             elevation: 0,
             leading: Builder(
               builder: (context) {
@@ -997,7 +1563,8 @@ class _HomePageState extends State<HomePage>
                     color: Colors.white,
                   ),
                   onPressed: () {
-                    Scaffold.of(context).openDrawer();
+                    Scaffold.of(context)
+                        .openDrawer();
                   },
                 );
               },
@@ -1014,42 +1581,61 @@ class _HomePageState extends State<HomePage>
               if (user == null)
                 IconButton(
                   icon: const Icon(
-                    Icons.notifications_outlined,
+                    Icons
+                        .notifications_outlined,
                     color: Colors.white,
                   ),
-                  onPressed: _openGlobalNotifications,
+                  onPressed:
+                      _openGlobalNotifications,
                 )
               else
                 StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('global_notifications')
-                      .where(
-                        'active',
-                        isEqualTo: true,
-                      )
-                      .snapshots(),
+                  stream:
+                      FirebaseFirestore.instance
+                          .collection(
+                            'global_notifications',
+                          )
+                          .where(
+                            'active',
+                            isEqualTo: true,
+                          )
+                          .snapshots(),
                   builder: (
                     context,
                     notificationSnapshot,
                   ) {
                     final notifications =
-                        notificationSnapshot.data?.docs ?? [];
+                        notificationSnapshot
+                                .data
+                                ?.docs ??
+                            [];
 
-                    return StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance
-                          .collection('users')
-                          .doc(user.uid)
-                          .collection('globalNotificationReads')
-                          .snapshots(),
+                    return StreamBuilder<
+                        QuerySnapshot>(
+                      stream:
+                          FirebaseFirestore
+                              .instance
+                              .collection('users')
+                              .doc(user.uid)
+                              .collection(
+                                'globalNotificationReads',
+                              )
+                              .snapshots(),
                       builder: (
                         context,
                         readSnapshot,
                       ) {
-                        final readIds = <String>{};
+                        final readIds =
+                            <String>{};
 
                         for (final readDoc
-                            in readSnapshot.data?.docs ?? []) {
-                          readIds.add(readDoc.id);
+                            in readSnapshot
+                                    .data
+                                    ?.docs ??
+                                []) {
+                          readIds.add(
+                            readDoc.id,
+                          );
                         }
 
                         int unreadCount = 0;
@@ -1064,12 +1650,16 @@ class _HomePageState extends State<HomePage>
                         }
 
                         return Stack(
-                          clipBehavior: Clip.none,
+                          clipBehavior:
+                              Clip.none,
                           children: [
                             IconButton(
-                              icon: const Icon(
-                                Icons.notifications_outlined,
-                                color: Colors.white,
+                              icon:
+                                  const Icon(
+                                Icons
+                                    .notifications_outlined,
+                                color:
+                                    Colors.white,
                               ),
                               onPressed:
                                   _openGlobalNotifications,
@@ -1079,9 +1669,11 @@ class _HomePageState extends State<HomePage>
                               Positioned(
                                 right: 4,
                                 top: 4,
-                                child: Container(
+                                child:
+                                    Container(
                                   padding:
-                                      const EdgeInsets.symmetric(
+                                      const EdgeInsets
+                                          .symmetric(
                                     horizontal: 4,
                                     vertical: 2,
                                   ),
@@ -1092,19 +1684,30 @@ class _HomePageState extends State<HomePage>
                                   ),
                                   decoration:
                                       const BoxDecoration(
-                                    color: Colors.white,
-                                    shape: BoxShape.circle,
+                                    color:
+                                        Colors.white,
+                                    shape:
+                                        BoxShape
+                                            .circle,
                                   ),
-                                  child: Text(
-                                    unreadCount > 99
+                                  child:
+                                      Text(
+                                    unreadCount >
+                                            99
                                         ? '99+'
                                         : '$unreadCount',
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      color: Colors.redAccent,
-                                      fontSize: 9,
+                                    textAlign:
+                                        TextAlign
+                                            .center,
+                                    style:
+                                        const TextStyle(
+                                      color: Colors
+                                          .redAccent,
+                                      fontSize:
+                                          9,
                                       fontWeight:
-                                          FontWeight.bold,
+                                          FontWeight
+                                              .bold,
                                     ),
                                   ),
                                 ),
@@ -1118,11 +1721,16 @@ class _HomePageState extends State<HomePage>
             ],
           ),
 
+          // ----------------------------------------------------
+          // BODY
+          // ----------------------------------------------------
           body: Column(
             children: [
+              // SEARCH BAR
               Container(
                 color: Colors.redAccent,
-                padding: const EdgeInsets.fromLTRB(
+                padding:
+                    const EdgeInsets.fromLTRB(
                   14,
                   2,
                   14,
@@ -1130,43 +1738,61 @@ class _HomePageState extends State<HomePage>
                 ),
                 child: Container(
                   height: 48,
-                  decoration: BoxDecoration(
+                  decoration:
+                      BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius:
+                        BorderRadius.circular(
+                      24,
+                    ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(
+                        color: Colors.black
+                            .withValues(
                           alpha: 0.12,
                         ),
                         blurRadius: 7,
-                        offset: const Offset(0, 2),
+                        offset:
+                            const Offset(0, 2),
                       ),
                     ],
                   ),
                   child: TextField(
-                    controller: _searchController,
-                    textInputAction: TextInputAction.search,
+                    controller:
+                        _searchController,
+                    textInputAction:
+                        TextInputAction.search,
                     onChanged: (value) {
                       setState(() {
                         _searchQuery =
-                            value.trim().toLowerCase();
+                            value
+                                .trim()
+                                .toLowerCase();
                       });
                     },
-                    decoration: InputDecoration(
-                      hintText: 'Search products...',
+                    decoration:
+                        InputDecoration(
+                      hintText:
+                          'Search products...',
                       hintStyle: TextStyle(
-                        color: Colors.grey.shade500,
+                        color: Colors
+                            .grey.shade500,
                         fontSize: 14,
-                        fontWeight: FontWeight.w400,
+                        fontWeight:
+                            FontWeight.w400,
                       ),
-                      prefixIcon: const Padding(
-                        padding: EdgeInsets.only(
+                      prefixIcon:
+                          const Padding(
+                        padding:
+                            EdgeInsets.only(
                           left: 4,
                           right: 2,
                         ),
                         child: Icon(
-                          Icons.search_rounded,
-                          color: Colors.redAccent,
+                          Icons
+                              .search_rounded,
+                          color:
+                              Colors.redAccent,
                           size: 24,
                         ),
                       ),
@@ -1176,22 +1802,28 @@ class _HomePageState extends State<HomePage>
                         minHeight: 48,
                       ),
                       suffixIcon: Row(
-                        mainAxisSize: MainAxisSize.min,
+                        mainAxisSize:
+                            MainAxisSize.min,
                         children: [
-                          if (_searchQuery.isNotEmpty)
+                          if (_searchQuery
+                              .isNotEmpty)
                             IconButton(
                               tooltip: 'Clear',
                               splashRadius: 20,
                               icon: Icon(
-                                Icons.close_rounded,
-                                color: Colors.grey.shade600,
+                                Icons
+                                    .close_rounded,
+                                color: Colors
+                                    .grey.shade600,
                                 size: 20,
                               ),
                               onPressed: () {
-                                _searchController.clear();
+                                _searchController
+                                    .clear();
 
                                 setState(() {
-                                  _searchQuery = '';
+                                  _searchQuery =
+                                      '';
                                 });
                               },
                             ),
@@ -1199,21 +1831,28 @@ class _HomePageState extends State<HomePage>
                           Container(
                             height: 26,
                             width: 1,
-                            color: Colors.grey.shade300,
+                            color: Colors
+                                .grey.shade300,
                           ),
 
                           IconButton(
-                            tooltip: 'Search by camera',
+                            tooltip:
+                                'Search by camera',
                             splashRadius: 20,
                             icon: Icon(
-                              Icons.camera_alt_outlined,
-                              color: Colors.grey.shade700,
+                              Icons
+                                  .camera_alt_outlined,
+                              color: Colors
+                                  .grey.shade700,
                               size: 21,
                             ),
-                            onPressed: _openCameraSearch,
+                            onPressed:
+                                _openCameraSearch,
                           ),
 
-                          const SizedBox(width: 4),
+                          const SizedBox(
+                            width: 4,
+                          ),
                         ],
                       ),
                       suffixIconConstraints:
@@ -1221,11 +1860,15 @@ class _HomePageState extends State<HomePage>
                         minWidth: 0,
                         minHeight: 48,
                       ),
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
+                      border:
+                          InputBorder.none,
+                      enabledBorder:
+                          InputBorder.none,
+                      focusedBorder:
+                          InputBorder.none,
                       contentPadding:
-                          const EdgeInsets.symmetric(
+                          const EdgeInsets
+                              .symmetric(
                         vertical: 13,
                         horizontal: 4,
                       ),
@@ -1234,60 +1877,91 @@ class _HomePageState extends State<HomePage>
                 ),
               ),
 
+              // CATEGORIES
               Container(
                 height: 58,
                 color: Colors.white,
                 child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
+                  scrollDirection:
+                      Axis.horizontal,
                   physics:
                       const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(
+                  padding:
+                      const EdgeInsets
+                          .symmetric(
                     horizontal: 10,
                     vertical: 9,
                   ),
-                  itemCount: categories.length,
-                  itemBuilder: (context, index) {
+                  itemCount:
+                      categories.length,
+                  itemBuilder:
+                      (context, index) {
                     final isSelected =
-                        _selectedCategory == index;
+                        _selectedCategory ==
+                            index;
 
                     return GestureDetector(
                       onTap: () {
                         setState(() {
-                          _selectedCategory = index;
+                          _selectedCategory =
+                              index;
                         });
                       },
-                      child: AnimatedContainer(
+                      child:
+                          AnimatedContainer(
                         duration:
-                            const Duration(milliseconds: 200),
-                        margin: const EdgeInsets.symmetric(
+                            const Duration(
+                          milliseconds: 200,
+                        ),
+                        margin:
+                            const EdgeInsets
+                                .symmetric(
                           horizontal: 5,
                         ),
-                        padding: const EdgeInsets.symmetric(
+                        padding:
+                            const EdgeInsets
+                                .symmetric(
                           horizontal: 17,
                           vertical: 8,
                         ),
-                        decoration: BoxDecoration(
+                        decoration:
+                            BoxDecoration(
                           color: isSelected
-                              ? Colors.redAccent
-                              : Colors.grey.shade100,
+                              ? Colors
+                                  .redAccent
+                              : Colors.grey
+                                  .shade100,
                           borderRadius:
-                              BorderRadius.circular(20),
-                          border: Border.all(
+                              BorderRadius
+                                  .circular(
+                            20,
+                          ),
+                          border:
+                              Border.all(
                             color: isSelected
-                                ? Colors.redAccent
-                                : Colors.grey.shade300,
+                                ? Colors
+                                    .redAccent
+                                : Colors
+                                    .grey
+                                    .shade300,
                           ),
                         ),
                         child: Center(
                           child: Text(
                             categories[index],
-                            style: TextStyle(
+                            style:
+                                TextStyle(
                               color: isSelected
-                                  ? Colors.white
-                                  : Colors.black87,
-                              fontWeight: isSelected
-                                  ? FontWeight.bold
-                                  : FontWeight.w500,
+                                  ? Colors
+                                      .white
+                                  : Colors
+                                      .black87,
+                              fontWeight:
+                                  isSelected
+                                      ? FontWeight
+                                          .bold
+                                      : FontWeight
+                                          .w500,
                               fontSize: 14,
                             ),
                           ),
@@ -1298,11 +1972,17 @@ class _HomePageState extends State<HomePage>
                 ),
               ),
 
+              // PRODUCTS
               Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('products')
-                      .snapshots(),
+                child:
+                    StreamBuilder<QuerySnapshot>(
+                  stream:
+                      FirebaseFirestore
+                          .instance
+                          .collection(
+                            'products',
+                          )
+                          .snapshots(),
                   builder: (
                     context,
                     snapshot,
@@ -1311,35 +1991,47 @@ class _HomePageState extends State<HomePage>
                       return const Center(
                         child: Text(
                           'Failed to load products',
-                          style: TextStyle(
+                          style:
+                              TextStyle(
                             fontSize: 16,
-                            color: Colors.grey,
+                            color:
+                                Colors.grey,
                           ),
                         ),
                       );
                     }
 
-                    if (snapshot.connectionState ==
-                        ConnectionState.waiting) {
+                    if (snapshot
+                            .connectionState ==
+                        ConnectionState
+                            .waiting) {
                       return const Center(
-                        child: CircularProgressIndicator(),
+                        child:
+                            CircularProgressIndicator(),
                       );
                     }
 
                     final allDocs =
-                        snapshot.data?.docs ?? [];
+                        snapshot.data?.docs ??
+                            [];
 
-                    final filteredDocs = allDocs.where(
+                    final filteredDocs =
+                        allDocs.where(
                       (doc) {
                         final data =
                             doc.data()
-                                as Map<String, dynamic>;
+                                as Map<
+                                    String,
+                                    dynamic>;
 
-                        if (!_matchesCategory(data)) {
+                        if (!_matchesCategory(
+                          data,
+                        )) {
                           return false;
                         }
 
-                        if (_searchQuery.isEmpty) {
+                        if (_searchQuery
+                            .isEmpty) {
                           return true;
                         }
 
@@ -1349,7 +2041,8 @@ class _HomePageState extends State<HomePage>
                                     .toLowerCase() ??
                                 '';
 
-                        return productName.contains(
+                        return productName
+                            .contains(
                           _searchQuery,
                         );
                       },
@@ -1358,73 +2051,108 @@ class _HomePageState extends State<HomePage>
                     if (filteredDocs.isEmpty) {
                       return Center(
                         child: Text(
-                          _searchQuery.isNotEmpty
+                          _searchQuery
+                                  .isNotEmpty
                               ? 'No products found for "$_searchQuery"'
-                              : _selectedCategory == 0
+                              : _selectedCategory ==
+                                      0
                                   ? 'No products found yet'
                                   : 'No products found in ${categories[_selectedCategory]}',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
+                          textAlign:
+                              TextAlign.center,
+                          style:
+                              const TextStyle(
                             fontSize: 16,
-                            color: Colors.grey,
+                            color:
+                                Colors.grey,
                           ),
                         ),
                       );
                     }
 
-                    return StreamBuilder<QuerySnapshot>(
+                    return StreamBuilder<
+                        QuerySnapshot>(
                       stream: user == null
                           ? null
-                          : FirebaseFirestore.instance
-                              .collection('users')
+                          : FirebaseFirestore
+                              .instance
+                              .collection(
+                                'users',
+                              )
                               .doc(user.uid)
-                              .collection('favorites')
+                              .collection(
+                                'favorites',
+                              )
                               .snapshots(),
                       builder: (
                         context,
                         favoriteSnapshot,
                       ) {
-                        final favoriteIds = <String>{};
+                        final favoriteIds =
+                            <String>{};
 
                         for (final favoriteDoc
-                            in favoriteSnapshot.data?.docs ?? []) {
-                          favoriteIds.add(favoriteDoc.id);
+                            in favoriteSnapshot
+                                    .data
+                                    ?.docs ??
+                                []) {
+                          favoriteIds.add(
+                            favoriteDoc.id,
+                          );
                         }
 
-                        return GridView.builder(
+                        return GridView
+                            .builder(
                           padding:
-                              const EdgeInsets.all(8),
+                              const EdgeInsets
+                                  .all(8),
                           gridDelegate:
                               const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            childAspectRatio: 0.75,
-                            crossAxisSpacing: 8,
-                            mainAxisSpacing: 8,
+                            crossAxisCount:
+                                2,
+                            childAspectRatio:
+                                0.75,
+                            crossAxisSpacing:
+                                8,
+                            mainAxisSpacing:
+                                8,
                           ),
-                          itemCount: filteredDocs.length,
-                          itemBuilder: (context, index) {
+                          itemCount:
+                              filteredDocs
+                                  .length,
+                          itemBuilder:
+                              (context, index) {
                             final productDoc =
-                                filteredDocs[index];
+                                filteredDocs[
+                                    index];
 
                             final data =
-                                productDoc.data()
-                                    as Map<String, dynamic>;
+                                productDoc
+                                        .data()
+                                    as Map<
+                                        String,
+                                        dynamic>;
 
                             final productId =
                                 productDoc.id;
 
                             final name =
-                                data['name']?.toString() ??
+                                data['name']
+                                        ?.toString() ??
                                     'Unnamed Product';
 
                             final displayPrice =
-                                _formatBdtPrice(data);
+                                _formatBdtPrice(
+                              data,
+                            );
 
                             final imageUrl =
-                                data['imageUrl']?.toString();
+                                data['imageUrl']
+                                    ?.toString();
 
                             final isFavorite =
-                                favoriteIds.contains(
+                                favoriteIds
+                                    .contains(
                               productId,
                             );
 
@@ -1435,21 +2163,30 @@ class _HomePageState extends State<HomePage>
                               shape:
                                   RoundedRectangleBorder(
                                 borderRadius:
-                                    BorderRadius.circular(10),
+                                    BorderRadius
+                                        .circular(
+                                  10,
+                                ),
                               ),
-                              child: InkWell(
+                              child:
+                                  InkWell(
                                 onTap: () {
                                   _openProductDetails(
-                                    productId: productId,
-                                    product: data,
+                                    productId:
+                                        productId,
+                                    product:
+                                        data,
                                   );
                                 },
-                                child: Column(
+                                child:
+                                    Column(
                                   crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                      CrossAxisAlignment
+                                          .start,
                                   children: [
                                     Expanded(
-                                      child: Stack(
+                                      child:
+                                          Stack(
                                         children: [
                                           Container(
                                             width:
@@ -1459,17 +2196,13 @@ class _HomePageState extends State<HomePage>
                                               color:
                                                   Colors.grey[300],
                                             ),
-                                            child: imageUrl !=
-                                                        null &&
-                                                    imageUrl
-                                                        .isNotEmpty
+                                            child: imageUrl != null &&
+                                                    imageUrl.isNotEmpty
                                                 ? Image.network(
                                                     imageUrl,
                                                     fit: BoxFit.cover,
-                                                    width:
-                                                        double.infinity,
-                                                    height:
-                                                        double.infinity,
+                                                    width: double.infinity,
+                                                    height: double.infinity,
                                                     errorBuilder:
                                                         (
                                                       context,
@@ -1481,8 +2214,7 @@ class _HomePageState extends State<HomePage>
                                                             Icon(
                                                           Icons.image,
                                                           size: 50,
-                                                          color:
-                                                              Colors.grey,
+                                                          color: Colors.grey,
                                                         ),
                                                       );
                                                     },
@@ -1492,8 +2224,7 @@ class _HomePageState extends State<HomePage>
                                                         Icon(
                                                       Icons.image,
                                                       size: 50,
-                                                      color:
-                                                          Colors.grey,
+                                                      color: Colors.grey,
                                                     ),
                                                   ),
                                           ),
@@ -1501,15 +2232,20 @@ class _HomePageState extends State<HomePage>
                                           Positioned(
                                             top: 8,
                                             right: 8,
-                                            child: Material(
-                                              color: Colors.white,
+                                            child:
+                                                Material(
+                                              color:
+                                                  Colors.white,
                                               shape:
                                                   const CircleBorder(),
-                                              elevation: 2,
-                                              child: InkWell(
+                                              elevation:
+                                                  2,
+                                              child:
+                                                  InkWell(
                                                 customBorder:
                                                     const CircleBorder(),
-                                                onTap: () async {
+                                                onTap:
+                                                    () async {
                                                   final currentUser =
                                                       user;
 
@@ -1535,18 +2271,22 @@ class _HomePageState extends State<HomePage>
                                                         data,
                                                   );
                                                 },
-                                                child: Padding(
+                                                child:
+                                                    Padding(
                                                   padding:
-                                                      const EdgeInsets
-                                                          .all(7),
-                                                  child: Icon(
+                                                      const EdgeInsets.all(
+                                                    7,
+                                                  ),
+                                                  child:
+                                                      Icon(
                                                     isFavorite
                                                         ? Icons.favorite
                                                         : Icons.favorite_border,
                                                     color: isFavorite
                                                         ? Colors.redAccent
                                                         : Colors.grey,
-                                                    size: 21,
+                                                    size:
+                                                        21,
                                                   ),
                                                 ),
                                               ),
@@ -1558,10 +2298,15 @@ class _HomePageState extends State<HomePage>
 
                                     Padding(
                                       padding:
-                                          const EdgeInsets.all(8),
-                                      child: Column(
+                                          const EdgeInsets
+                                              .all(
+                                        8,
+                                      ),
+                                      child:
+                                          Column(
                                         crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                                            CrossAxisAlignment
+                                                .start,
                                         children: [
                                           Text(
                                             name,
@@ -1570,13 +2315,16 @@ class _HomePageState extends State<HomePage>
                                               fontWeight:
                                                   FontWeight.bold,
                                             ),
-                                            maxLines: 1,
+                                            maxLines:
+                                                1,
                                             overflow:
-                                                TextOverflow.ellipsis,
+                                                TextOverflow
+                                                    .ellipsis,
                                           ),
 
                                           const SizedBox(
-                                            height: 4,
+                                            height:
+                                                4,
                                           ),
 
                                           Row(
@@ -1585,7 +2333,8 @@ class _HomePageState extends State<HomePage>
                                                     .spaceBetween,
                                             children: [
                                               Flexible(
-                                                child: Text(
+                                                child:
+                                                    Text(
                                                   displayPrice,
                                                   style:
                                                       const TextStyle(
@@ -1593,16 +2342,19 @@ class _HomePageState extends State<HomePage>
                                                         Colors.redAccent,
                                                     fontWeight:
                                                         FontWeight.bold,
-                                                    fontSize: 16,
+                                                    fontSize:
+                                                        16,
                                                   ),
-                                                  maxLines: 1,
+                                                  maxLines:
+                                                      1,
                                                   overflow:
                                                       TextOverflow.ellipsis,
                                                 ),
                                               ),
 
                                               const SizedBox(
-                                                width: 5,
+                                                width:
+                                                    5,
                                               ),
 
                                               InkWell(
@@ -1610,7 +2362,8 @@ class _HomePageState extends State<HomePage>
                                                     BorderRadius.circular(
                                                   20,
                                                 ),
-                                                onTap: () async {
+                                                onTap:
+                                                    () async {
                                                   final currentUser =
                                                       user;
 
@@ -1634,35 +2387,42 @@ class _HomePageState extends State<HomePage>
 
                                                   await CartService
                                                       .addItem(
-                                                    id: productId,
-                                                    name: name,
-                                                    price: bdtPrice,
+                                                    id:
+                                                        productId,
+                                                    name:
+                                                        name,
+                                                    price:
+                                                        bdtPrice,
                                                     imageUrl:
                                                         imageUrl,
                                                   );
 
-                                                  if (!context.mounted) {
+                                                  if (!context
+                                                      .mounted) {
                                                     return;
                                                   }
 
                                                   ScaffoldMessenger
-                                                      .of(context)
-                                                      .showSnackBar(
+                                                      .of(
+                                                    context,
+                                                  ).showSnackBar(
                                                     SnackBar(
-                                                      content: Text(
+                                                      content:
+                                                          Text(
                                                         '$name added to cart',
                                                       ),
                                                       behavior:
-                                                          SnackBarBehavior
-                                                              .floating,
+                                                          SnackBarBehavior.floating,
                                                       duration:
                                                           const Duration(
-                                                        seconds: 1,
+                                                        seconds:
+                                                            1,
                                                       ),
                                                     ),
                                                   );
                                                 },
-                                                child: Container(
+                                                child:
+                                                    Container(
                                                   padding:
                                                       const EdgeInsets.all(
                                                     6,
@@ -1676,10 +2436,12 @@ class _HomePageState extends State<HomePage>
                                                       20,
                                                     ),
                                                   ),
-                                                  child: const Icon(
+                                                  child:
+                                                      const Icon(
                                                     Icons
                                                         .add_shopping_cart,
-                                                    size: 16,
+                                                    size:
+                                                        16,
                                                     color:
                                                         Colors.white,
                                                   ),
@@ -1704,40 +2466,56 @@ class _HomePageState extends State<HomePage>
             ],
           ),
 
+          // ----------------------------------------------------
+          // SIGN-IN BANNER
+          // ----------------------------------------------------
           bottomSheet: isLoggedIn
               ? null
               : Container(
-                  color: Colors.orangeAccent,
-                  padding: const EdgeInsets.symmetric(
+                  color:
+                      Colors.orangeAccent,
+                  padding:
+                      const EdgeInsets
+                          .symmetric(
                     horizontal: 16,
                     vertical: 8,
                   ),
                   child: Row(
                     mainAxisAlignment:
-                        MainAxisAlignment.spaceBetween,
+                        MainAxisAlignment
+                            .spaceBetween,
                     children: [
                       const Expanded(
                         child: Text(
                           'Sign in for best experience!',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                          style:
+                              TextStyle(
+                            color:
+                                Colors.white,
+                            fontWeight:
+                                FontWeight
+                                    .bold,
                           ),
                         ),
                       ),
 
                       ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
+                        style:
+                            ElevatedButton
+                                .styleFrom(
+                          backgroundColor:
+                              Colors.white,
                           foregroundColor:
-                              Colors.orangeAccent,
+                              Colors
+                                  .orangeAccent,
                         ),
                         onPressed: () {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) =>
-                                  const LoginPage(),
+                              builder:
+                                  (context) =>
+                                      const LoginPage(),
                             ),
                           );
                         },
@@ -1749,36 +2527,51 @@ class _HomePageState extends State<HomePage>
                   ),
                 ),
 
+          // ----------------------------------------------------
+          // BOTTOM NAVIGATION
+          // ----------------------------------------------------
           bottomNavigationBar:
               BottomNavigationBar(
-            currentIndex: _selectedIndex,
+            currentIndex:
+                _selectedIndex,
             onTap: _onNavTap,
             selectedItemColor:
                 Colors.redAccent,
             unselectedItemColor:
                 Colors.grey,
-            type: BottomNavigationBarType.fixed,
+            type:
+                BottomNavigationBarType
+                    .fixed,
             items: const [
               BottomNavigationBarItem(
-                icon: Icon(Icons.home),
+                icon: Icon(
+                  Icons.home,
+                ),
                 label: 'Home',
               ),
               BottomNavigationBarItem(
-                icon: Icon(Icons.category),
+                icon: Icon(
+                  Icons.category,
+                ),
                 label: 'Categories',
               ),
               BottomNavigationBarItem(
-                icon: Icon(Icons.video_library),
+                icon: Icon(
+                  Icons.video_library,
+                ),
                 label: 'Videos',
               ),
               BottomNavigationBarItem(
                 icon: Icon(
-                  Icons.shopping_cart_outlined,
+                  Icons
+                      .shopping_cart_outlined,
                 ),
                 label: 'Cart',
               ),
               BottomNavigationBarItem(
-                icon: Icon(Icons.person),
+                icon: Icon(
+                  Icons.person,
+                ),
                 label: 'Profile',
               ),
             ],
