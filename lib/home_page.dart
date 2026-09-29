@@ -282,6 +282,7 @@ class _HomePageState extends State<HomePage>
                         BorderRadius.circular(10),
                   ),
                 ),
+
                 const Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
@@ -292,7 +293,9 @@ class _HomePageState extends State<HomePage>
                     ),
                   ),
                 ),
+
                 const SizedBox(height: 16),
+
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Container(
@@ -327,7 +330,9 @@ class _HomePageState extends State<HomePage>
                     );
                   },
                 ),
+
                 const SizedBox(height: 6),
+
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Container(
@@ -362,7 +367,9 @@ class _HomePageState extends State<HomePage>
                     );
                   },
                 ),
+
                 const SizedBox(height: 8),
+
                 SizedBox(
                   width: double.infinity,
                   height: 46,
@@ -451,6 +458,7 @@ class _HomePageState extends State<HomePage>
                         BorderRadius.circular(10),
                   ),
                 ),
+
                 const Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
@@ -461,7 +469,9 @@ class _HomePageState extends State<HomePage>
                     ),
                   ),
                 ),
+
                 const SizedBox(height: 12),
+
                 ClipRRect(
                   borderRadius:
                       BorderRadius.circular(16),
@@ -472,7 +482,9 @@ class _HomePageState extends State<HomePage>
                     fit: BoxFit.cover,
                   ),
                 ),
+
                 const SizedBox(height: 16),
+
                 Row(
                   children: [
                     Expanded(
@@ -510,7 +522,9 @@ class _HomePageState extends State<HomePage>
                         ),
                       ),
                     ),
+
                     const SizedBox(width: 10),
+
                     Expanded(
                       child: ElevatedButton.icon(
                         style:
@@ -550,7 +564,9 @@ class _HomePageState extends State<HomePage>
                     ),
                   ],
                 ),
+
                 const SizedBox(height: 8),
+
                 SizedBox(
                   width: double.infinity,
                   height: 45,
@@ -640,10 +656,11 @@ class _HomePageState extends State<HomePage>
               .get();
 
       final matchedProducts =
-          <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+          <QueryDocumentSnapshot>[];
 
       for (final doc in snapshot.docs) {
-        final data = doc.data();
+        final data =
+            doc.data() as Map<String, dynamic>;
 
         final productName =
             data['name']
@@ -738,7 +755,7 @@ class _HomePageState extends State<HomePage>
   Future<void> _showImageSearchResults({
     required XFile image,
     required List<String> detectedLabels,
-    required List<QueryDocumentSnapshot<Map<String, dynamic>>> products,
+    required List<QueryDocumentSnapshot> products,
   }) async {
     if (!mounted) return;
 
@@ -761,6 +778,7 @@ class _HomePageState extends State<HomePage>
             child: Column(
               children: [
                 const SizedBox(height: 10),
+
                 Container(
                   width: 42,
                   height: 4,
@@ -770,7 +788,9 @@ class _HomePageState extends State<HomePage>
                         BorderRadius.circular(10),
                   ),
                 ),
+
                 const SizedBox(height: 16),
+
                 const Padding(
                   padding:
                       EdgeInsets.symmetric(
@@ -788,7 +808,9 @@ class _HomePageState extends State<HomePage>
                     ),
                   ),
                 ),
+
                 const SizedBox(height: 12),
+
                 Padding(
                   padding:
                       const EdgeInsets.symmetric(
@@ -808,7 +830,9 @@ class _HomePageState extends State<HomePage>
                           fit: BoxFit.cover,
                         ),
                       ),
+
                       const SizedBox(width: 12),
+
                       Expanded(
                         child: Column(
                           crossAxisAlignment:
@@ -844,8 +868,11 @@ class _HomePageState extends State<HomePage>
                     ],
                   ),
                 ),
+
                 const SizedBox(height: 16),
+
                 const Divider(height: 1),
+
                 Expanded(
                   child: products.isEmpty
                       ? Center(
@@ -865,9 +892,11 @@ class _HomePageState extends State<HomePage>
                                   color: Colors
                                       .grey.shade400,
                                 ),
+
                                 const SizedBox(
                                   height: 14,
                                 ),
+
                                 const Text(
                                   'No matching products found',
                                   textAlign:
@@ -878,9 +907,11 @@ class _HomePageState extends State<HomePage>
                                         FontWeight.bold,
                                   ),
                                 ),
+
                                 const SizedBox(
                                   height: 8,
                                 ),
+
                                 Text(
                                   'Try another photo with the product clearly visible.',
                                   textAlign:
@@ -907,7 +938,9 @@ class _HomePageState extends State<HomePage>
                                 products[index];
 
                             final data =
-                                doc.data();
+                                doc.data()
+                                    as Map<String,
+                                        dynamic>;
 
                             final name =
                                 data['name']
@@ -1346,6 +1379,7 @@ class _HomePageState extends State<HomePage>
                       ],
                     ),
                   ),
+
                   ListTile(
                     leading: const Icon(
                       Icons.person_outline,
@@ -1360,6 +1394,7 @@ class _HomePageState extends State<HomePage>
                       );
                     },
                   ),
+
                   ListTile(
                     leading: const Icon(
                       Icons.home_outlined,
@@ -1375,6 +1410,7 @@ class _HomePageState extends State<HomePage>
                       });
                     },
                   ),
+
                   ListTile(
                     leading: const Icon(
                       Icons.category_outlined,
@@ -1410,6 +1446,7 @@ class _HomePageState extends State<HomePage>
                       }
                     },
                   ),
+
                   if (isLoggedIn)
                     ListTile(
                       leading: const Icon(
@@ -1431,6 +1468,7 @@ class _HomePageState extends State<HomePage>
                         );
                       },
                     ),
+
                   ListTile(
                     leading: const Icon(
                       Icons
@@ -1447,6 +1485,7 @@ class _HomePageState extends State<HomePage>
                       _openVideos();
                     },
                   ),
+
                   ListTile(
                     leading: const Icon(
                       Icons
@@ -1467,6 +1506,7 @@ class _HomePageState extends State<HomePage>
                       );
                     },
                   ),
+
                   ListTile(
                     leading: const Icon(
                       Icons.settings_outlined,
@@ -1486,6 +1526,7 @@ class _HomePageState extends State<HomePage>
                       );
                     },
                   ),
+
                   if (isLoggedIn)
                     ListTile(
                       leading: const Icon(
@@ -1623,6 +1664,7 @@ class _HomePageState extends State<HomePage>
                               onPressed:
                                   _openGlobalNotifications,
                             ),
+
                             if (unreadCount > 0)
                               Positioned(
                                 right: 4,
@@ -1785,12 +1827,14 @@ class _HomePageState extends State<HomePage>
                                 });
                               },
                             ),
+
                           Container(
                             height: 26,
                             width: 1,
                             color: Colors
                                 .grey.shade300,
                           ),
+
                           IconButton(
                             tooltip:
                                 'Search by camera',
@@ -1805,6 +1849,7 @@ class _HomePageState extends State<HomePage>
                             onPressed:
                                 _openCameraSearch,
                           ),
+
                           const SizedBox(
                             width: 4,
                           ),
@@ -1974,7 +2019,10 @@ class _HomePageState extends State<HomePage>
                         allDocs.where(
                       (doc) {
                         final data =
-                            doc.data();
+                            doc.data()
+                                as Map<
+                                    String,
+                                    dynamic>;
 
                         if (!_matchesCategory(
                           data,
@@ -2079,7 +2127,11 @@ class _HomePageState extends State<HomePage>
                                     index];
 
                             final data =
-                                productDoc.data();
+                                productDoc
+                                        .data()
+                                    as Map<
+                                        String,
+                                        dynamic>;
 
                             final productId =
                                 productDoc.id;
@@ -2176,6 +2228,7 @@ class _HomePageState extends State<HomePage>
                                                     ),
                                                   ),
                                           ),
+
                                           Positioned(
                                             top: 8,
                                             right: 8,
@@ -2242,6 +2295,7 @@ class _HomePageState extends State<HomePage>
                                         ],
                                       ),
                                     ),
+
                                     Padding(
                                       padding:
                                           const EdgeInsets
@@ -2267,10 +2321,12 @@ class _HomePageState extends State<HomePage>
                                                 TextOverflow
                                                     .ellipsis,
                                           ),
+
                                           const SizedBox(
                                             height:
                                                 4,
                                           ),
+
                                           Row(
                                             mainAxisAlignment:
                                                 MainAxisAlignment
@@ -2295,10 +2351,12 @@ class _HomePageState extends State<HomePage>
                                                       TextOverflow.ellipsis,
                                                 ),
                                               ),
+
                                               const SizedBox(
                                                 width:
                                                     5,
                                               ),
+
                                               InkWell(
                                                 borderRadius:
                                                     BorderRadius.circular(
@@ -2440,6 +2498,7 @@ class _HomePageState extends State<HomePage>
                           ),
                         ),
                       ),
+
                       ElevatedButton(
                         style:
                             ElevatedButton
