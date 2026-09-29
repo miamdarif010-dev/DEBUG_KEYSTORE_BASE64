@@ -68,7 +68,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   // ============================================================
 
   static const String _pendingCouponKey =
-      'buynova_pending_coupon_code';
+    'buynova_pending_coupon';
 
   String _paymentMethod = 'Cash on Delivery';
 
