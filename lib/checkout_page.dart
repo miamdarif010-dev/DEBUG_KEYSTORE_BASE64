@@ -54,29 +54,24 @@ class CheckoutPage extends StatefulWidget {
 
 class _CheckoutPageState extends State<CheckoutPage> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore =
-      FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  static const String _functionsRegion = 'asia-northeast3';
 
   final _formKey = GlobalKey<FormState>();
+  final TextEditingController _couponController = TextEditingController();
 
-  final TextEditingController _couponController =
-      TextEditingController();
-
-  // ============================================================
-  // BUY NOVA PENDING COUPON KEY
   // Must match CouponPage
-  // ============================================================
-
-  static const String _pendingCouponKey =
-    'buynova_pending_coupon';
+  static const String _pendingCouponKey = 'buynova_pending_coupon';
 
   String _paymentMethod = 'Cash on Delivery';
 
   bool _placingOrder = false;
   bool _checkingCoupon = false;
 
+  // NOTE: discount / delivery fee / totals shown here are only a preview.
+  // The real values are calculated by the server (createOrder function).
   double _discount = 0;
-
   String? _couponCode;
   String? _couponMessage;
 
@@ -84,60 +79,46 @@ class _CheckoutPageState extends State<CheckoutPage> {
   bool _loadingWalletBalance = false;
 
   Map<String, dynamic>? _selectedAddress;
+  String? _selectedAddressId;
+
+  FirebaseFunctions get _functions =>
+      FirebaseFunctions.instanceFor(region: _functionsRegion);
 
   // ============================================================
-  // DELIVERY FEE
-  // Inside Dhaka: ৳60
-  // Outside Dhaka: ৳120
+  // DELIVERY FEE (preview only)
+  // Inside Dhaka: ৳60, Outside Dhaka: ৳120
   // ============================================================
 
-  String get _deliveryZone {
-    return _selectedAddress?['deliveryZone']
-            ?.toString() ??
-        '';
-  }
+  String get _deliveryZone =>
+      _selectedAddress?['deliveryZone']?.toString() ?? '';
 
-  bool get _hasDeliveryZone {
-    return _deliveryZone == 'inside_dhaka' ||
-        _deliveryZone == 'outside_dhaka';
-  }
+  bool get _hasDeliveryZone =>
+      _deliveryZone == 'inside_dhaka' || _deliveryZone == 'outside_dhaka';
 
   bool get _isInsideDhaka {
     final address = _selectedAddress;
-
     if (address == null) return false;
 
     final zone = _deliveryZone;
-
     if (zone == 'inside_dhaka') return true;
     if (zone == 'outside_dhaka') return false;
 
     final text =
-        '${address['city'] ?? ''} '
-        '${address['district'] ?? ''}'
-            .toLowerCase();
+        '${address['city'] ?? ''} ${address['district'] ?? ''}'.toLowerCase();
 
-    return text.contains('dhaka') ||
-        text.contains('ঢাকা');
+    return text.contains('dhaka') || text.contains('ঢাকা');
   }
 
   double get _deliveryFee {
     if (_selectedAddress == null) return 60;
-
     return _isInsideDhaka ? 60 : 120;
   }
 
-  double get subtotal {
-    return widget.items.fold(
-      0,
-      (sum, item) => sum + item.total,
-    );
-  }
+  double get subtotal =>
+      widget.items.fold(0, (sum, item) => sum + item.total);
 
   double get grandTotal {
-    final value =
-        subtotal + _deliveryFee - _discount;
-
+    final value = subtotal + _deliveryFee - _discount;
     return value < 0 ? 0 : value;
   }
 
@@ -161,41 +142,26 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   // ============================================================
-  // LOAD COUPON SELECTED FROM COUPON PAGE
+  // COUPON SELECTED FROM COUPON PAGE
   // ============================================================
 
   Future<void> _loadSavedCoupon() async {
     try {
-      final prefs =
-          await SharedPreferences.getInstance();
+      final prefs = await SharedPreferences.getInstance();
+      final savedCode = prefs.getString(_pendingCouponKey);
 
-      final savedCode =
-          prefs.getString(_pendingCouponKey);
-
-      if (savedCode == null ||
-          savedCode.trim().isEmpty) {
-        return;
-      }
-
-      final cleanCode =
-          savedCode.trim().toUpperCase();
+      if (savedCode == null || savedCode.trim().isEmpty) return;
 
       // Consume the pending coupon once.
-      await prefs.remove(
-        _pendingCouponKey,
-      );
+      await prefs.remove(_pendingCouponKey);
 
       if (!mounted) return;
 
       setState(() {
-        _couponController.text =
-            cleanCode;
+        _couponController.text = savedCode.trim().toUpperCase();
       });
 
-      // Automatically validate the selected coupon.
-      await _checkCoupon(
-        showMessage: true,
-      );
+      await _checkCoupon(showMessage: true);
     } catch (_) {
       // Coupon loading is optional.
     }
@@ -208,63 +174,31 @@ class _CheckoutPageState extends State<CheckoutPage> {
   Future<void> _loadWalletBalance() async {
     if (!mounted) return;
 
-    setState(() {
-      _loadingWalletBalance = true;
-    });
+    setState(() => _loadingWalletBalance = true);
 
     try {
-      final user = _auth.currentUser;
-
-      if (user == null) {
-        return;
-      }
-
-      final callable =
-          FirebaseFunctions.instanceFor(
-        region: 'asia-northeast3',
-      ).httpsCallable(
-        'getWalletBalance',
-      );
+      if (_auth.currentUser == null) return;
 
       final result =
-          await callable.call();
+          await _functions.httpsCallable('getWalletBalance').call();
 
-      final data =
-          Map<String, dynamic>.from(
-        result.data as Map,
-      );
-
-      final dynamic balanceValue =
-          data['balance'] ??
-              data['cashBalance'] ??
-              0;
-
-      final balance =
-          (balanceValue as num).toDouble();
+      final data = Map<String, dynamic>.from(result.data as Map);
+      final dynamic balanceValue = data['balance'] ?? data['cashBalance'] ?? 0;
+      final balance = (balanceValue as num).toDouble();
 
       if (!mounted) return;
-
-      setState(() {
-        _walletBalance = balance;
-      });
-    } catch (e) {
+      setState(() => _walletBalance = balance);
+    } catch (_) {
       if (!mounted) return;
-
-      setState(() {
-        _walletBalance = 0;
-      });
+      setState(() => _walletBalance = 0);
     } finally {
-      if (!mounted) return;
-
-      setState(() {
-        _loadingWalletBalance = false;
-      });
+      if (mounted) {
+        setState(() => _loadingWalletBalance = false);
+      }
     }
   }
 
-  bool get _walletHasEnoughBalance {
-    return _walletBalance >= grandTotal;
-  }
+  bool get _walletHasEnoughBalance => _walletBalance >= grandTotal;
 
   // ============================================================
   // ADDRESS
@@ -272,72 +206,48 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   Future<void> _loadDefaultAddress() async {
     final user = _auth.currentUser;
-
     if (user == null) return;
 
     try {
       final addressesRef =
-          _firestore
-              .collection('users')
-              .doc(user.uid)
-              .collection('addresses');
+          _firestore.collection('users').doc(user.uid).collection('addresses');
 
-      final defaultSnapshot =
-          await addressesRef
-              .where(
-                'isDefault',
-                isEqualTo: true,
-              )
-              .limit(1)
-              .get();
+      final defaultSnapshot = await addressesRef
+          .where('isDefault', isEqualTo: true)
+          .limit(1)
+          .get();
 
       if (defaultSnapshot.docs.isNotEmpty) {
         if (!mounted) return;
 
         setState(() {
-          _selectedAddress =
-              defaultSnapshot.docs.first.data();
+          _selectedAddress = defaultSnapshot.docs.first.data();
+          _selectedAddressId = defaultSnapshot.docs.first.id;
         });
-
         return;
       }
 
-      final anySnapshot =
-          await addressesRef
-              .limit(1)
-              .get();
+      final anySnapshot = await addressesRef.limit(1).get();
 
       if (anySnapshot.docs.isNotEmpty) {
         if (!mounted) return;
 
         setState(() {
-          _selectedAddress =
-              anySnapshot.docs.first.data();
+          _selectedAddress = anySnapshot.docs.first.data();
+          _selectedAddressId = anySnapshot.docs.first.id;
         });
-
         return;
       }
 
-      final userDoc =
-          await _firestore
-              .collection('users')
-              .doc(user.uid)
-              .get();
-
-      final data = userDoc.data();
-
-      if (data == null) return;
-
-      final address = data['address'];
+      final userDoc = await _firestore.collection('users').doc(user.uid).get();
+      final address = userDoc.data()?['address'];
 
       if (address is Map) {
         if (!mounted) return;
 
         setState(() {
-          _selectedAddress =
-              Map<String, dynamic>.from(
-            address,
-          );
+          _selectedAddress = Map<String, dynamic>.from(address);
+          _selectedAddressId = null; // legacy address stored on user doc
         });
       }
     } catch (_) {}
@@ -346,279 +256,141 @@ class _CheckoutPageState extends State<CheckoutPage> {
   Future<void> _openAddressBook() async {
     await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) =>
-            const AddressBookPage(),
-      ),
+      MaterialPageRoute(builder: (_) => const AddressBookPage()),
     );
 
     await _loadDefaultAddress();
   }
 
   // ============================================================
-  // COUPON HELPERS
+  // COUPON (preview check - server validates again on order)
   // ============================================================
 
   double _toDouble(dynamic value) {
-    if (value is num) {
-      return value.toDouble();
-    }
-
-    if (value is String) {
-      return double.tryParse(value) ?? 0;
-    }
-
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0;
     return 0;
   }
 
   DateTime? _couponExpiry(dynamic value) {
-    if (value is Timestamp) {
-      return value.toDate();
-    }
-
-    if (value is DateTime) {
-      return value;
-    }
-
-    if (value is String) {
-      return DateTime.tryParse(value);
-    }
-
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value);
     return null;
   }
 
-  // ============================================================
-  // CHECK / APPLY COUPON
-  // ============================================================
+  void _resetCoupon(String? message) {
+    if (!mounted) return;
 
-  Future<bool> _checkCoupon({
-    bool showMessage = true,
-  }) async {
-    final code =
-        _couponController.text
-            .trim()
-            .toUpperCase();
+    setState(() {
+      _discount = 0;
+      _couponCode = null;
+      _couponMessage = message;
+    });
+  }
+
+  Future<bool> _checkCoupon({bool showMessage = true}) async {
+    final code = _couponController.text.trim().toUpperCase();
 
     if (code.isEmpty) {
-      if (mounted && showMessage) {
-        setState(() {
-          _couponMessage =
-              'Please enter a coupon code.';
-          _discount = 0;
-          _couponCode = null;
-        });
-      }
-
+      if (showMessage) _resetCoupon('Please enter a coupon code.');
       return false;
     }
 
     if (mounted) {
       setState(() {
         _checkingCoupon = true;
-
-        if (showMessage) {
-          _couponMessage = null;
-        }
+        if (showMessage) _couponMessage = null;
       });
     }
 
     try {
-      final snapshot =
-          await _firestore
-              .collection('coupons')
-              .where(
-                'code',
-                isEqualTo: code,
-              )
-              .limit(1)
-              .get();
+      final snapshot = await _firestore
+          .collection('coupons')
+          .where('code', isEqualTo: code)
+          .limit(1)
+          .get();
 
       if (snapshot.docs.isEmpty) {
-        if (mounted) {
-          setState(() {
-            _discount = 0;
-            _couponCode = null;
-            _couponMessage =
-                'Invalid coupon code.';
-          });
-        }
-
+        _resetCoupon('Invalid coupon code.');
         return false;
       }
 
-      final data =
-          snapshot.docs.first.data();
+      final data = snapshot.docs.first.data();
 
-      // --------------------------------------------------------
-      // ACTIVE CHECK
-      // --------------------------------------------------------
-
-      final bool isActive =
-          data['isActive'] == true;
-
-      if (!isActive) {
-        if (mounted) {
-          setState(() {
-            _discount = 0;
-            _couponCode = null;
-            _couponMessage =
-                'This coupon is not active.';
-          });
-        }
-
+      if (data['isActive'] != true) {
+        _resetCoupon('This coupon is not active.');
         return false;
       }
 
-      // --------------------------------------------------------
-      // EXPIRY CHECK
-      // --------------------------------------------------------
-
-      final expiresAt =
-          _couponExpiry(
-        data['expiresAt'],
-      );
-
-      if (expiresAt != null &&
-          expiresAt.isBefore(
-            DateTime.now(),
-          )) {
-        if (mounted) {
-          setState(() {
-            _discount = 0;
-            _couponCode = null;
-            _couponMessage =
-                'This coupon has expired.';
-          });
-        }
-
+      final expiresAt = _couponExpiry(data['expiresAt']);
+      if (expiresAt != null && expiresAt.isBefore(DateTime.now())) {
+        _resetCoupon('This coupon has expired.');
         return false;
       }
 
-      // --------------------------------------------------------
-      // COUPON VALUES
-      // --------------------------------------------------------
+      final double usageLimit = _toDouble(data['usageLimit']);
+      final double usedCount = _toDouble(data['usedCount']);
+      if (usageLimit > 0 && usedCount >= usageLimit) {
+        _resetCoupon('This coupon has reached its usage limit.');
+        return false;
+      }
 
       final String discountType =
-          (data['discountType'] ??
-                  'fixed')
-              .toString()
-              .toLowerCase()
-              .trim();
+          (data['discountType'] ?? 'fixed').toString().toLowerCase().trim();
+      final double discountValue = _toDouble(data['discountValue']);
+      final double minimumOrder = _toDouble(data['minimumOrder']);
+      final double maximumDiscount = _toDouble(data['maximumDiscount']);
 
-      final double discountValue =
-          _toDouble(
-        data['discountValue'],
-      );
-
-      final double minimumOrder =
-          _toDouble(
-        data['minimumOrder'],
-      );
-
-      final double maximumDiscount =
-          _toDouble(
-        data['maximumDiscount'],
-      );
-
-      // --------------------------------------------------------
-      // MINIMUM ORDER
-      // --------------------------------------------------------
-
-      if (minimumOrder > 0 &&
-          subtotal < minimumOrder) {
-        if (mounted) {
-          setState(() {
-            _discount = 0;
-            _couponCode = null;
-            _couponMessage =
-                'Minimum order amount is '
-                '৳${minimumOrder.toStringAsFixed(2)}.';
-          });
-        }
-
+      if (minimumOrder > 0 && subtotal < minimumOrder) {
+        _resetCoupon(
+          'Minimum order amount is ৳${minimumOrder.toStringAsFixed(2)}.',
+        );
         return false;
       }
-
-      // --------------------------------------------------------
-      // CALCULATE DISCOUNT
-      // --------------------------------------------------------
 
       double calculatedDiscount;
 
-      if (discountType ==
-          'percentage') {
-        calculatedDiscount =
-            subtotal *
-                discountValue /
-                100;
+      if (discountType == 'percentage') {
+        calculatedDiscount = subtotal * discountValue / 100;
 
-        if (maximumDiscount > 0 &&
-            calculatedDiscount >
-                maximumDiscount) {
-          calculatedDiscount =
-              maximumDiscount;
+        if (maximumDiscount > 0 && calculatedDiscount > maximumDiscount) {
+          calculatedDiscount = maximumDiscount;
         }
       } else {
-        calculatedDiscount =
-            discountValue;
+        calculatedDiscount = discountValue;
       }
 
-      if (calculatedDiscount < 0) {
-        calculatedDiscount = 0;
-      }
-
-      if (calculatedDiscount >
-          subtotal) {
-        calculatedDiscount =
-            subtotal;
-      }
-
-      // --------------------------------------------------------
-      // APPLY
-      // --------------------------------------------------------
+      if (calculatedDiscount < 0) calculatedDiscount = 0;
+      if (calculatedDiscount > subtotal) calculatedDiscount = subtotal;
 
       if (mounted) {
         setState(() {
-          _discount =
-              calculatedDiscount;
-
+          _discount = calculatedDiscount;
           _couponCode = code;
-
-          _couponMessage =
-              calculatedDiscount > 0
-                  ? 'Coupon applied. Discount: '
-                      '৳${calculatedDiscount.toStringAsFixed(2)}'
-                  : 'Coupon applied, but no discount was calculated.';
+          _couponMessage = calculatedDiscount > 0
+              ? 'Coupon applied. Discount: '
+                  '৳${calculatedDiscount.toStringAsFixed(2)}'
+              : 'Coupon applied, but no discount was calculated.';
         });
       }
 
       return true;
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _discount = 0;
-          _couponCode = null;
-          _couponMessage =
-              'Could not validate coupon. Please try again.';
-        });
-      }
-
+    } catch (_) {
+      _resetCoupon('Could not validate coupon. Please try again.');
       return false;
     } finally {
       if (mounted) {
-        setState(() {
-          _checkingCoupon = false;
-        });
+        setState(() => _checkingCoupon = false);
       }
     }
   }
 
   // ============================================================
-  // PAYMENT
+  // WALLET PRE-CHECK
   // ============================================================
 
-  Future<bool>
-      _validateWalletBeforeOrder() async {
+  Future<bool> _validateWalletBeforeOrder() async {
     await _loadWalletBalance();
 
     if (!_walletHasEnoughBalance) {
@@ -626,11 +398,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
       await showDialog(
         context: context,
-        builder: (_) =>
-            AlertDialog(
-          title: const Text(
-            'Insufficient Wallet Balance',
-          ),
+        builder: (_) => AlertDialog(
+          title: const Text('Insufficient Wallet Balance'),
           content: Text(
             'Your BuyNova Wallet balance is '
             '৳${_walletBalance.toStringAsFixed(2)}, '
@@ -639,12 +408,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
           ),
           actions: [
             TextButton(
-              onPressed: () =>
-                  Navigator.pop(
-                context,
-              ),
-              child:
-                  const Text('OK'),
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
             ),
           ],
         ),
@@ -658,546 +423,132 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   // ============================================================
   // PLACE ORDER
+  // The server calculates prices, discount, delivery fee and total.
   // ============================================================
 
   Future<void> _placeOrder() async {
     if (_placingOrder) return;
 
-    final user =
-        _auth.currentUser;
+    final user = _auth.currentUser;
 
     if (user == null) {
-      _showMessage(
-        'Please login first.',
-      );
+      _showMessage('Please login first.');
       return;
     }
 
     if (widget.items.isEmpty) {
-      _showMessage(
-        'Your cart is empty.',
-      );
+      _showMessage('Your cart is empty.');
       return;
     }
 
-    if (!_formKey.currentState!
-        .validate()) {
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
     if (_selectedAddress == null) {
-      _showMessage(
-        'Please select a delivery address.',
-      );
+      _showMessage('Please select a delivery address.');
       return;
     }
 
     if (!_hasDeliveryZone) {
       _showMessage(
-        'Please edit your address and choose '
-        'Inside Dhaka or Outside Dhaka.',
+        'Please edit your address and choose Inside Dhaka or Outside Dhaka.',
       );
       return;
     }
 
-    setState(() {
-      _placingOrder = true;
-    });
+    setState(() => _placingOrder = true);
 
     try {
-      // --------------------------------------------------------
-      // REVALIDATE COUPON
-      // --------------------------------------------------------
-
-      if (_couponController.text
-          .trim()
-          .isNotEmpty) {
-        final couponValid =
-            await _checkCoupon();
-
-        if (!couponValid) {
-          return;
-        }
+      // Revalidate coupon (preview)
+      if (_couponController.text.trim().isNotEmpty) {
+        final couponValid = await _checkCoupon();
+        if (!couponValid) return;
       } else {
-        _discount = 0;
-        _couponCode = null;
+        _resetCoupon(null);
       }
 
-      // --------------------------------------------------------
-      // WALLET BALANCE
-      // --------------------------------------------------------
+      // Wallet pre-check (UX only, the server checks again)
+      final bool isWallet = _paymentMethod == 'BuyNova Wallet';
 
-      if (_paymentMethod ==
-          'BuyNova Wallet') {
-        final enough =
-            await _validateWalletBeforeOrder();
-
-        if (!enough) {
-          return;
-        }
+      if (isWallet) {
+        final enough = await _validateWalletBeforeOrder();
+        if (!enough) return;
       }
 
-      // --------------------------------------------------------
-      // MAIN ORDER
-      // --------------------------------------------------------
+      // ------------------------------------------------------
+      // CREATE ORDER ON SERVER
+      // ------------------------------------------------------
 
-      final orderRef =
-          _firestore
-              .collection('orders')
-              .doc();
-
-      final orderId =
-          orderRef.id;
-
-      final List<
-              Map<String, dynamic>>
-          orderItems = [];
-
-      for (final item
-          in widget.items) {
-        orderItems.add({
-          'productId': item.id,
-          'name': item.name,
-          'price': item.price,
-          'quantity': item.quantity,
-          'total': item.total,
-          'imageUrl': item.imageUrl,
-          'isResellerProduct':
-              item.isResellerProduct,
-          'entrepreneurUid':
-              item.entrepreneurUid,
-          'sellerId': item.sellerId,
-          'supplierProductId':
-              item.supplierProductId,
-          'supplierPrice':
-              item.supplierPrice,
-          'resellerProfit':
-              item.resellerProfit,
-        });
-      }
-
-      final Map<String, dynamic>
-          orderData = {
-        'orderId': orderId,
-        'userId': user.uid,
-        'customerId': user.uid,
-        'items': orderItems,
-        'subtotal': subtotal,
-        'deliveryFee': _deliveryFee,
-        'deliveryZone': _deliveryZone,
-        'discount': _discount,
-        'total': grandTotal,
-        'grandTotal': grandTotal,
-        'currency': 'BDT',
+      final createResult = await _functions.httpsCallable('createOrder').call({
+        'items': widget.items
+            .map((item) => {
+                  'productId': item.id,
+                  'quantity': item.quantity,
+                  'isResellerProduct': item.isResellerProduct,
+                })
+            .toList(),
         'couponCode': _couponCode,
-        'paymentMethod':
-            _paymentMethod,
-        'paymentStatus': 'pending',
-        'orderStatus': 'placed',
-        'address': _selectedAddress,
-        'createdAt':
-            FieldValue.serverTimestamp(),
-        'updatedAt':
-            FieldValue.serverTimestamp(),
-      };
+        'paymentMethod': _paymentMethod,
+        'addressId': _selectedAddressId,
+      });
 
-      // --------------------------------------------------------
-      // GROUP SELLER ORDERS
-      // --------------------------------------------------------
+      final createData = Map<String, dynamic>.from(createResult.data as Map);
+      final String orderId = createData['orderId'].toString();
 
-      final Map<String,
-              List<CheckoutItem>>
-          sellerGroups = {};
+      // ------------------------------------------------------
+      // WALLET PAYMENT
+      // ------------------------------------------------------
 
-      for (final item
-          in widget.items) {
-        if (item.isResellerProduct) {
-          continue;
-        }
+      if (isWallet) {
+        try {
+          final result = await _functions
+              .httpsCallable('placeWalletOrder')
+              .call({'orderId': orderId});
 
-        String? sellerId =
-            item.sellerId;
+          final resultData = Map<String, dynamic>.from(result.data as Map);
 
-        if (sellerId == null ||
-            sellerId.isEmpty) {
-          try {
-            final productDoc =
-                await _firestore
-                    .collection(
-                        'products')
-                    .doc(item.id)
-                    .get();
+          final bool success = resultData['success'] == true ||
+              resultData['alreadyPaid'] == true;
 
-            if (productDoc.exists) {
-              final productData =
-                  productDoc.data();
-
-              sellerId =
-                  productData?[
-                              'sellerId']
-                          ?.toString() ??
-                      productData?[
-                              'ownerId']
-                          ?.toString();
-            }
-          } catch (_) {}
-        }
-
-        if (sellerId == null ||
-            sellerId.isEmpty) {
-          sellerId =
-              'unknown_seller';
-        }
-
-        sellerGroups.putIfAbsent(
-          sellerId,
-          () => [],
-        );
-
-        sellerGroups[sellerId]!
-            .add(item);
-      }
-
-      // --------------------------------------------------------
-      // GROUP RESELLER ORDERS
-      // --------------------------------------------------------
-
-      final Map<String,
-              List<CheckoutItem>>
-          resellerGroups = {};
-
-      for (final item
-          in widget.items) {
-        if (!item.isResellerProduct) {
-          continue;
-        }
-
-        final entrepreneurUid =
-            item.entrepreneurUid ??
-                user.uid;
-
-        final sellerId =
-            item.sellerId ??
-                'unknown_seller';
-
-        final groupKey =
-            '${entrepreneurUid}_$sellerId';
-
-        resellerGroups.putIfAbsent(
-          groupKey,
-          () => [],
-        );
-
-        resellerGroups[groupKey]!
-            .add(item);
-      }
-
-      final WriteBatch batch =
-          _firestore.batch();
-
-      // --------------------------------------------------------
-      // MAIN ORDER
-      // --------------------------------------------------------
-
-      batch.set(
-        orderRef,
-        orderData,
-      );
-
-      // --------------------------------------------------------
-      // SELLER ORDERS
-      // --------------------------------------------------------
-
-      for (final entry
-          in sellerGroups.entries) {
-        final sellerId =
-            entry.key;
-
-        final items =
-            entry.value;
-
-        final sellerSubtotal =
-            items.fold<double>(
-          0,
-          (sum, item) =>
-              sum + item.total,
-        );
-
-        final sellerOrderRef =
-            _firestore
-                .collection(
-                    'seller_orders')
-                .doc();
-
-        batch.set(
-          sellerOrderRef,
-          {
-            'orderId': orderId,
-            'sellerOrderId':
-                sellerOrderRef.id,
-            'sellerId': sellerId,
-            'buyerId': user.uid,
-            'customerId': user.uid,
-            'userId': user.uid,
-            'items': items.map(
-              (item) {
-                return {
-                  'productId':
-                      item.id,
-                  'name': item.name,
-                  'price':
-                      item.price,
-                  'quantity':
-                      item.quantity,
-                  'total':
-                      item.total,
-                  'imageUrl':
-                      item.imageUrl,
-                };
-              },
-            ).toList(),
-            'subtotal':
-                sellerSubtotal,
-            'currency': 'BDT',
-            'paymentMethod':
-                _paymentMethod,
-            'paymentStatus':
-                'pending',
-            'orderStatus':
-                'placed',
-            'createdAt':
-                FieldValue
-                    .serverTimestamp(),
-            'updatedAt':
-                FieldValue
-                    .serverTimestamp(),
-          },
-        );
-      }
-
-      // --------------------------------------------------------
-      // RESELLER / ENTREPRENEUR ORDERS
-      // --------------------------------------------------------
-
-      for (final entry
-          in resellerGroups.entries) {
-        final items =
-            entry.value;
-
-        if (items.isEmpty) {
-          continue;
-        }
-
-        final entrepreneurUid =
-            items.first
-                    .entrepreneurUid ??
-                user.uid;
-
-        final sellerId =
-            items.first.sellerId ??
-                'unknown_seller';
-
-        final sellingTotal =
-            items.fold<double>(
-          0,
-          (sum, item) =>
-              sum + item.total,
-        );
-
-        final supplierTotal =
-            items.fold<double>(
-          0,
-          (sum, item) {
-            final supplierPrice =
-                item.supplierPrice ??
-                    0;
-
-            return sum +
-                (supplierPrice *
-                    item.quantity);
-          },
-        );
-
-        final resellerProfit =
-            sellingTotal -
-                supplierTotal;
-
-        final resellerOrderRef =
-            _firestore
-                .collection(
-                    'reseller_orders')
-                .doc();
-
-        batch.set(
-          resellerOrderRef,
-          {
-            'orderId': orderId,
-            'resellerOrderId':
-                resellerOrderRef.id,
-            'entrepreneurUid':
-                entrepreneurUid,
-            'buyerId': user.uid,
-            'customerId': user.uid,
-            'userId': user.uid,
-            'sellerId': sellerId,
-            'customerName':
-                _selectedAddress?[
-                            'name']
-                        ?.toString() ??
-                    '',
-            'customerPhone':
-                _selectedAddress?[
-                            'phone']
-                        ?.toString() ??
-                    '',
-            'address':
-                _selectedAddress?[
-                            'address']
-                        ?.toString() ??
-                    '',
-            'deliveryZone':
-                _deliveryZone,
-            'items': items.map(
-              (item) {
-                return {
-                  'productId':
-                      item.id,
-                  'name':
-                      item.name,
-                  'price':
-                      item.price,
-                  'quantity':
-                      item.quantity,
-                  'total':
-                      item.total,
-                  'imageUrl':
-                      item.imageUrl,
-                  'supplierProductId':
-                      item.supplierProductId,
-                  'supplierPrice':
-                      item.supplierPrice,
-                  'resellerProfit':
-                      item.resellerProfit,
-                };
-              },
-            ).toList(),
-            'sellingTotal':
-                sellingTotal,
-            'supplierTotal':
-                supplierTotal,
-            'resellerProfit':
-                resellerProfit,
-            'profit':
-                resellerProfit,
-            'currency': 'BDT',
-            'paymentMethod':
-                _paymentMethod,
-            'paymentStatus':
-                'pending',
-            'orderStatus':
-                'placed',
-            'createdAt':
-                FieldValue
-                    .serverTimestamp(),
-            'updatedAt':
-                FieldValue
-                    .serverTimestamp(),
-          },
-        );
-      }
-
-      // --------------------------------------------------------
-      // COMMIT ORDER
-      // --------------------------------------------------------
-
-      await batch.commit();
-
-      // --------------------------------------------------------
-      // BUY NOVA WALLET PAYMENT
-      // --------------------------------------------------------
-
-      if (_paymentMethod ==
-          'BuyNova Wallet') {
-        final callable =
-            FirebaseFunctions
-                .instanceFor(
-          region:
-              'asia-northeast3',
-        ).httpsCallable(
-          'placeWalletOrder',
-        );
-
-        final result =
-            await callable.call({
-          'orderId': orderId,
-        });
-
-        final resultData =
-            Map<String, dynamic>.from(
-          result.data as Map,
-        );
-
-        final bool success =
-            resultData['success'] ==
-                    true ||
-                resultData[
-                        'alreadyPaid'] ==
-                    true;
-
-        if (!success) {
-          throw Exception(
-            'Wallet payment could not be completed.',
-          );
+          if (!success) {
+            throw Exception('Wallet payment could not be completed.');
+          }
+        } catch (_) {
+          // Do not leave an unpaid order behind.
+          await _cancelUnpaidOrder(orderId);
+          rethrow;
         }
       }
 
-      // --------------------------------------------------------
+      // ------------------------------------------------------
       // CLEAR CART
-      // --------------------------------------------------------
+      // ------------------------------------------------------
 
       if (widget.clearCartOnSuccess) {
-        await _clearCart(
-          user.uid,
-        );
+        await _clearCart(user.uid);
       }
 
       if (!mounted) return;
 
       await showDialog(
         context: context,
-        barrierDismissible:
-            false,
-        builder: (_) =>
-            AlertDialog(
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
           title: const Row(
             children: [
-              Icon(
-                Icons.check_circle,
-                color: Colors.green,
-              ),
-              SizedBox(
-                width: 10,
-              ),
+              Icon(Icons.check_circle, color: Colors.green),
+              SizedBox(width: 10),
               Text('Order Placed'),
             ],
           ),
           content: Text(
-            _paymentMethod ==
-                    'BuyNova Wallet'
+            isWallet
                 ? 'Your order has been placed and paid successfully using BuyNova Wallet.'
                 : 'Your order has been placed successfully.',
           ),
           actions: [
             ElevatedButton(
-              onPressed: () {
-                Navigator.pop(
-                  context,
-                );
-              },
-              child:
-                  const Text(
-                'Continue',
-              ),
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Continue'),
             ),
           ],
         ),
@@ -1207,54 +558,60 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-          builder: (_) =>
-              const MyOrdersPage(),
-        ),
+        MaterialPageRoute(builder: (_) => const MyOrdersPage()),
       );
     } catch (e) {
+      debugPrint('Place order error: $e');
       if (!mounted) return;
 
-      String message =
-          'Something went wrong. Please try again.';
-
-      final errorText =
-          e.toString();
-
-      if (errorText.contains(
-              'insufficient') ||
-          errorText.contains(
-              'Insufficient')) {
-        message =
-            'Your BuyNova Wallet balance is not enough for this order.';
-      } else if (errorText.contains(
-          'unauthenticated')) {
-        message =
-            'Please login again.';
-      } else if (errorText.contains(
-          'not-found')) {
-        message =
-            'Order or Wallet service was not found.';
-      }
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              Text(message),
-          duration:
-              const Duration(
-            seconds: 4,
-          ),
+          content: Text(_friendlyError(e)),
+          duration: const Duration(seconds: 4),
         ),
       );
     } finally {
-      if (!mounted) return;
+      if (mounted) {
+        setState(() => _placingOrder = false);
+      }
+    }
+  }
 
-      setState(() {
-        _placingOrder = false;
-      });
+  String _friendlyError(Object error) {
+    // Messages thrown by our own server function are safe to show.
+    if (error is FirebaseFunctionsException) {
+      final message = error.message ?? '';
+
+      if (message.toLowerCase().contains('insufficient')) {
+        return 'Your BuyNova Wallet balance is not enough for this order.';
+      }
+
+      switch (error.code) {
+        case 'unauthenticated':
+          return 'Please login again.';
+        case 'invalid-argument':
+        case 'failed-precondition':
+        case 'not-found':
+          if (message.isNotEmpty) return message;
+      }
+    }
+
+    final text = error.toString().toLowerCase();
+
+    if (text.contains('insufficient')) {
+      return 'Your BuyNova Wallet balance is not enough for this order.';
+    }
+
+    return 'Something went wrong. Please try again.';
+  }
+
+  Future<void> _cancelUnpaidOrder(String orderId) async {
+    try {
+      await _functions
+          .httpsCallable('cancelUnpaidOrder')
+          .call({'orderId': orderId});
+    } catch (e) {
+      debugPrint('Cancel unpaid order error: $e');
     }
   }
 
@@ -1262,29 +619,20 @@ class _CheckoutPageState extends State<CheckoutPage> {
   // CLEAR CART
   // ============================================================
 
-  Future<void> _clearCart(
-    String uid,
-  ) async {
+  Future<void> _clearCart(String uid) async {
     try {
-      final cartSnapshot =
-          await _firestore
-              .collection('users')
-              .doc(uid)
-              .collection('cart')
-              .get();
+      final cartSnapshot = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('cart')
+          .get();
 
-      if (cartSnapshot.docs.isEmpty) {
-        return;
-      }
+      if (cartSnapshot.docs.isEmpty) return;
 
-      final batch =
-          _firestore.batch();
+      final batch = _firestore.batch();
 
-      for (final doc
-          in cartSnapshot.docs) {
-        batch.delete(
-          doc.reference,
-        );
+      for (final doc in cartSnapshot.docs) {
+        batch.delete(doc.reference);
       }
 
       await batch.commit();
@@ -1297,18 +645,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
   // HELPERS
   // ============================================================
 
-  void _showMessage(
-    String message,
-  ) {
+  void _showMessage(String message) {
     if (!mounted) return;
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(
-      SnackBar(
-        content:
-            Text(message),
-      ),
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
     );
   }
 
@@ -1319,56 +660,31 @@ class _CheckoutPageState extends State<CheckoutPage> {
   Widget _buildAddressCard() {
     return Card(
       child: Padding(
-        padding:
-            const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment
-                  .start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                const Icon(
-                  Icons.location_on,
-                ),
-                const SizedBox(
-                  width: 8,
-                ),
+                const Icon(Icons.location_on),
+                const SizedBox(width: 8),
                 const Expanded(
                   child: Text(
                     'Delivery Address',
-                    style:
-                        TextStyle(
-                      fontSize: 17,
-                      fontWeight:
-                          FontWeight
-                              .bold,
-                    ),
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
                   ),
                 ),
                 TextButton(
-                  onPressed:
-                      _openAddressBook,
-                  child: Text(
-                    _selectedAddress ==
-                            null
-                        ? 'Add'
-                        : 'Change',
-                  ),
+                  onPressed: _openAddressBook,
+                  child: Text(_selectedAddress == null ? 'Add' : 'Change'),
                 ),
               ],
             ),
-            const SizedBox(
-              height: 8,
-            ),
-            if (_selectedAddress ==
-                null)
+            const SizedBox(height: 8),
+            if (_selectedAddress == null)
               const Text(
                 'No delivery address selected.',
-                style:
-                    TextStyle(
-                  color: Colors.grey,
-                ),
+                style: TextStyle(color: Colors.grey),
               )
             else
               _buildAddressText(),
@@ -1378,116 +694,51 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
   }
 
-  // ============================================================
-  // ADDRESS TEXT
-  // ============================================================
-
   Widget _buildAddressText() {
-    final address =
-        _selectedAddress!;
+    final address = _selectedAddress!;
 
-    final name =
-        address['name']
-                ?.toString() ??
-            '';
+    final name = address['name']?.toString() ?? '';
+    final phone = address['phone']?.toString() ?? '';
+    final line1 = address['address']?.toString() ??
+        address['addressLine1']?.toString() ??
+        '';
+    final city = address['city']?.toString() ?? '';
+    final postalCode = address['postalCode']?.toString() ??
+        address['zipCode']?.toString() ??
+        '';
 
-    final phone =
-        address['phone']
-                ?.toString() ??
-            '';
+    final zoneText = _deliveryZone == 'inside_dhaka'
+        ? 'Inside Dhaka'
+        : _deliveryZone == 'outside_dhaka'
+            ? 'Outside Dhaka'
+            : '';
 
-    final line1 =
-        address['address']
-                ?.toString() ??
-            address['addressLine1']
-                ?.toString() ??
-            '';
-
-    final city =
-        address['city']
-                ?.toString() ??
-            '';
-
-    final postalCode =
-        address['postalCode']
-                ?.toString() ??
-            address['zipCode']
-                ?.toString() ??
-            '';
-
-    final zoneText =
-        _deliveryZone ==
-                'inside_dhaka'
-            ? 'Inside Dhaka'
-            : _deliveryZone ==
-                    'outside_dhaka'
-                ? 'Outside Dhaka'
-                : '';
+    Widget line(String text) => Padding(
+          padding: const EdgeInsets.only(top: 3),
+          child: Text(text),
+        );
 
     return Column(
-      crossAxisAlignment:
-          CrossAxisAlignment
-              .start,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (name.isNotEmpty)
-          Text(
-            name,
-            style:
-                const TextStyle(
-              fontWeight:
-                  FontWeight.bold,
-            ),
-          ),
-        if (phone.isNotEmpty)
-          Padding(
-            padding:
-                const EdgeInsets.only(
-              top: 3,
-            ),
-            child:
-                Text(phone),
-          ),
-        if (line1.isNotEmpty)
-          Padding(
-            padding:
-                const EdgeInsets.only(
-              top: 3,
-            ),
-            child:
-                Text(line1),
-          ),
-        if (city.isNotEmpty ||
-            postalCode.isNotEmpty)
-          Padding(
-            padding:
-                const EdgeInsets.only(
-              top: 3,
-            ),
-            child: Text(
-              '$city '
-                      '${postalCode.isNotEmpty ? postalCode : ''}'
-                  .trim(),
-            ),
-          ),
+          Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+        if (phone.isNotEmpty) line(phone),
+        if (line1.isNotEmpty) line(line1),
+        if (city.isNotEmpty || postalCode.isNotEmpty)
+          line('$city ${postalCode.isNotEmpty ? postalCode : ''}'.trim()),
         Padding(
-          padding:
-              const EdgeInsets.only(
-            top: 3,
-          ),
+          padding: const EdgeInsets.only(top: 3),
           child: Text(
             zoneText.isEmpty
                 ? 'Delivery area not set. Tap Change, then edit '
                     'this address and choose Inside/Outside Dhaka.'
                 : zoneText,
-            style:
-                TextStyle(
+            style: TextStyle(
               fontSize: 12,
-              color: zoneText
-                      .isEmpty
-                  ? Colors.orange
-                      .shade800
-                  : Colors.grey
-                      .shade600,
+              color: zoneText.isEmpty
+                  ? Colors.orange.shade800
+                  : Colors.grey.shade600,
             ),
           ),
         ),
@@ -1502,157 +753,81 @@ class _CheckoutPageState extends State<CheckoutPage> {
   Widget _buildPaymentSection() {
     return Card(
       child: Padding(
-        padding:
-            const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment
-                  .start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
               'Payment Method',
-              style:
-                  TextStyle(
-                fontSize: 18,
-                fontWeight:
-                    FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(
-              height: 10,
-            ),
+            const SizedBox(height: 10),
             RadioGroup<String>(
-              groupValue:
-                  _paymentMethod,
-              onChanged:
-                  (value) async {
-                if (value == null) {
-                  return;
-                }
+              groupValue: _paymentMethod,
+              onChanged: (value) async {
+                if (value == null) return;
 
-                setState(() {
-                  _paymentMethod =
-                      value;
-                });
+                setState(() => _paymentMethod = value);
 
-                if (value ==
-                    'BuyNova Wallet') {
+                if (value == 'BuyNova Wallet') {
                   await _loadWalletBalance();
                 }
               },
               child: Column(
                 children: [
-                  RadioListTile<
-                      String>(
-                    value:
-                        'Cash on Delivery',
-                    title:
-                        const Text(
-                      'Cash on Delivery',
-                    ),
-                    subtitle:
-                        const Text(
-                      'Pay when your order arrives.',
-                    ),
-                    secondary:
-                        const Icon(
-                      Icons
-                          .local_shipping,
-                    ),
+                  const RadioListTile<String>(
+                    value: 'Cash on Delivery',
+                    title: Text('Cash on Delivery'),
+                    subtitle: Text('Pay when your order arrives.'),
+                    secondary: Icon(Icons.local_shipping),
                   ),
-                  RadioListTile<
-                      String>(
-                    value:
-                        'BuyNova Wallet',
-                    title:
-                        const Text(
-                      'BuyNova Wallet',
-                    ),
-                    subtitle:
-                        _loadingWalletBalance
-                            ? const Text(
-                                'Checking wallet balance...',
-                              )
-                            : Text(
-                                'Balance: '
-                                '৳${_walletBalance.toStringAsFixed(2)}',
-                                style:
-                                    const TextStyle(
-                                  color:
-                                      Colors.green,
-                                  fontWeight:
-                                      FontWeight
-                                          .w600,
-                                ),
-                              ),
-                    secondary:
-                        const Icon(
-                      Icons
-                          .account_balance_wallet,
-                    ),
+                  RadioListTile<String>(
+                    value: 'BuyNova Wallet',
+                    title: const Text('BuyNova Wallet'),
+                    subtitle: _loadingWalletBalance
+                        ? const Text('Checking wallet balance...')
+                        : Text(
+                            'Balance: ৳${_walletBalance.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              color: Colors.green,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                    secondary: const Icon(Icons.account_balance_wallet),
                   ),
                 ],
               ),
             ),
-            if (_paymentMethod ==
-                'BuyNova Wallet') ...[
-              const SizedBox(
-                height: 6,
-              ),
+            if (_paymentMethod == 'BuyNova Wallet') ...[
+              const SizedBox(height: 6),
               Container(
-                width:
-                    double.infinity,
-                padding:
-                    const EdgeInsets.all(
-                  12,
-                ),
-                decoration:
-                    BoxDecoration(
-                  borderRadius:
-                      BorderRadius
-                          .circular(
-                    12,
-                  ),
-                  color:
-                      _walletHasEnoughBalance
-                          ? Colors.green
-                              .withValues(
-                              alpha: 0.08,
-                            )
-                          : Colors.red
-                              .withValues(
-                              alpha: 0.08,
-                            ),
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  color: (_walletHasEnoughBalance ? Colors.green : Colors.red)
+                      .withValues(alpha: 0.08),
                 ),
                 child: Row(
                   children: [
                     Icon(
                       _walletHasEnoughBalance
-                          ? Icons
-                              .check_circle
+                          ? Icons.check_circle
                           : Icons.warning,
                       color:
-                          _walletHasEnoughBalance
-                              ? Colors.green
-                              : Colors.red,
+                          _walletHasEnoughBalance ? Colors.green : Colors.red,
                     ),
-                    const SizedBox(
-                      width: 10,
-                    ),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         _walletHasEnoughBalance
                             ? 'Wallet balance is enough for this order.'
                             : 'Insufficient Wallet balance. Please add money before paying.',
-                        style:
-                            TextStyle(
-                          color:
-                              _walletHasEnoughBalance
-                                  ? Colors.green
-                                  : Colors.red,
-                          fontWeight:
-                              FontWeight
-                                  .w600,
+                        style: TextStyle(
+                          color: _walletHasEnoughBalance
+                              ? Colors.green
+                              : Colors.red,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
@@ -1673,86 +848,50 @@ class _CheckoutPageState extends State<CheckoutPage> {
   Widget _buildCouponSection() {
     return Card(
       child: Padding(
-        padding:
-            const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment
-                  .start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
               'Coupon',
-              style:
-                  TextStyle(
-                fontSize: 18,
-                fontWeight:
-                    FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(
-              height: 10,
-            ),
+            const SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
                   child: TextField(
-                    controller:
-                        _couponController,
-                    textCapitalization:
-                        TextCapitalization
-                            .characters,
-                    decoration:
-                        const InputDecoration(
-                      hintText:
-                          'Enter coupon code',
-                      border:
-                          OutlineInputBorder(),
+                    controller: _couponController,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: const InputDecoration(
+                      hintText: 'Enter coupon code',
+                      border: OutlineInputBorder(),
                     ),
-                    onSubmitted:
-                        (_) =>
-                            _checkCoupon(),
+                    onSubmitted: (_) {
+                      if (!_checkingCoupon) _checkCoupon();
+                    },
                   ),
                 ),
-                const SizedBox(
-                  width: 10,
-                ),
+                const SizedBox(width: 10),
                 ElevatedButton(
-                  onPressed:
-                      _checkingCoupon
-                          ? null
-                          : _checkCoupon,
-                  child:
-                      _checkingCoupon
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child:
-                                  CircularProgressIndicator(
-                                strokeWidth:
-                                    2,
-                              ),
-                            )
-                          : const Text(
-                              'Apply',
-                            ),
+                  onPressed: _checkingCoupon ? null : _checkCoupon,
+                  child: _checkingCoupon
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Apply'),
                 ),
               ],
             ),
-            if (_couponMessage !=
-                null) ...[
-              const SizedBox(
-                height: 8,
-              ),
+            if (_couponMessage != null) ...[
+              const SizedBox(height: 8),
               Text(
                 _couponMessage!,
-                style:
-                    TextStyle(
-                  color:
-                      _discount > 0
-                          ? Colors.green
-                          : Colors.red,
-                  fontWeight:
-                      FontWeight.w500,
+                style: TextStyle(
+                  color: _discount > 0 ? Colors.green : Colors.red,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
@@ -1769,132 +908,70 @@ class _CheckoutPageState extends State<CheckoutPage> {
   Widget _buildOrderItems() {
     return Card(
       child: Padding(
-        padding:
-            const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment
-                  .start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
               'Order Items',
-              style:
-                  TextStyle(
-                fontSize: 18,
-                fontWeight:
-                    FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(
-              height: 12,
-            ),
-            ...widget.items.map(
-              (item) {
-                return Padding(
-                  padding:
-                      const EdgeInsets
-                          .only(
-                    bottom: 12,
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 54,
-                        height: 54,
-                        decoration:
-                            BoxDecoration(
-                          borderRadius:
-                              BorderRadius
-                                  .circular(
-                            10,
+            const SizedBox(height: 12),
+            ...widget.items.map((item) {
+              final hasImage =
+                  item.imageUrl != null && item.imageUrl!.isNotEmpty;
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 54,
+                      height: 54,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        color: Colors.grey.shade200,
+                      ),
+                      child: hasImage
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Image.network(
+                                item.imageUrl!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return const Icon(Icons.image_not_supported);
+                                },
+                              ),
+                            )
+                          : const Icon(Icons.shopping_bag),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
-                          color: Colors
-                              .grey
-                              .shade200,
-                        ),
-                        child:
-                            item.imageUrl !=
-                                        null &&
-                                    item.imageUrl!
-                                        .isNotEmpty
-                                ? ClipRRect(
-                                    borderRadius:
-                                        BorderRadius
-                                            .circular(
-                                      10,
-                                    ),
-                                    child:
-                                        Image.network(
-                                      item.imageUrl!,
-                                      fit: BoxFit
-                                          .cover,
-                                      errorBuilder:
-                                          (
-                                        _,
-                                        __,
-                                        ___,
-                                      ) {
-                                        return const Icon(
-                                          Icons
-                                              .image_not_supported,
-                                        );
-                                      },
-                                    ),
-                                  )
-                                : const Icon(
-                                    Icons
-                                        .shopping_bag,
-                                  ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Qty: ${item.quantity}',
+                            style: const TextStyle(color: Colors.grey),
+                          ),
+                        ],
                       ),
-                      const SizedBox(
-                        width: 12,
-                      ),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment:
-                              CrossAxisAlignment
-                                  .start,
-                          children: [
-                            Text(
-                              item.name,
-                              maxLines: 2,
-                              overflow:
-                                  TextOverflow
-                                      .ellipsis,
-                              style:
-                                  const TextStyle(
-                                fontWeight:
-                                    FontWeight
-                                        .w600,
-                              ),
-                            ),
-                            const SizedBox(
-                              height: 4,
-                            ),
-                            Text(
-                              'Qty: ${item.quantity}',
-                              style:
-                                  const TextStyle(
-                                color:
-                                    Colors.grey,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Text(
-                        '৳${item.total.toStringAsFixed(2)}',
-                        style:
-                            const TextStyle(
-                          fontWeight:
-                              FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
+                    ),
+                    Text(
+                      '৳${item.total.toStringAsFixed(2)}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              );
+            }),
           ],
         ),
       ),
@@ -1908,17 +985,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
   Widget _buildSummary() {
     return Card(
       child: Padding(
-        padding:
-            const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            _summaryRow(
-              'Subtotal',
-              subtotal,
-            ),
-            const SizedBox(
-              height: 8,
-            ),
+            _summaryRow('Subtotal', subtotal),
+            const SizedBox(height: 8),
             _summaryRow(
               _hasDeliveryZone
                   ? 'Delivery Fee (${_isInsideDhaka ? 'Inside' : 'Outside'} Dhaka)'
@@ -1926,40 +997,22 @@ class _CheckoutPageState extends State<CheckoutPage> {
               _deliveryFee,
             ),
             if (_discount > 0) ...[
-              const SizedBox(
-                height: 8,
-              ),
-              _summaryRow(
-                'Discount',
-                -_discount,
-                color:
-                    Colors.green,
-              ),
+              const SizedBox(height: 8),
+              _summaryRow('Discount', -_discount, color: Colors.green),
             ],
-            const Divider(
-              height: 24,
-            ),
+            const Divider(height: 24),
             Row(
-              mainAxisAlignment:
-                  MainAxisAlignment
-                      .spaceBetween,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
                   'Grand Total',
-                  style:
-                      TextStyle(
-                    fontSize: 18,
-                    fontWeight:
-                        FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 Text(
                   '৳${grandTotal.toStringAsFixed(2)}',
-                  style:
-                      const TextStyle(
+                  style: const TextStyle(
                     fontSize: 20,
-                    fontWeight:
-                        FontWeight.bold,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ],
@@ -1970,33 +1023,18 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
   }
 
-  // ============================================================
-  // SUMMARY ROW
-  // ============================================================
-
-  Widget _summaryRow(
-    String title,
-    double value, {
-    Color? color,
-  }) {
-    final prefix =
-        value < 0 ? '- ' : '';
+  Widget _summaryRow(String title, double value, {Color? color}) {
+    final prefix = value < 0 ? '- ' : '';
 
     return Row(
-      mainAxisAlignment:
-          MainAxisAlignment
-              .spaceBetween,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(title),
         Text(
           '$prefix৳${value.abs().toStringAsFixed(2)}',
-          style:
-              TextStyle(
+          style: TextStyle(
             color: color,
-            fontWeight:
-                color != null
-                    ? FontWeight.w600
-                    : null,
+            fontWeight: color != null ? FontWeight.w600 : null,
           ),
         ),
       ],
@@ -2008,85 +1046,52 @@ class _CheckoutPageState extends State<CheckoutPage> {
   // ============================================================
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title:
-            const Text('Checkout'),
-      ),
+      appBar: AppBar(title: const Text('Checkout')),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding:
-              const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(12),
           children: [
             _buildAddressCard(),
-            const SizedBox(
-              height: 12,
-            ),
+            const SizedBox(height: 12),
             _buildOrderItems(),
-            const SizedBox(
-              height: 12,
-            ),
+            const SizedBox(height: 12),
             _buildCouponSection(),
-            const SizedBox(
-              height: 12,
-            ),
+            const SizedBox(height: 12),
             _buildPaymentSection(),
-            const SizedBox(
-              height: 12,
-            ),
+            const SizedBox(height: 12),
             _buildSummary(),
-            const SizedBox(
-              height: 20,
-            ),
+            const SizedBox(height: 20),
             SizedBox(
               height: 54,
-              child:
-                  ElevatedButton(
-                onPressed:
-                    _placingOrder
-                        ? null
-                        : _placeOrder,
-                child:
-                    _placingOrder
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child:
-                                CircularProgressIndicator(
-                              strokeWidth:
-                                  2.5,
-                              color:
-                                  Colors.white,
-                            ),
-                          )
-                        : Text(
-                            _paymentMethod ==
-                                    'BuyNova Wallet'
-                                ? 'Pay ৳${grandTotal.toStringAsFixed(2)} with Wallet'
-                                : 'Place Order',
-                            style:
-                                const TextStyle(
-                              fontSize:
-                                  16,
-                              fontWeight:
-                                  FontWeight
-                                      .bold,
-                            ),
-                          ),
+              child: ElevatedButton(
+                onPressed: _placingOrder ? null : _placeOrder,
+                child: _placingOrder
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        _paymentMethod == 'BuyNova Wallet'
+                            ? 'Pay ৳${grandTotal.toStringAsFixed(2)} with Wallet'
+                            : 'Place Order',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
               ),
             ),
-            const SizedBox(
-              height: 30,
-            ),
+            const SizedBox(height: 30),
           ],
         ),
       ),
     );
   }
 }
-
-
