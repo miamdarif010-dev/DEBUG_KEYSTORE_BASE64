@@ -243,15 +243,154 @@ class _HomePageState extends State<HomePage>
   }
 
   // ------------------------------------------------------------
-  // CAMERA SEARCH
+  // CAMERA / GALLERY SEARCH
   // ------------------------------------------------------------
 
   Future<void> _openCameraSearch() async {
+    final ImageSource? source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return SafeArea(
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(
+              16,
+              12,
+              16,
+              20,
+            ),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 42,
+                  height: 4,
+                  margin: const EdgeInsets.only(
+                    bottom: 18,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Search by Image',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withValues(
+                        alpha: 0.10,
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.camera_alt_outlined,
+                      color: Colors.redAccent,
+                    ),
+                  ),
+                  title: const Text(
+                    'Take Photo',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  subtitle: const Text(
+                    'Take a new picture with camera',
+                  ),
+                  onTap: () {
+                    Navigator.pop(
+                      context,
+                      ImageSource.camera,
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 6),
+
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: Colors.blueAccent.withValues(
+                        alpha: 0.10,
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.photo_library_outlined,
+                      color: Colors.blueAccent,
+                    ),
+                  ),
+                  title: const Text(
+                    'Choose from Gallery',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  subtitle: const Text(
+                    'Select an existing product photo',
+                  ),
+                  onTap: () {
+                    Navigator.pop(
+                      context,
+                      ImageSource.gallery,
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 8),
+
+                SizedBox(
+                  width: double.infinity,
+                  height: 46,
+                  child: TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                    },
+                    child: const Text(
+                      'Cancel',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (source == null || !mounted) {
+      return;
+    }
+
     try {
       final picker = ImagePicker();
 
       final XFile? image = await picker.pickImage(
-        source: ImageSource.camera,
+        source: source,
         imageQuality: 85,
         maxWidth: 1600,
       );
@@ -260,170 +399,175 @@ class _HomePageState extends State<HomePage>
         return;
       }
 
-      await showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (context) {
-          return SafeArea(
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(
-                  top: Radius.circular(24),
-                ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 42,
-                    height: 4,
-                    margin: const EdgeInsets.only(
-                      bottom: 16,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Search by Image',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: Image.file(
-                      File(image.path),
-                      width: double.infinity,
-                      height: 300,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            minimumSize:
-                                const Size.fromHeight(50),
-                            side: const BorderSide(
-                              color: Colors.redAccent,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius:
-                                  BorderRadius.circular(14),
-                            ),
-                          ),
-                          onPressed: () {
-                            Navigator.pop(context);
-                            _openCameraSearch();
-                          },
-                          icon: const Icon(
-                            Icons.refresh,
-                            color: Colors.redAccent,
-                          ),
-                          label: const Text(
-                            'Retake',
-                            style: TextStyle(
-                              color: Colors.redAccent,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(width: 10),
-
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                Colors.redAccent,
-                            foregroundColor: Colors.white,
-                            minimumSize:
-                                const Size.fromHeight(50),
-                            shape: RoundedRectangleBorder(
-                              borderRadius:
-                                  BorderRadius.circular(14),
-                            ),
-                          ),
-                          onPressed: () {
-                            Navigator.pop(context);
-
-                            ScaffoldMessenger.of(context)
-                                .showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Photo selected successfully.',
-                                ),
-                                behavior:
-                                    SnackBarBehavior.floating,
-                                duration:
-                                    Duration(seconds: 2),
-                              ),
-                            );
-                          },
-                          icon: const Icon(
-                            Icons.check,
-                          ),
-                          label: const Text(
-                            'Use Photo',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  SizedBox(
-                    width: double.infinity,
-                    height: 45,
-                    child: TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                      },
-                      child: const Text(
-                        'Cancel',
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      );
+      await _showImagePreview(image);
     } catch (e) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Could not open camera: $e',
+            'Could not select image: $e',
           ),
           behavior: SnackBarBehavior.floating,
         ),
       );
     }
+  }
+
+  Future<void> _showImagePreview(XFile image) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return SafeArea(
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 42,
+                  height: 4,
+                  margin: const EdgeInsets.only(
+                    bottom: 16,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Selected Photo',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.file(
+                    File(image.path),
+                    width: double.infinity,
+                    height: 300,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize:
+                              const Size.fromHeight(50),
+                          side: const BorderSide(
+                            color: Colors.redAccent,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(14),
+                          ),
+                        ),
+                        onPressed: () async {
+                          Navigator.pop(context);
+
+                          await _openCameraSearch();
+                        },
+                        icon: const Icon(
+                          Icons.refresh,
+                          color: Colors.redAccent,
+                        ),
+                        label: const Text(
+                          'Choose Again',
+                          style: TextStyle(
+                            color: Colors.redAccent,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(width: 10),
+
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor:
+                              Colors.redAccent,
+                          foregroundColor: Colors.white,
+                          minimumSize:
+                              const Size.fromHeight(50),
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(14),
+                          ),
+                        ),
+                        onPressed: () {
+                          Navigator.pop(context);
+
+                          ScaffoldMessenger.of(context)
+                              .showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Photo selected successfully.',
+                              ),
+                              behavior:
+                                  SnackBarBehavior.floating,
+                              duration:
+                                  Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                        icon: const Icon(
+                          Icons.check,
+                        ),
+                        label: const Text(
+                          'Use Photo',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 8),
+
+                SizedBox(
+                  width: double.infinity,
+                  height: 45,
+                  child: TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                    },
+                    child: const Text(
+                      'Cancel',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _openCoupon() {
@@ -1334,3 +1478,313 @@ class _HomePageState extends State<HomePage>
                                                     ) {
                                                       return const Center(
                                                         child:
+                                                            Icon(
+                                                          Icons.image,
+                                                          size: 50,
+                                                          color:
+                                                              Colors.grey,
+                                                        ),
+                                                      );
+                                                    },
+                                                  )
+                                                : const Center(
+                                                    child:
+                                                        Icon(
+                                                      Icons.image,
+                                                      size: 50,
+                                                      color:
+                                                          Colors.grey,
+                                                    ),
+                                                  ),
+                                          ),
+
+                                          Positioned(
+                                            top: 8,
+                                            right: 8,
+                                            child: Material(
+                                              color: Colors.white,
+                                              shape:
+                                                  const CircleBorder(),
+                                              elevation: 2,
+                                              child: InkWell(
+                                                customBorder:
+                                                    const CircleBorder(),
+                                                onTap: () async {
+                                                  final currentUser =
+                                                      user;
+
+                                                  if (currentUser ==
+                                                      null) {
+                                                    await Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder:
+                                                            (context) =>
+                                                                const LoginPage(),
+                                                      ),
+                                                    );
+                                                    return;
+                                                  }
+
+                                                  await _toggleFavorite(
+                                                    user:
+                                                        currentUser,
+                                                    productId:
+                                                        productId,
+                                                    productData:
+                                                        data,
+                                                  );
+                                                },
+                                                child: Padding(
+                                                  padding:
+                                                      const EdgeInsets
+                                                          .all(7),
+                                                  child: Icon(
+                                                    isFavorite
+                                                        ? Icons.favorite
+                                                        : Icons.favorite_border,
+                                                    color: isFavorite
+                                                        ? Colors.redAccent
+                                                        : Colors.grey,
+                                                    size: 21,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+
+                                    Padding(
+                                      padding:
+                                          const EdgeInsets.all(8),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            name,
+                                            style:
+                                                const TextStyle(
+                                              fontWeight:
+                                                  FontWeight.bold,
+                                            ),
+                                            maxLines: 1,
+                                            overflow:
+                                                TextOverflow.ellipsis,
+                                          ),
+
+                                          const SizedBox(
+                                            height: 4,
+                                          ),
+
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment
+                                                    .spaceBetween,
+                                            children: [
+                                              Flexible(
+                                                child: Text(
+                                                  displayPrice,
+                                                  style:
+                                                      const TextStyle(
+                                                    color:
+                                                        Colors.redAccent,
+                                                    fontWeight:
+                                                        FontWeight.bold,
+                                                    fontSize: 16,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+
+                                              const SizedBox(
+                                                width: 5,
+                                              ),
+
+                                              InkWell(
+                                                borderRadius:
+                                                    BorderRadius.circular(
+                                                  20,
+                                                ),
+                                                onTap: () async {
+                                                  final currentUser =
+                                                      user;
+
+                                                  if (currentUser ==
+                                                      null) {
+                                                    await Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder:
+                                                            (context) =>
+                                                                const LoginPage(),
+                                                      ),
+                                                    );
+                                                    return;
+                                                  }
+
+                                                  final bdtPrice =
+                                                      _displayBdtPrice(
+                                                    data,
+                                                  );
+
+                                                  await CartService
+                                                      .addItem(
+                                                    id: productId,
+                                                    name: name,
+                                                    price: bdtPrice,
+                                                    imageUrl:
+                                                        imageUrl,
+                                                  );
+
+                                                  if (!context.mounted) {
+                                                    return;
+                                                  }
+
+                                                  ScaffoldMessenger
+                                                      .of(context)
+                                                      .showSnackBar(
+                                                    SnackBar(
+                                                      content: Text(
+                                                        '$name added to cart',
+                                                      ),
+                                                      behavior:
+                                                          SnackBarBehavior
+                                                              .floating,
+                                                      duration:
+                                                          const Duration(
+                                                        seconds: 1,
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                                child: Container(
+                                                  padding:
+                                                      const EdgeInsets.all(
+                                                    6,
+                                                  ),
+                                                  decoration:
+                                                      BoxDecoration(
+                                                    color:
+                                                        Colors.redAccent,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                      20,
+                                                    ),
+                                                  ),
+                                                  child: const Icon(
+                                                    Icons
+                                                        .add_shopping_cart,
+                                                    size: 16,
+                                                    color:
+                                                        Colors.white,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+
+          bottomSheet: isLoggedIn
+              ? null
+              : Container(
+                  color: Colors.orangeAccent,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    mainAxisAlignment:
+                        MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Sign in for best experience!',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor:
+                              Colors.orangeAccent,
+                        ),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  const LoginPage(),
+                            ),
+                          );
+                        },
+                        child: const Text(
+                          'Sign In',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+          bottomNavigationBar:
+              BottomNavigationBar(
+            currentIndex: _selectedIndex,
+            onTap: _onNavTap,
+            selectedItemColor:
+                Colors.redAccent,
+            unselectedItemColor:
+                Colors.grey,
+            type: BottomNavigationBarType.fixed,
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.home),
+                label: 'Home',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.category),
+                label: 'Categories',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.video_library),
+                label: 'Videos',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(
+                  Icons.shopping_cart_outlined,
+                ),
+                label: 'Cart',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.person),
+                label: 'Profile',
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
