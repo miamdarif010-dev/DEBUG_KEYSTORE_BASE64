@@ -260,7 +260,7 @@ class _HomePageState extends State<HomePage>
         return;
       }
 
-      await showModalBottomSheet(
+      await showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
@@ -314,48 +314,89 @@ class _HomePageState extends State<HomePage>
 
                   const SizedBox(height: 16),
 
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.redAccent,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      onPressed: () {
-                        Navigator.pop(context);
-
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Image product search will be connected next.',
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            minimumSize:
+                                const Size.fromHeight(50),
+                            side: const BorderSide(
+                              color: Colors.redAccent,
                             ),
-                            behavior: SnackBarBehavior.floating,
-                            duration: Duration(seconds: 2),
+                            shape: RoundedRectangleBorder(
+                              borderRadius:
+                                  BorderRadius.circular(14),
+                            ),
                           ),
-                        );
-                      },
-                      icon: const Icon(
-                        Icons.search,
-                      ),
-                      label: const Text(
-                        'Search Products',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _openCameraSearch();
+                          },
+                          icon: const Icon(
+                            Icons.refresh,
+                            color: Colors.redAccent,
+                          ),
+                          label: const Text(
+                            'Retake',
+                            style: TextStyle(
+                              color: Colors.redAccent,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+
+                      const SizedBox(width: 10),
+
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor:
+                                Colors.redAccent,
+                            foregroundColor: Colors.white,
+                            minimumSize:
+                                const Size.fromHeight(50),
+                            shape: RoundedRectangleBorder(
+                              borderRadius:
+                                  BorderRadius.circular(14),
+                            ),
+                          ),
+                          onPressed: () {
+                            Navigator.pop(context);
+
+                            ScaffoldMessenger.of(context)
+                                .showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Photo selected successfully.',
+                                ),
+                                behavior:
+                                    SnackBarBehavior.floating,
+                                duration:
+                                    Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                          icon: const Icon(
+                            Icons.check,
+                          ),
+                          label: const Text(
+                            'Use Photo',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
 
                   const SizedBox(height: 8),
 
                   SizedBox(
                     width: double.infinity,
-                    height: 48,
+                    height: 45,
                     child: TextButton(
                       onPressed: () {
                         Navigator.pop(context);
@@ -1293,313 +1334,3 @@ class _HomePageState extends State<HomePage>
                                                     ) {
                                                       return const Center(
                                                         child:
-                                                            Icon(
-                                                          Icons.image,
-                                                          size: 50,
-                                                          color:
-                                                              Colors.grey,
-                                                        ),
-                                                      );
-                                                    },
-                                                  )
-                                                : const Center(
-                                                    child:
-                                                        Icon(
-                                                      Icons.image,
-                                                      size: 50,
-                                                      color:
-                                                          Colors.grey,
-                                                    ),
-                                                  ),
-                                          ),
-
-                                          Positioned(
-                                            top: 8,
-                                            right: 8,
-                                            child: Material(
-                                              color: Colors.white,
-                                              shape:
-                                                  const CircleBorder(),
-                                              elevation: 2,
-                                              child: InkWell(
-                                                customBorder:
-                                                    const CircleBorder(),
-                                                onTap: () async {
-                                                  final currentUser =
-                                                      user;
-
-                                                  if (currentUser ==
-                                                      null) {
-                                                    await Navigator.push(
-                                                      context,
-                                                      MaterialPageRoute(
-                                                        builder:
-                                                            (context) =>
-                                                                const LoginPage(),
-                                                      ),
-                                                    );
-                                                    return;
-                                                  }
-
-                                                  await _toggleFavorite(
-                                                    user:
-                                                        currentUser,
-                                                    productId:
-                                                        productId,
-                                                    productData:
-                                                        data,
-                                                  );
-                                                },
-                                                child: Padding(
-                                                  padding:
-                                                      const EdgeInsets
-                                                          .all(7),
-                                                  child: Icon(
-                                                    isFavorite
-                                                        ? Icons.favorite
-                                                        : Icons.favorite_border,
-                                                    color: isFavorite
-                                                        ? Colors.redAccent
-                                                        : Colors.grey,
-                                                    size: 21,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-
-                                    Padding(
-                                      padding:
-                                          const EdgeInsets.all(8),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            name,
-                                            style:
-                                                const TextStyle(
-                                              fontWeight:
-                                                  FontWeight.bold,
-                                            ),
-                                            maxLines: 1,
-                                            overflow:
-                                                TextOverflow.ellipsis,
-                                          ),
-
-                                          const SizedBox(
-                                            height: 4,
-                                          ),
-
-                                          Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment
-                                                    .spaceBetween,
-                                            children: [
-                                              Flexible(
-                                                child: Text(
-                                                  displayPrice,
-                                                  style:
-                                                      const TextStyle(
-                                                    color:
-                                                        Colors.redAccent,
-                                                    fontWeight:
-                                                        FontWeight.bold,
-                                                    fontSize: 16,
-                                                  ),
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ),
-
-                                              const SizedBox(
-                                                width: 5,
-                                              ),
-
-                                              InkWell(
-                                                borderRadius:
-                                                    BorderRadius.circular(
-                                                  20,
-                                                ),
-                                                onTap: () async {
-                                                  final currentUser =
-                                                      user;
-
-                                                  if (currentUser ==
-                                                      null) {
-                                                    await Navigator.push(
-                                                      context,
-                                                      MaterialPageRoute(
-                                                        builder:
-                                                            (context) =>
-                                                                const LoginPage(),
-                                                      ),
-                                                    );
-                                                    return;
-                                                  }
-
-                                                  final bdtPrice =
-                                                      _displayBdtPrice(
-                                                    data,
-                                                  );
-
-                                                  await CartService
-                                                      .addItem(
-                                                    id: productId,
-                                                    name: name,
-                                                    price: bdtPrice,
-                                                    imageUrl:
-                                                        imageUrl,
-                                                  );
-
-                                                  if (!context.mounted) {
-                                                    return;
-                                                  }
-
-                                                  ScaffoldMessenger
-                                                      .of(context)
-                                                      .showSnackBar(
-                                                    SnackBar(
-                                                      content: Text(
-                                                        '$name added to cart',
-                                                      ),
-                                                      behavior:
-                                                          SnackBarBehavior
-                                                              .floating,
-                                                      duration:
-                                                          const Duration(
-                                                        seconds: 1,
-                                                      ),
-                                                    ),
-                                                  );
-                                                },
-                                                child: Container(
-                                                  padding:
-                                                      const EdgeInsets.all(
-                                                    6,
-                                                  ),
-                                                  decoration:
-                                                      BoxDecoration(
-                                                    color:
-                                                        Colors.redAccent,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                      20,
-                                                    ),
-                                                  ),
-                                                  child: const Icon(
-                                                    Icons
-                                                        .add_shopping_cart,
-                                                    size: 16,
-                                                    color:
-                                                        Colors.white,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-
-          bottomSheet: isLoggedIn
-              ? null
-              : Container(
-                  color: Colors.orangeAccent,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    mainAxisAlignment:
-                        MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'Sign in for best experience!',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor:
-                              Colors.orangeAccent,
-                        ),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  const LoginPage(),
-                            ),
-                          );
-                        },
-                        child: const Text(
-                          'Sign In',
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-          bottomNavigationBar:
-              BottomNavigationBar(
-            currentIndex: _selectedIndex,
-            onTap: _onNavTap,
-            selectedItemColor:
-                Colors.redAccent,
-            unselectedItemColor:
-                Colors.grey,
-            type: BottomNavigationBarType.fixed,
-            items: const [
-              BottomNavigationBarItem(
-                icon: Icon(Icons.home),
-                label: 'Home',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.category),
-                label: 'Categories',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.video_library),
-                label: 'Videos',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(
-                  Icons.shopping_cart_outlined,
-                ),
-                label: 'Cart',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.person),
-                label: 'Profile',
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
