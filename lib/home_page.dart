@@ -509,7 +509,7 @@ class _HomePageState extends State<HomePage>
           TextSpan(
             text: 'a',
             style: TextStyle(
-              color: Colors.pinkAccent,
+              color: Colors.cyanAccent,
             ),
           ),
         ],
