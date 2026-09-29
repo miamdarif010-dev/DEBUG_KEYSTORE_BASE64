@@ -177,8 +177,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
         _walletBalance = balance;
       });
     } catch (e) {
-      // Wallet balance is only a display/UX value.
-      // Final payment validation happens securely in Cloud Functions.
       if (!mounted) return;
 
       setState(() {
@@ -212,7 +210,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
           .doc(user.uid)
           .collection('addresses');
 
-      // 1) Default address
       final defaultSnapshot = await addressesRef
           .where('isDefault', isEqualTo: true)
           .limit(1)
@@ -228,7 +225,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
         return;
       }
 
-      // 2) Any saved address
       final anySnapshot = await addressesRef.limit(1).get();
 
       if (anySnapshot.docs.isNotEmpty) {
@@ -241,7 +237,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
         return;
       }
 
-      // 3) Old single address saved in the user document
       final userDoc = await _firestore
           .collection('users')
           .doc(user.uid)
@@ -275,26 +270,68 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   // ============================================================
+  // COUPON HELPERS
+  // ============================================================
+
+  double _toDouble(dynamic value) {
+    if (value is num) {
+      return value.toDouble();
+    }
+
+    if (value is String) {
+      return double.tryParse(value) ?? 0;
+    }
+
+    return 0;
+  }
+
+  DateTime? _couponExpiry(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate();
+    }
+
+    if (value is DateTime) {
+      return value;
+    }
+
+    if (value is String) {
+      return DateTime.tryParse(value);
+    }
+
+    return null;
+  }
+
+  // ============================================================
   // COUPON
   // ============================================================
 
-  Future<void> _checkCoupon() async {
+  Future<bool> _checkCoupon({
+    bool showMessage = true,
+  }) async {
     final code =
         _couponController.text.trim().toUpperCase();
 
     if (code.isEmpty) {
-      setState(() {
-        _couponMessage = 'Please enter a coupon code.';
-        _discount = 0;
-        _couponCode = null;
-      });
-      return;
+      if (mounted && showMessage) {
+        setState(() {
+          _couponMessage = 'Please enter a coupon code.';
+          _discount = 0;
+          _couponCode = null;
+        });
+      }
+
+      return false;
     }
 
-    setState(() {
-      _checkingCoupon = true;
-      _couponMessage = null;
-    });
+    if (mounted) {
+      setState(() {
+        _checkingCoupon = true;
+
+        if (showMessage) {
+          _couponMessage = null;
+        }
+      });
+    }
 
     try {
       final snapshot = await _firestore
@@ -304,70 +341,159 @@ class _CheckoutPageState extends State<CheckoutPage> {
           .get();
 
       if (snapshot.docs.isEmpty) {
-        setState(() {
-          _discount = 0;
-          _couponCode = null;
-          _couponMessage = 'Invalid coupon code.';
-        });
+        if (mounted) {
+          setState(() {
+            _discount = 0;
+            _couponCode = null;
+            _couponMessage =
+                'Invalid coupon code.';
+          });
+        }
 
-        return;
+        return false;
       }
 
       final data = snapshot.docs.first.data();
 
-      final bool active =
-          data['active'] == true;
+      // --------------------------------------------------------
+      // ACTIVE CHECK
+      // CouponPage uses "isActive", so Checkout must also use it.
+      // --------------------------------------------------------
 
-      if (!active) {
-        setState(() {
-          _discount = 0;
-          _couponCode = null;
-          _couponMessage =
-              'This coupon is not active.';
-        });
+      final bool isActive =
+          data['isActive'] == true;
 
-        return;
+      if (!isActive) {
+        if (mounted) {
+          setState(() {
+            _discount = 0;
+            _couponCode = null;
+            _couponMessage =
+                'This coupon is not active.';
+          });
+        }
+
+        return false;
       }
 
+      // --------------------------------------------------------
+      // EXPIRY CHECK
+      // --------------------------------------------------------
+
+      final expiresAt =
+          _couponExpiry(data['expiresAt']);
+
+      if (expiresAt != null &&
+          expiresAt.isBefore(DateTime.now())) {
+        if (mounted) {
+          setState(() {
+            _discount = 0;
+            _couponCode = null;
+            _couponMessage =
+                'This coupon has expired.';
+          });
+        }
+
+        return false;
+      }
+
+      // --------------------------------------------------------
+      // COUPON VALUES
+      // --------------------------------------------------------
+
       final String discountType =
-          (data['discountType'] ?? 'fixed').toString();
+          (data['discountType'] ?? 'fixed')
+              .toString()
+              .toLowerCase()
+              .trim();
 
       final double discountValue =
-          ((data['discountValue'] ?? 0) as num)
-              .toDouble();
+          _toDouble(data['discountValue']);
 
-      double calculatedDiscount = 0;
+      final double minimumOrder =
+          _toDouble(data['minimumOrder']);
+
+      final double maximumDiscount =
+          _toDouble(data['maximumDiscount']);
+
+      // --------------------------------------------------------
+      // MINIMUM ORDER CHECK
+      // --------------------------------------------------------
+
+      if (minimumOrder > 0 &&
+          subtotal < minimumOrder) {
+        if (mounted) {
+          setState(() {
+            _discount = 0;
+            _couponCode = null;
+            _couponMessage =
+                'Minimum order amount is '
+                '৳${minimumOrder.toStringAsFixed(2)}.';
+          });
+        }
+
+        return false;
+      }
+
+      // --------------------------------------------------------
+      // CALCULATE DISCOUNT
+      // --------------------------------------------------------
+
+      double calculatedDiscount;
 
       if (discountType == 'percentage') {
         calculatedDiscount =
             subtotal * discountValue / 100;
+
+        // Maximum discount applies to percentage coupons.
+        if (maximumDiscount > 0 &&
+            calculatedDiscount > maximumDiscount) {
+          calculatedDiscount = maximumDiscount;
+        }
       } else {
         calculatedDiscount = discountValue;
       }
 
+      // Never allow a negative discount.
+      if (calculatedDiscount < 0) {
+        calculatedDiscount = 0;
+      }
+
+      // Discount cannot exceed subtotal.
       if (calculatedDiscount > subtotal) {
         calculatedDiscount = subtotal;
       }
 
-      setState(() {
-        _discount = calculatedDiscount;
-        _couponCode = code;
-        _couponMessage =
-            'Coupon applied. Discount: ৳${calculatedDiscount.toStringAsFixed(2)}';
-      });
-    } catch (e) {
-      setState(() {
-        _discount = 0;
-        _couponCode = null;
-        _couponMessage =
-            'Could not validate coupon. Please try again.';
-      });
-    } finally {
-      if (!mounted) return;
+      if (mounted) {
+        setState(() {
+          _discount = calculatedDiscount;
+          _couponCode = code;
+          _couponMessage =
+              calculatedDiscount > 0
+                  ? 'Coupon applied. Discount: '
+                      '৳${calculatedDiscount.toStringAsFixed(2)}'
+                  : 'Coupon applied, but no discount was calculated.';
+        });
+      }
 
-      setState(() {
-        _checkingCoupon = false;
-      });
+      return true;
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _discount = 0;
+          _couponCode = null;
+          _couponMessage =
+              'Could not validate coupon. Please try again.';
+        });
+      }
+
+      return false;
+    } finally {
+      if (mounted) {
+        setState(() {
+          _checkingCoupon = false;
+        });
+      }
     }
   }
 
@@ -451,18 +577,26 @@ class _CheckoutPageState extends State<CheckoutPage> {
     });
 
     try {
-      // Revalidate coupon before placing order.
-      if (_couponController.text.trim().isNotEmpty) {
-        await _checkCoupon();
+      // --------------------------------------------------------
+      // REVALIDATE COUPON
+      // --------------------------------------------------------
 
-        if (_couponController.text.trim().isNotEmpty &&
-            _couponCode == null) {
+      if (_couponController.text.trim().isNotEmpty) {
+        final couponValid = await _checkCoupon();
+
+        if (!couponValid) {
           return;
         }
+      } else {
+        // No coupon entered.
+        _discount = 0;
+        _couponCode = null;
       }
 
-      // Wallet balance is checked for UX only.
-      // Actual deduction happens securely on Cloud Functions.
+      // --------------------------------------------------------
+      // WALLET BALANCE
+      // --------------------------------------------------------
+
       if (_paymentMethod == 'BuyNova Wallet') {
         final enough =
             await _validateWalletBeforeOrder();
@@ -472,9 +606,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
         }
       }
 
-      // ----------------------------------------------------------
+      // --------------------------------------------------------
       // MAIN ORDER
-      // ----------------------------------------------------------
+      // --------------------------------------------------------
 
       final orderRef =
           _firestore.collection('orders').doc();
@@ -528,9 +662,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
             FieldValue.serverTimestamp(),
       };
 
-      // ----------------------------------------------------------
+      // --------------------------------------------------------
       // GROUP SELLER ORDERS
-      // ----------------------------------------------------------
+      // --------------------------------------------------------
 
       final Map<String, List<CheckoutItem>>
           sellerGroups = {};
@@ -572,9 +706,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
         sellerGroups[sellerId]!.add(item);
       }
 
-      // ----------------------------------------------------------
+      // --------------------------------------------------------
       // GROUP RESELLER ORDERS
-      // ----------------------------------------------------------
+      // --------------------------------------------------------
 
       final Map<String, List<CheckoutItem>>
           resellerGroups = {};
@@ -608,9 +742,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
         orderData,
       );
 
-      // ----------------------------------------------------------
+      // --------------------------------------------------------
       // SELLER ORDERS
-      // ----------------------------------------------------------
+      // --------------------------------------------------------
 
       for (final entry
           in sellerGroups.entries) {
@@ -662,9 +796,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
         );
       }
 
-      // ----------------------------------------------------------
+      // --------------------------------------------------------
       // RESELLER / ENTREPRENEUR ORDERS
-      // ----------------------------------------------------------
+      // --------------------------------------------------------
 
       for (final entry
           in resellerGroups.entries) {
@@ -769,15 +903,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
         );
       }
 
-      // ----------------------------------------------------------
+      // --------------------------------------------------------
       // COMMIT ORDER
-      // ----------------------------------------------------------
+      // --------------------------------------------------------
 
       await batch.commit();
 
-      // ----------------------------------------------------------
+      // --------------------------------------------------------
       // BUY NOVA WALLET PAYMENT
-      // ----------------------------------------------------------
+      // --------------------------------------------------------
 
       if (_paymentMethod ==
           'BuyNova Wallet') {
@@ -810,9 +944,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
         }
       }
 
-      // ----------------------------------------------------------
+      // --------------------------------------------------------
       // CLEAR CART
-      // ----------------------------------------------------------
+      // --------------------------------------------------------
 
       if (widget.clearCartOnSuccess) {
         await _clearCart(user.uid);
@@ -926,7 +1060,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
       await batch.commit();
     } catch (_) {
       // Order has already been successfully placed.
-      // Cart cleanup failure should not cancel the order.
     }
   }
 
