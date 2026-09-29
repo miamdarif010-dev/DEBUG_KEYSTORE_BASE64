@@ -54,12 +54,21 @@ class CheckoutPage extends StatefulWidget {
 
 class _CheckoutPageState extends State<CheckoutPage> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore =
+      FirebaseFirestore.instance;
 
   final _formKey = GlobalKey<FormState>();
 
   final TextEditingController _couponController =
       TextEditingController();
+
+  // ============================================================
+  // BUY NOVA PENDING COUPON KEY
+  // Must match CouponPage
+  // ============================================================
+
+  static const String _pendingCouponKey =
+      'buynova_pending_coupon_code';
 
   String _paymentMethod = 'Cash on Delivery';
 
@@ -78,11 +87,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   // ============================================================
   // DELIVERY FEE
-  // Inside Dhaka: ৳60, Outside Dhaka: ৳120
+  // Inside Dhaka: ৳60
+  // Outside Dhaka: ৳120
   // ============================================================
 
   String get _deliveryZone {
-    return _selectedAddress?['deliveryZone']?.toString() ?? '';
+    return _selectedAddress?['deliveryZone']
+            ?.toString() ??
+        '';
   }
 
   bool get _hasDeliveryZone {
@@ -101,7 +113,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
     if (zone == 'outside_dhaka') return false;
 
     final text =
-        '${address['city'] ?? ''} ${address['district'] ?? ''}'
+        '${address['city'] ?? ''} '
+        '${address['district'] ?? ''}'
             .toLowerCase();
 
     return text.contains('dhaka') ||
@@ -110,6 +123,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   double get _deliveryFee {
     if (_selectedAddress == null) return 60;
+
     return _isInsideDhaka ? 60 : 120;
   }
 
@@ -121,13 +135,20 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   double get grandTotal {
-    final value = subtotal + _deliveryFee - _discount;
+    final value =
+        subtotal + _deliveryFee - _discount;
+
     return value < 0 ? 0 : value;
   }
+
+  // ============================================================
+  // INIT
+  // ============================================================
 
   @override
   void initState() {
     super.initState();
+
     _loadDefaultAddress();
     _loadWalletBalance();
     _loadSavedCoupon();
@@ -140,7 +161,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   // ============================================================
-  // LOAD SAVED COUPON
+  // LOAD COUPON SELECTED FROM COUPON PAGE
   // ============================================================
 
   Future<void> _loadSavedCoupon() async {
@@ -149,23 +170,32 @@ class _CheckoutPageState extends State<CheckoutPage> {
           await SharedPreferences.getInstance();
 
       final savedCode =
-          prefs.getString('buynova_pending_coupon');
+          prefs.getString(_pendingCouponKey);
 
       if (savedCode == null ||
           savedCode.trim().isEmpty) {
         return;
       }
 
+      final cleanCode =
+          savedCode.trim().toUpperCase();
+
+      // Consume the pending coupon once.
       await prefs.remove(
-        'buynova_pending_coupon',
+        _pendingCouponKey,
       );
 
       if (!mounted) return;
 
-      _couponController.text =
-          savedCode.trim().toUpperCase();
+      setState(() {
+        _couponController.text =
+            cleanCode;
+      });
 
-      await _checkCoupon();
+      // Automatically validate the selected coupon.
+      await _checkCoupon(
+        showMessage: true,
+      );
     } catch (_) {
       // Coupon loading is optional.
     }
@@ -189,18 +219,25 @@ class _CheckoutPageState extends State<CheckoutPage> {
         return;
       }
 
-      final callable = FirebaseFunctions.instanceFor(
+      final callable =
+          FirebaseFunctions.instanceFor(
         region: 'asia-northeast3',
-      ).httpsCallable('getWalletBalance');
+      ).httpsCallable(
+        'getWalletBalance',
+      );
 
-      final result = await callable.call();
+      final result =
+          await callable.call();
 
-      final data = Map<String, dynamic>.from(
+      final data =
+          Map<String, dynamic>.from(
         result.data as Map,
       );
 
       final dynamic balanceValue =
-          data['balance'] ?? data['cashBalance'] ?? 0;
+          data['balance'] ??
+              data['cashBalance'] ??
+              0;
 
       final balance =
           (balanceValue as num).toDouble();
@@ -239,15 +276,20 @@ class _CheckoutPageState extends State<CheckoutPage> {
     if (user == null) return;
 
     try {
-      final addressesRef = _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('addresses');
+      final addressesRef =
+          _firestore
+              .collection('users')
+              .doc(user.uid)
+              .collection('addresses');
 
-      final defaultSnapshot = await addressesRef
-          .where('isDefault', isEqualTo: true)
-          .limit(1)
-          .get();
+      final defaultSnapshot =
+          await addressesRef
+              .where(
+                'isDefault',
+                isEqualTo: true,
+              )
+              .limit(1)
+              .get();
 
       if (defaultSnapshot.docs.isNotEmpty) {
         if (!mounted) return;
@@ -261,7 +303,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
       }
 
       final anySnapshot =
-          await addressesRef.limit(1).get();
+          await addressesRef
+              .limit(1)
+              .get();
 
       if (anySnapshot.docs.isNotEmpty) {
         if (!mounted) return;
@@ -274,10 +318,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
         return;
       }
 
-      final userDoc = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .get();
+      final userDoc =
+          await _firestore
+              .collection('users')
+              .doc(user.uid)
+              .get();
 
       final data = userDoc.data();
 
@@ -290,7 +335,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
         setState(() {
           _selectedAddress =
-              Map<String, dynamic>.from(address);
+              Map<String, dynamic>.from(
+            address,
+          );
         });
       }
     } catch (_) {}
@@ -300,7 +347,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => const AddressBookPage(),
+        builder: (_) =>
+            const AddressBookPage(),
       ),
     );
 
@@ -340,14 +388,16 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   // ============================================================
-  // COUPON
+  // CHECK / APPLY COUPON
   // ============================================================
 
   Future<bool> _checkCoupon({
     bool showMessage = true,
   }) async {
     final code =
-        _couponController.text.trim().toUpperCase();
+        _couponController.text
+            .trim()
+            .toUpperCase();
 
     if (code.isEmpty) {
       if (mounted && showMessage) {
@@ -373,14 +423,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
     }
 
     try {
-      final snapshot = await _firestore
-          .collection('coupons')
-          .where(
-            'code',
-            isEqualTo: code,
-          )
-          .limit(1)
-          .get();
+      final snapshot =
+          await _firestore
+              .collection('coupons')
+              .where(
+                'code',
+                isEqualTo: code,
+              )
+              .limit(1)
+              .get();
 
       if (snapshot.docs.isEmpty) {
         if (mounted) {
@@ -448,7 +499,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
       // --------------------------------------------------------
 
       final String discountType =
-          (data['discountType'] ?? 'fixed')
+          (data['discountType'] ??
+                  'fixed')
               .toString()
               .toLowerCase()
               .trim();
@@ -493,9 +545,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
       double calculatedDiscount;
 
-      if (discountType == 'percentage') {
+      if (discountType ==
+          'percentage') {
         calculatedDiscount =
-            subtotal * discountValue / 100;
+            subtotal *
+                discountValue /
+                100;
 
         if (maximumDiscount > 0 &&
             calculatedDiscount >
@@ -512,15 +567,23 @@ class _CheckoutPageState extends State<CheckoutPage> {
         calculatedDiscount = 0;
       }
 
-      if (calculatedDiscount > subtotal) {
-        calculatedDiscount = subtotal;
+      if (calculatedDiscount >
+          subtotal) {
+        calculatedDiscount =
+            subtotal;
       }
+
+      // --------------------------------------------------------
+      // APPLY
+      // --------------------------------------------------------
 
       if (mounted) {
         setState(() {
           _discount =
               calculatedDiscount;
+
           _couponCode = code;
+
           _couponMessage =
               calculatedDiscount > 0
                   ? 'Coupon applied. Discount: '
@@ -554,7 +617,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
   // PAYMENT
   // ============================================================
 
-  Future<bool> _validateWalletBeforeOrder() async {
+  Future<bool>
+      _validateWalletBeforeOrder() async {
     await _loadWalletBalance();
 
     if (!_walletHasEnoughBalance) {
@@ -562,7 +626,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
       await showDialog(
         context: context,
-        builder: (_) => AlertDialog(
+        builder: (_) =>
+            AlertDialog(
           title: const Text(
             'Insufficient Wallet Balance',
           ),
@@ -575,8 +640,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
           actions: [
             TextButton(
               onPressed: () =>
-                  Navigator.pop(context),
-              child: const Text('OK'),
+                  Navigator.pop(
+                context,
+              ),
+              child:
+                  const Text('OK'),
             ),
           ],
         ),
@@ -595,19 +663,25 @@ class _CheckoutPageState extends State<CheckoutPage> {
   Future<void> _placeOrder() async {
     if (_placingOrder) return;
 
-    final user = _auth.currentUser;
+    final user =
+        _auth.currentUser;
 
     if (user == null) {
-      _showMessage('Please login first.');
+      _showMessage(
+        'Please login first.',
+      );
       return;
     }
 
     if (widget.items.isEmpty) {
-      _showMessage('Your cart is empty.');
+      _showMessage(
+        'Your cart is empty.',
+      );
       return;
     }
 
-    if (!_formKey.currentState!.validate()) {
+    if (!_formKey.currentState!
+        .validate()) {
       return;
     }
 
@@ -668,14 +742,19 @@ class _CheckoutPageState extends State<CheckoutPage> {
       // --------------------------------------------------------
 
       final orderRef =
-          _firestore.collection('orders').doc();
+          _firestore
+              .collection('orders')
+              .doc();
 
-      final orderId = orderRef.id;
+      final orderId =
+          orderRef.id;
 
-      final List<Map<String, dynamic>>
+      final List<
+              Map<String, dynamic>>
           orderItems = [];
 
-      for (final item in widget.items) {
+      for (final item
+          in widget.items) {
         orderItems.add({
           'productId': item.id,
           'name': item.name,
@@ -730,7 +809,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
               List<CheckoutItem>>
           sellerGroups = {};
 
-      for (final item in widget.items) {
+      for (final item
+          in widget.items) {
         if (item.isResellerProduct) {
           continue;
         }
@@ -786,7 +866,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
               List<CheckoutItem>>
           resellerGroups = {};
 
-      for (final item in widget.items) {
+      for (final item
+          in widget.items) {
         if (!item.isResellerProduct) {
           continue;
         }
@@ -814,7 +895,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
       final WriteBatch batch =
           _firestore.batch();
 
-      // Main order
+      // --------------------------------------------------------
+      // MAIN ORDER
+      // --------------------------------------------------------
+
       batch.set(
         orderRef,
         orderData,
@@ -1072,7 +1156,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
       // --------------------------------------------------------
 
       if (widget.clearCartOnSuccess) {
-        await _clearCart(user.uid);
+        await _clearCart(
+          user.uid,
+        );
       }
 
       if (!mounted) return;
@@ -1089,7 +1175,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 Icons.check_circle,
                 color: Colors.green,
               ),
-              SizedBox(width: 10),
+              SizedBox(
+                width: 10,
+              ),
               Text('Order Placed'),
             ],
           ),
@@ -1224,6 +1312,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
   }
 
+  // ============================================================
+  // ADDRESS CARD
+  // ============================================================
+
   Widget _buildAddressCard() {
     return Card(
       child: Padding(
@@ -1273,7 +1365,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 null)
               const Text(
                 'No delivery address selected.',
-                style: TextStyle(
+                style:
+                    TextStyle(
                   color: Colors.grey,
                 ),
               )
@@ -1284,6 +1377,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
       ),
     );
   }
+
+  // ============================================================
+  // ADDRESS TEXT
+  // ============================================================
 
   Widget _buildAddressText() {
     final address =
@@ -1367,7 +1464,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
               top: 3,
             ),
             child: Text(
-              '$city ${postalCode.isNotEmpty ? postalCode : ''}'
+              '$city '
+                      '${postalCode.isNotEmpty ? postalCode : ''}'
                   .trim(),
             ),
           ),
@@ -1385,7 +1483,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 TextStyle(
               fontSize: 12,
               color: zoneText
-                  .isEmpty
+                      .isEmpty
                   ? Colors.orange
                       .shade800
                   : Colors.grey
@@ -1396,6 +1494,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
       ],
     );
   }
+
+  // ============================================================
+  // PAYMENT SECTION
+  // ============================================================
 
   Widget _buildPaymentSection() {
     return Card(
@@ -1564,6 +1666,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
   }
 
+  // ============================================================
+  // COUPON SECTION
+  // ============================================================
+
   Widget _buildCouponSection() {
     return Card(
       child: Padding(
@@ -1602,6 +1708,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
                       border:
                           OutlineInputBorder(),
                     ),
+                    onSubmitted:
+                        (_) =>
+                            _checkCoupon(),
                   ),
                 ),
                 const SizedBox(
@@ -1642,6 +1751,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
                       _discount > 0
                           ? Colors.green
                           : Colors.red,
+                  fontWeight:
+                      FontWeight.w500,
                 ),
               ),
             ],
@@ -1650,6 +1761,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
       ),
     );
   }
+
+  // ============================================================
+  // ORDER ITEMS
+  // ============================================================
 
   Widget _buildOrderItems() {
     return Card(
@@ -1697,39 +1812,39 @@ class _CheckoutPageState extends State<CheckoutPage> {
                               .grey
                               .shade200,
                         ),
-                        child: item
-                                        .imageUrl !=
-                                    null &&
-                                item.imageUrl!
-                                    .isNotEmpty
-                            ? ClipRRect(
-                                borderRadius:
-                                    BorderRadius
-                                        .circular(
-                                  10,
-                                ),
-                                child:
-                                    Image.network(
-                                  item.imageUrl!,
-                                  fit: BoxFit
-                                      .cover,
-                                  errorBuilder:
-                                      (
-                                    _,
-                                    __,
-                                    ___,
-                                  ) {
-                                    return const Icon(
-                                      Icons
-                                          .image_not_supported,
-                                    );
-                                  },
-                                ),
-                              )
-                            : const Icon(
-                                Icons
-                                    .shopping_bag,
-                              ),
+                        child:
+                            item.imageUrl !=
+                                        null &&
+                                    item.imageUrl!
+                                        .isNotEmpty
+                                ? ClipRRect(
+                                    borderRadius:
+                                        BorderRadius
+                                            .circular(
+                                      10,
+                                    ),
+                                    child:
+                                        Image.network(
+                                      item.imageUrl!,
+                                      fit: BoxFit
+                                          .cover,
+                                      errorBuilder:
+                                          (
+                                        _,
+                                        __,
+                                        ___,
+                                      ) {
+                                        return const Icon(
+                                          Icons
+                                              .image_not_supported,
+                                        );
+                                      },
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons
+                                        .shopping_bag,
+                                  ),
                       ),
                       const SizedBox(
                         width: 12,
@@ -1785,6 +1900,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
       ),
     );
   }
+
+  // ============================================================
+  // SUMMARY
+  // ============================================================
 
   Widget _buildSummary() {
     return Card(
@@ -1851,6 +1970,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
   }
 
+  // ============================================================
+  // SUMMARY ROW
+  // ============================================================
+
   Widget _summaryRow(
     String title,
     double value, {
@@ -1879,6 +2002,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
       ],
     );
   }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
 
   @override
   Widget build(
@@ -1917,7 +2044,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
             ),
             SizedBox(
               height: 54,
-              child: ElevatedButton(
+              child:
+                  ElevatedButton(
                 onPressed:
                     _placingOrder
                         ? null
@@ -1960,3 +2088,5 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
   }
 }
+
+
