@@ -17,13 +17,9 @@ class _CouponPageState extends State<CouponPage> {
   bool _checkingCode = false;
 
   static const String _pendingCouponKey =
-      'buynova_pending_coupon_code';
+      'buynova_pending_coupon';
 
   User? get currentUser => FirebaseAuth.instance.currentUser;
-
-  // =========================================================
-  // CHECK COUPON
-  // =========================================================
 
   Future<void> _checkCoupon() async {
     final code =
@@ -50,8 +46,7 @@ class _CouponPageState extends State<CouponPage> {
       if (snapshot.docs.isEmpty) {
         _showCouponResult(
           title: 'Coupon Not Found',
-          message:
-              'This coupon code does not exist.',
+          message: 'This coupon code does not exist.',
           icon: Icons.error_outline,
           color: Colors.red,
         );
@@ -61,30 +56,20 @@ class _CouponPageState extends State<CouponPage> {
       final document = snapshot.docs.first;
       final data = document.data();
 
-      // =====================================================
-      // ACTIVE CHECK
-      // =====================================================
-
       final bool isActive =
           data['isActive'] == true;
 
       if (!isActive) {
         _showCouponResult(
           title: 'Coupon Inactive',
-          message:
-              'This coupon is no longer active.',
+          message: 'This coupon is no longer active.',
           icon: Icons.block_outlined,
           color: Colors.orange,
         );
         return;
       }
 
-      // =====================================================
-      // EXPIRATION CHECK
-      // =====================================================
-
-      final expiresAt =
-          data['expiresAt'];
+      final expiresAt = data['expiresAt'];
 
       final expiryDate =
           _getExpiryDate(expiresAt);
@@ -93,17 +78,12 @@ class _CouponPageState extends State<CouponPage> {
           expiryDate.isBefore(DateTime.now())) {
         _showCouponResult(
           title: 'Coupon Expired',
-          message:
-              'This coupon has expired.',
+          message: 'This coupon has expired.',
           icon: Icons.event_busy_outlined,
           color: Colors.red,
         );
         return;
       }
-
-      // =====================================================
-      // COUPON VALUES
-      // =====================================================
 
       final discountType =
           data['discountType']
@@ -113,19 +93,13 @@ class _CouponPageState extends State<CouponPage> {
               'fixed';
 
       final double discountValue =
-          _toDouble(
-        data['discountValue'],
-      );
+          _toDouble(data['discountValue']);
 
       final double minimumOrder =
-          _toDouble(
-        data['minimumOrder'],
-      );
+          _toDouble(data['minimumOrder']);
 
       final double maximumDiscount =
-          _toDouble(
-        data['maximumDiscount'],
-      );
+          _toDouble(data['maximumDiscount']);
 
       String discountText;
 
@@ -157,7 +131,7 @@ class _CouponPageState extends State<CouponPage> {
         icon: Icons.local_offer_outlined,
         color: Colors.green,
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       _showMessage(
@@ -171,10 +145,6 @@ class _CouponPageState extends State<CouponPage> {
       }
     }
   }
-
-  // =========================================================
-  // SAVE SELECTED COUPON
-  // =========================================================
 
   Future<void> _selectCoupon(String code) async {
     final cleanCode =
@@ -200,7 +170,7 @@ class _CouponPageState extends State<CouponPage> {
       _showMessage(
         'Coupon $cleanCode selected. It will be available at checkout.',
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       _showMessage(
@@ -208,10 +178,6 @@ class _CouponPageState extends State<CouponPage> {
       );
     }
   }
-
-  // =========================================================
-  // CONVERT NUMBER
-  // =========================================================
 
   double _toDouble(dynamic value) {
     if (value is num) {
@@ -223,10 +189,6 @@ class _CouponPageState extends State<CouponPage> {
         ) ??
         0;
   }
-
-  // =========================================================
-  // GET EXPIRATION DATE
-  // =========================================================
 
   DateTime? _getExpiryDate(dynamic value) {
     if (value is Timestamp) {
@@ -244,10 +206,6 @@ class _CouponPageState extends State<CouponPage> {
     return null;
   }
 
-  // =========================================================
-  // CHECK IF EXPIRED
-  // =========================================================
-
   bool _isExpired(dynamic value) {
     final expiryDate =
         _getExpiryDate(value);
@@ -260,10 +218,6 @@ class _CouponPageState extends State<CouponPage> {
       DateTime.now(),
     );
   }
-
-  // =========================================================
-  // COUPON RESULT
-  // =========================================================
 
   void _showCouponResult({
     required String title,
@@ -307,10 +261,6 @@ class _CouponPageState extends State<CouponPage> {
     );
   }
 
-  // =========================================================
-  // MESSAGE
-  // =========================================================
-
   void _showMessage(String message) {
     if (!mounted) return;
 
@@ -323,10 +273,6 @@ class _CouponPageState extends State<CouponPage> {
       ),
     );
   }
-
-  // =========================================================
-  // FORMAT EXPIRATION
-  // =========================================================
 
   String _formatDate(dynamic value) {
     final date =
@@ -348,10 +294,6 @@ class _CouponPageState extends State<CouponPage> {
     return '$day/$month/$year';
   }
 
-  // =========================================================
-  // DISCOUNT TEXT
-  // =========================================================
-
   String _discountText(
     Map<String, dynamic> data,
   ) {
@@ -363,9 +305,7 @@ class _CouponPageState extends State<CouponPage> {
             'fixed';
 
     final value =
-        _toDouble(
-      data['discountValue'],
-    );
+        _toDouble(data['discountValue']);
 
     if (type == 'percentage') {
       return '${value.toStringAsFixed(0)}% OFF';
@@ -373,10 +313,6 @@ class _CouponPageState extends State<CouponPage> {
 
     return '৳${value.toStringAsFixed(0)} OFF';
   }
-
-  // =========================================================
-  // COUPON CARD
-  // =========================================================
 
   Widget _couponCard(
     QueryDocumentSnapshot<Map<String, dynamic>>
@@ -389,14 +325,10 @@ class _CouponPageState extends State<CouponPage> {
         data['code']?.toString() ?? '';
 
     final minimumOrder =
-        _toDouble(
-      data['minimumOrder'],
-    );
+        _toDouble(data['minimumOrder']);
 
     final maximumDiscount =
-        _toDouble(
-      data['maximumDiscount'],
-    );
+        _toDouble(data['maximumDiscount']);
 
     final expiresAt =
         data['expiresAt'];
@@ -436,33 +368,26 @@ class _CouponPageState extends State<CouponPage> {
                   decoration:
                       BoxDecoration(
                     color:
-                        Colors.redAccent
-                            .withValues(
+                        Colors.redAccent.withValues(
                       alpha: 0.10,
                     ),
                     borderRadius:
-                        BorderRadius.circular(
-                      12,
-                    ),
+                        BorderRadius.circular(12),
                   ),
                   child:
                       const Icon(
-                    Icons
-                        .local_offer_outlined,
+                    Icons.local_offer_outlined,
                     color:
                         Colors.redAccent,
                   ),
                 ),
-
                 const SizedBox(
                   width: 12,
                 ),
-
                 Expanded(
                   child: Column(
                     crossAxisAlignment:
-                        CrossAxisAlignment
-                            .start,
+                        CrossAxisAlignment.start,
                     children: [
                       Text(
                         code,
@@ -490,29 +415,23 @@ class _CouponPageState extends State<CouponPage> {
                     ],
                   ),
                 ),
-
                 Container(
                   padding:
-                      const EdgeInsets
-                          .symmetric(
+                      const EdgeInsets.symmetric(
                     horizontal: 8,
                     vertical: 4,
                   ),
                   decoration:
                       BoxDecoration(
                     color: available
-                        ? Colors.green
-                            .withValues(
+                        ? Colors.green.withValues(
                             alpha: 0.10,
                           )
-                        : Colors.red
-                            .withValues(
+                        : Colors.red.withValues(
                             alpha: 0.10,
                           ),
                     borderRadius:
-                        BorderRadius.circular(
-                      20,
-                    ),
+                        BorderRadius.circular(20),
                   ),
                   child: Text(
                     available
@@ -532,36 +451,29 @@ class _CouponPageState extends State<CouponPage> {
                 ),
               ],
             ),
-
             const SizedBox(
               height: 14,
             ),
-
             if (minimumOrder > 0)
               _infoRow(
-                Icons
-                    .shopping_cart_outlined,
+                Icons.shopping_cart_outlined,
                 'Minimum order',
                 '৳${minimumOrder.toStringAsFixed(0)}',
               ),
-
             if (maximumDiscount > 0)
               _infoRow(
                 Icons.discount_outlined,
                 'Maximum discount',
                 '৳${maximumDiscount.toStringAsFixed(0)}',
               ),
-
             _infoRow(
               Icons.event_outlined,
               'Valid until',
               _formatDate(expiresAt),
             ),
-
             const SizedBox(
               height: 10,
             ),
-
             SizedBox(
               width: double.infinity,
               child:
@@ -571,8 +483,7 @@ class _CouponPageState extends State<CouponPage> {
                     : null,
                 icon:
                     const Icon(
-                  Icons
-                      .content_copy_outlined,
+                  Icons.content_copy_outlined,
                 ),
                 label:
                     Text(
@@ -587,10 +498,6 @@ class _CouponPageState extends State<CouponPage> {
       ),
     );
   }
-
-  // =========================================================
-  // INFO ROW
-  // =========================================================
 
   Widget _infoRow(
     IconData icon,
@@ -638,10 +545,6 @@ class _CouponPageState extends State<CouponPage> {
     );
   }
 
-  // =========================================================
-  // BUILD
-  // =========================================================
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -660,13 +563,8 @@ class _CouponPageState extends State<CouponPage> {
           ),
         ),
       ),
-
       body: Column(
         children: [
-          // ===================================================
-          // ENTER CODE
-          // ===================================================
-
           Container(
             width: double.infinity,
             padding:
@@ -685,8 +583,7 @@ class _CouponPageState extends State<CouponPage> {
             child:
                 Column(
               crossAxisAlignment:
-                  CrossAxisAlignment
-                      .start,
+                  CrossAxisAlignment.start,
               children: [
                 const Text(
                   'Have a promo code?',
@@ -697,11 +594,9 @@ class _CouponPageState extends State<CouponPage> {
                         FontWeight.bold,
                   ),
                 ),
-
                 const SizedBox(
                   height: 10,
                 ),
-
                 Row(
                   children: [
                     Expanded(
@@ -710,36 +605,28 @@ class _CouponPageState extends State<CouponPage> {
                         controller:
                             _codeController,
                         textCapitalization:
-                            TextCapitalization
-                                .characters,
+                            TextCapitalization.characters,
                         decoration:
                             InputDecoration(
                           hintText:
                               'Enter coupon code',
                           prefixIcon:
                               const Icon(
-                            Icons
-                                .confirmation_number_outlined,
+                            Icons.confirmation_number_outlined,
                           ),
                           border:
                               OutlineInputBorder(
                             borderRadius:
-                                BorderRadius
-                                    .circular(
-                              12,
-                            ),
+                                BorderRadius.circular(12),
                           ),
                         ),
                         onSubmitted:
-                            (_) =>
-                                _checkCoupon(),
+                            (_) => _checkCoupon(),
                       ),
                     ),
-
                     const SizedBox(
                       width: 10,
                     ),
-
                     SizedBox(
                       height: 54,
                       child:
@@ -749,20 +636,15 @@ class _CouponPageState extends State<CouponPage> {
                                 ? null
                                 : _checkCoupon,
                         style:
-                            ElevatedButton
-                                .styleFrom(
+                            ElevatedButton.styleFrom(
                           backgroundColor:
-                              Colors
-                                  .redAccent,
+                              Colors.redAccent,
                           foregroundColor:
                               Colors.white,
                           shape:
                               RoundedRectangleBorder(
                             borderRadius:
-                                BorderRadius
-                                    .circular(
-                              12,
-                            ),
+                                BorderRadius.circular(12),
                           ),
                         ),
                         child:
@@ -772,8 +654,7 @@ class _CouponPageState extends State<CouponPage> {
                                     height: 22,
                                     child:
                                         CircularProgressIndicator(
-                                      strokeWidth:
-                                          2.5,
+                                      strokeWidth: 2.5,
                                       color:
                                           Colors.white,
                                     ),
@@ -788,31 +669,22 @@ class _CouponPageState extends State<CouponPage> {
               ],
             ),
           ),
-
-          // ===================================================
-          // AVAILABLE COUPONS
-          // ===================================================
-
           Expanded(
             child:
                 StreamBuilder<
                     QuerySnapshot<
-                        Map<String,
-                            dynamic>>>(
+                        Map<String, dynamic>>>(
               stream:
-                  FirebaseFirestore
-                      .instance
+                  FirebaseFirestore.instance
                       .collection('coupons')
                       .where(
                         'isActive',
                         isEqualTo: true,
                       )
                       .snapshots(),
-
               builder:
                   (context, snapshot) {
-                if (snapshot
-                        .connectionState ==
+                if (snapshot.connectionState ==
                     ConnectionState.waiting) {
                   return const Center(
                     child:
@@ -828,16 +700,14 @@ class _CouponPageState extends State<CouponPage> {
                     child:
                         Padding(
                       padding:
-                          const EdgeInsets
-                              .all(24),
+                          const EdgeInsets.all(24),
                       child:
                           Column(
                         mainAxisSize:
                             MainAxisSize.min,
                         children: [
                           const Icon(
-                            Icons
-                                .error_outline,
+                            Icons.error_outline,
                             size: 45,
                             color:
                                 Colors.grey,
@@ -857,12 +727,7 @@ class _CouponPageState extends State<CouponPage> {
                 }
 
                 final documents =
-                    snapshot.data?.docs ??
-                        [];
-
-                // ------------------------------------------------
-                // REMOVE EXPIRED COUPONS
-                // ------------------------------------------------
+                    snapshot.data?.docs ?? [];
 
                 final availableDocuments =
                     documents.where(
@@ -876,26 +741,22 @@ class _CouponPageState extends State<CouponPage> {
                   },
                 ).toList();
 
-                if (availableDocuments
-                    .isEmpty) {
+                if (availableDocuments.isEmpty) {
                   return Center(
                     child:
                         Padding(
                       padding:
-                          const EdgeInsets
-                              .all(24),
+                          const EdgeInsets.all(24),
                       child:
                           Column(
                         mainAxisSize:
                             MainAxisSize.min,
                         children: [
                           Icon(
-                            Icons
-                                .local_offer_outlined,
+                            Icons.local_offer_outlined,
                             size: 60,
-                            color: Colors
-                                .grey
-                                .shade400,
+                            color:
+                                Colors.grey.shade400,
                           ),
                           const SizedBox(
                             height: 12,
@@ -918,9 +779,8 @@ class _CouponPageState extends State<CouponPage> {
                             'New promotions will appear here.',
                             style:
                                 TextStyle(
-                              color: Colors
-                                  .grey
-                                  .shade600,
+                              color:
+                                  Colors.grey.shade600,
                             ),
                           ),
                         ],
@@ -928,10 +788,6 @@ class _CouponPageState extends State<CouponPage> {
                     ),
                   );
                 }
-
-                // ------------------------------------------------
-                // SORT BY EXPIRATION DATE
-                // ------------------------------------------------
 
                 final sorted =
                     [...availableDocuments];
@@ -977,8 +833,7 @@ class _CouponPageState extends State<CouponPage> {
 
                 return ListView(
                   padding:
-                      const EdgeInsets
-                          .fromLTRB(
+                      const EdgeInsets.fromLTRB(
                     16,
                     16,
                     16,
@@ -994,16 +849,12 @@ class _CouponPageState extends State<CouponPage> {
                             FontWeight.bold,
                       ),
                     ),
-
                     const SizedBox(
                       height: 12,
                     ),
-
                     ...sorted.map(
                       (document) =>
-                          _couponCard(
-                        document,
-                      ),
+                          _couponCard(document),
                     ),
                   ],
                 );
@@ -1015,14 +866,9 @@ class _CouponPageState extends State<CouponPage> {
     );
   }
 
-  // =========================================================
-  // DISPOSE
-  // =========================================================
-
   @override
   void dispose() {
     _codeController.dispose();
     super.dispose();
   }
 }
-
