@@ -56,6 +56,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  // ============================================================
+  // WALLET SWITCH
+  // BuyNova Wallet needs the Cloud Functions (getWalletBalance and
+  // placeWalletOrder). While Functions are NOT deployed, keep this false.
+  // After deploying Functions, change it to true.
+  // ============================================================
+  static const bool _walletEnabled = false;
+
   static const String _functionsRegion = 'asia-northeast3';
 
   final _formKey = GlobalKey<FormState>();
@@ -69,8 +77,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
   bool _placingOrder = false;
   bool _checkingCoupon = false;
 
-  // NOTE: discount / delivery fee / totals shown here are only a preview.
-  // The real values are calculated by the server (createOrder function).
   double _discount = 0;
   String? _couponCode;
   String? _couponMessage;
@@ -79,13 +85,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
   bool _loadingWalletBalance = false;
 
   Map<String, dynamic>? _selectedAddress;
-  String? _selectedAddressId;
 
   FirebaseFunctions get _functions =>
       FirebaseFunctions.instanceFor(region: _functionsRegion);
 
   // ============================================================
-  // DELIVERY FEE (preview only)
+  // DELIVERY FEE
   // Inside Dhaka: ৳60, Outside Dhaka: ৳120
   // ============================================================
 
@@ -168,10 +173,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   // ============================================================
-  // WALLET
+  // WALLET (only when _walletEnabled is true)
   // ============================================================
 
   Future<void> _loadWalletBalance() async {
+    if (!_walletEnabled) return;
     if (!mounted) return;
 
     setState(() => _loadingWalletBalance = true);
@@ -222,7 +228,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
         setState(() {
           _selectedAddress = defaultSnapshot.docs.first.data();
-          _selectedAddressId = defaultSnapshot.docs.first.id;
         });
         return;
       }
@@ -234,7 +239,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
         setState(() {
           _selectedAddress = anySnapshot.docs.first.data();
-          _selectedAddressId = anySnapshot.docs.first.id;
         });
         return;
       }
@@ -247,7 +251,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
         setState(() {
           _selectedAddress = Map<String, dynamic>.from(address);
-          _selectedAddressId = null; // legacy address stored on user doc
         });
       }
     } catch (_) {}
@@ -263,7 +266,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   // ============================================================
-  // COUPON (preview check - server validates again on order)
+  // COUPON
   // ============================================================
 
   double _toDouble(dynamic value) {
@@ -422,8 +425,32 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   // ============================================================
+  // SELLER LOOKUP
+  // ============================================================
+
+  Future<String> _findSellerId(CheckoutItem item) async {
+    final existing = item.sellerId;
+    if (existing != null && existing.isNotEmpty) return existing;
+
+    for (final collection in const ['products', 'Products']) {
+      try {
+        final doc = await _firestore.collection(collection).doc(item.id).get();
+
+        if (doc.exists) {
+          final data = doc.data();
+          final id =
+              data?['sellerId']?.toString() ?? data?['ownerId']?.toString();
+
+          if (id != null && id.isNotEmpty) return id;
+        }
+      } catch (_) {}
+    }
+
+    return 'unknown_seller';
+  }
+
+  // ============================================================
   // PLACE ORDER
-  // The server calculates prices, discount, delivery fee and total.
   // ============================================================
 
   Future<void> _placeOrder() async {
@@ -458,7 +485,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     setState(() => _placingOrder = true);
 
     try {
-      // Revalidate coupon (preview)
+      // Revalidate coupon
       if (_couponController.text.trim().isNotEmpty) {
         final couponValid = await _checkCoupon();
         if (!couponValid) return;
@@ -466,8 +493,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         _resetCoupon(null);
       }
 
-      // Wallet pre-check (UX only, the server checks again)
-      final bool isWallet = _paymentMethod == 'BuyNova Wallet';
+      final bool isWallet = _walletEnabled && _paymentMethod == 'BuyNova Wallet';
 
       if (isWallet) {
         final enough = await _validateWalletBeforeOrder();
@@ -475,47 +501,202 @@ class _CheckoutPageState extends State<CheckoutPage> {
       }
 
       // ------------------------------------------------------
-      // CREATE ORDER ON SERVER
+      // MAIN ORDER
       // ------------------------------------------------------
 
-      final createResult = await _functions.httpsCallable('createOrder').call({
-        'items': widget.items
-            .map((item) => {
-                  'productId': item.id,
-                  'quantity': item.quantity,
-                  'isResellerProduct': item.isResellerProduct,
-                })
-            .toList(),
+      final orderRef = _firestore.collection('orders').doc();
+      final orderId = orderRef.id;
+
+      final List<Map<String, dynamic>> orderItems = widget.items
+          .map((item) => {
+                'productId': item.id,
+                'name': item.name,
+                'price': item.price,
+                'quantity': item.quantity,
+                'total': item.total,
+                'imageUrl': item.imageUrl,
+                'isResellerProduct': item.isResellerProduct,
+                'entrepreneurUid': item.entrepreneurUid,
+                'sellerId': item.sellerId,
+                'supplierProductId': item.supplierProductId,
+                'supplierPrice': item.supplierPrice,
+                'resellerProfit': item.resellerProfit,
+              })
+          .toList();
+
+      final Map<String, dynamic> orderData = {
+        'orderId': orderId,
+        'userId': user.uid,
+        'customerId': user.uid,
+        'items': orderItems,
+        'subtotal': subtotal,
+        'deliveryFee': _deliveryFee,
+        'deliveryZone': _deliveryZone,
+        'discount': _discount,
+        'total': grandTotal,
+        'grandTotal': grandTotal,
+        'currency': 'BDT',
         'couponCode': _couponCode,
         'paymentMethod': _paymentMethod,
-        'addressId': _selectedAddressId,
-      });
-
-      final createData = Map<String, dynamic>.from(createResult.data as Map);
-      final String orderId = createData['orderId'].toString();
+        'paymentStatus': 'pending',
+        'orderStatus': 'placed',
+        'address': _selectedAddress,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
 
       // ------------------------------------------------------
-      // WALLET PAYMENT
+      // GROUP SELLER ORDERS
+      // ------------------------------------------------------
+
+      final Map<String, List<CheckoutItem>> sellerGroups = {};
+
+      for (final item in widget.items) {
+        if (item.isResellerProduct) continue;
+
+        final sellerId = await _findSellerId(item);
+
+        sellerGroups.putIfAbsent(sellerId, () => []).add(item);
+      }
+
+      // ------------------------------------------------------
+      // GROUP RESELLER ORDERS
+      // ------------------------------------------------------
+
+      final Map<String, List<CheckoutItem>> resellerGroups = {};
+
+      for (final item in widget.items) {
+        if (!item.isResellerProduct) continue;
+
+        final entrepreneurUid = item.entrepreneurUid ?? user.uid;
+        final sellerId = item.sellerId ?? 'unknown_seller';
+
+        resellerGroups
+            .putIfAbsent('${entrepreneurUid}_$sellerId', () => [])
+            .add(item);
+      }
+
+      final WriteBatch batch = _firestore.batch();
+
+      batch.set(orderRef, orderData);
+
+      // Seller orders
+      for (final entry in sellerGroups.entries) {
+        final items = entry.value;
+
+        final sellerSubtotal = items.fold<double>(
+          0,
+          (sum, item) => sum + item.total,
+        );
+
+        final sellerOrderRef = _firestore.collection('seller_orders').doc();
+
+        batch.set(sellerOrderRef, {
+          'orderId': orderId,
+          'sellerOrderId': sellerOrderRef.id,
+          'sellerId': entry.key,
+          'buyerId': user.uid,
+          'customerId': user.uid,
+          'userId': user.uid,
+          'items': items
+              .map((item) => {
+                    'productId': item.id,
+                    'name': item.name,
+                    'price': item.price,
+                    'quantity': item.quantity,
+                    'total': item.total,
+                    'imageUrl': item.imageUrl,
+                  })
+              .toList(),
+          'subtotal': sellerSubtotal,
+          'currency': 'BDT',
+          'paymentMethod': _paymentMethod,
+          'paymentStatus': 'pending',
+          'orderStatus': 'placed',
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      // Reseller orders
+      for (final entry in resellerGroups.entries) {
+        final items = entry.value;
+
+        if (items.isEmpty) continue;
+
+        final entrepreneurUid = items.first.entrepreneurUid ?? user.uid;
+        final sellerId = items.first.sellerId ?? 'unknown_seller';
+
+        final sellingTotal = items.fold<double>(
+          0,
+          (sum, item) => sum + item.total,
+        );
+
+        final supplierTotal = items.fold<double>(
+          0,
+          (sum, item) => sum + ((item.supplierPrice ?? 0) * item.quantity),
+        );
+
+        final resellerProfit = sellingTotal - supplierTotal;
+
+        final resellerOrderRef = _firestore.collection('reseller_orders').doc();
+
+        batch.set(resellerOrderRef, {
+          'orderId': orderId,
+          'resellerOrderId': resellerOrderRef.id,
+          'entrepreneurUid': entrepreneurUid,
+          'buyerId': user.uid,
+          'customerId': user.uid,
+          'userId': user.uid,
+          'sellerId': sellerId,
+          'customerName': _selectedAddress?['name']?.toString() ?? '',
+          'customerPhone': _selectedAddress?['phone']?.toString() ?? '',
+          'address': _selectedAddress?['address']?.toString() ?? '',
+          'deliveryZone': _deliveryZone,
+          'items': items
+              .map((item) => {
+                    'productId': item.id,
+                    'name': item.name,
+                    'price': item.price,
+                    'quantity': item.quantity,
+                    'total': item.total,
+                    'imageUrl': item.imageUrl,
+                    'supplierProductId': item.supplierProductId,
+                    'supplierPrice': item.supplierPrice,
+                    'resellerProfit': item.resellerProfit,
+                  })
+              .toList(),
+          'sellingTotal': sellingTotal,
+          'supplierTotal': supplierTotal,
+          'resellerProfit': resellerProfit,
+          'profit': resellerProfit,
+          'currency': 'BDT',
+          'paymentMethod': _paymentMethod,
+          'paymentStatus': 'pending',
+          'orderStatus': 'placed',
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      await batch.commit();
+
+      // ------------------------------------------------------
+      // WALLET PAYMENT (needs Cloud Functions)
       // ------------------------------------------------------
 
       if (isWallet) {
-        try {
-          final result = await _functions
-              .httpsCallable('placeWalletOrder')
-              .call({'orderId': orderId});
+        final result = await _functions
+            .httpsCallable('placeWalletOrder')
+            .call({'orderId': orderId});
 
-          final resultData = Map<String, dynamic>.from(result.data as Map);
+        final resultData = Map<String, dynamic>.from(result.data as Map);
 
-          final bool success = resultData['success'] == true ||
-              resultData['alreadyPaid'] == true;
+        final bool success =
+            resultData['success'] == true || resultData['alreadyPaid'] == true;
 
-          if (!success) {
-            throw Exception('Wallet payment could not be completed.');
-          }
-        } catch (_) {
-          // Do not leave an unpaid order behind.
-          await _cancelUnpaidOrder(orderId);
-          rethrow;
+        if (!success) {
+          throw Exception('Wallet payment could not be completed.');
         }
       }
 
@@ -578,41 +759,22 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   String _friendlyError(Object error) {
-    // Messages thrown by our own server function are safe to show.
-    if (error is FirebaseFunctionsException) {
-      final message = error.message ?? '';
-
-      if (message.toLowerCase().contains('insufficient')) {
-        return 'Your BuyNova Wallet balance is not enough for this order.';
-      }
-
-      switch (error.code) {
-        case 'unauthenticated':
-          return 'Please login again.';
-        case 'invalid-argument':
-        case 'failed-precondition':
-        case 'not-found':
-          if (message.isNotEmpty) return message;
-      }
-    }
-
     final text = error.toString().toLowerCase();
 
     if (text.contains('insufficient')) {
       return 'Your BuyNova Wallet balance is not enough for this order.';
     }
+    if (text.contains('unauthenticated')) {
+      return 'Please login again.';
+    }
+    if (text.contains('permission-denied')) {
+      return 'You do not have permission to place this order.';
+    }
+    if (text.contains('not-found')) {
+      return 'Order or Wallet service was not found.';
+    }
 
     return 'Something went wrong. Please try again.';
-  }
-
-  Future<void> _cancelUnpaidOrder(String orderId) async {
-    try {
-      await _functions
-          .httpsCallable('cancelUnpaidOrder')
-          .call({'orderId': orderId});
-    } catch (e) {
-      debugPrint('Cancel unpaid order error: $e');
-    }
   }
 
   // ============================================================
@@ -781,24 +943,25 @@ class _CheckoutPageState extends State<CheckoutPage> {
                     subtitle: Text('Pay when your order arrives.'),
                     secondary: Icon(Icons.local_shipping),
                   ),
-                  RadioListTile<String>(
-                    value: 'BuyNova Wallet',
-                    title: const Text('BuyNova Wallet'),
-                    subtitle: _loadingWalletBalance
-                        ? const Text('Checking wallet balance...')
-                        : Text(
-                            'Balance: ৳${_walletBalance.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              color: Colors.green,
-                              fontWeight: FontWeight.w600,
+                  if (_walletEnabled)
+                    RadioListTile<String>(
+                      value: 'BuyNova Wallet',
+                      title: const Text('BuyNova Wallet'),
+                      subtitle: _loadingWalletBalance
+                          ? const Text('Checking wallet balance...')
+                          : Text(
+                              'Balance: ৳${_walletBalance.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                color: Colors.green,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
-                          ),
-                    secondary: const Icon(Icons.account_balance_wallet),
-                  ),
+                      secondary: const Icon(Icons.account_balance_wallet),
+                    ),
                 ],
               ),
             ),
-            if (_paymentMethod == 'BuyNova Wallet') ...[
+            if (_walletEnabled && _paymentMethod == 'BuyNova Wallet') ...[
               const SizedBox(height: 6),
               Container(
                 width: double.infinity,
@@ -1047,6 +1210,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   @override
   Widget build(BuildContext context) {
+    final bool walletSelected =
+        _walletEnabled && _paymentMethod == 'BuyNova Wallet';
+
     return Scaffold(
       appBar: AppBar(title: const Text('Checkout')),
       body: Form(
@@ -1078,7 +1244,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                         ),
                       )
                     : Text(
-                        _paymentMethod == 'BuyNova Wallet'
+                        walletSelected
                             ? 'Pay ৳${grandTotal.toStringAsFixed(2)} with Wallet'
                             : 'Place Order',
                         style: const TextStyle(
