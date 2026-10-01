@@ -40,6 +40,7 @@ jobs:
         run: |
           mkdir -p "$HOME/.android"
           echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | base64 --decode > "$HOME/.android/debug.keystore"
+          cp "$HOME/.android/debug.keystore" android/app/ci-debug.keystore
 
       - name: Analyze project
         run: flutter analyze
