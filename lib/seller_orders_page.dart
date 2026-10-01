@@ -18,6 +18,8 @@ class _SellerOrderEntry {
   });
 
   Map<String, dynamic> get data => document.data();
+
+  String get documentId => document.id;
 }
 
 // =============================================================
@@ -433,7 +435,9 @@ class SellerOrdersPage extends StatelessWidget {
     required String sellerName,
     required String newStatus,
   }) {
-    if (customerId.isEmpty) return;
+    if (customerId.isEmpty || orderId.isEmpty) {
+      return;
+    }
 
     final firestore = FirebaseFirestore.instance;
 
@@ -473,8 +477,8 @@ class SellerOrdersPage extends StatelessWidget {
   //   reseller_orders
   //
   // IMPORTANT:
-  // Main /orders is NOT updated here because current Firestore
-  // rules do not allow Seller to update /orders.
+  // Main /orders is intentionally NOT updated here.
+  // Current Firestore Rules allow only Admin to update /orders.
   // ===========================================================
 
   Future<void> _updateStatus({
@@ -489,7 +493,9 @@ class SellerOrdersPage extends StatelessWidget {
   }) async {
     final user = FirebaseAuth.instance.currentUser;
 
-    if (user == null) return;
+    if (user == null) {
+      return;
+    }
 
     if (user.uid != sellerId) {
       if (!context.mounted) return;
@@ -498,6 +504,20 @@ class SellerOrdersPage extends StatelessWidget {
         const SnackBar(
           content: Text(
             'You are not allowed to update this order.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    if (orderDocumentId.isEmpty) {
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Order document ID is missing.',
           ),
         ),
       );
@@ -521,7 +541,6 @@ class SellerOrdersPage extends StatelessWidget {
 
     try {
       final firestore = FirebaseFirestore.instance;
-      final batch = firestore.batch();
 
       final collectionName = isResellerOrder
           ? 'reseller_orders'
@@ -531,8 +550,10 @@ class SellerOrdersPage extends StatelessWidget {
           .collection(collectionName)
           .doc(orderDocumentId);
 
+      final batch = firestore.batch();
+
       // -------------------------------------------------------
-      // ORDER STATUS
+      // UPDATE CHILD ORDER
       // -------------------------------------------------------
 
       batch.update(
@@ -544,7 +565,7 @@ class SellerOrdersPage extends StatelessWidget {
       );
 
       // -------------------------------------------------------
-      // BUYER NOTIFICATION
+      // CUSTOMER NOTIFICATION
       // -------------------------------------------------------
 
       _addBuyerNotification(
@@ -552,7 +573,9 @@ class SellerOrdersPage extends StatelessWidget {
         customerId: customerId,
         orderId: mainOrderId,
         sellerId: sellerId,
-        sellerName: user.displayName ?? 'Seller',
+        sellerName: user.displayName?.trim().isNotEmpty == true
+            ? user.displayName!.trim()
+            : 'Seller',
         newStatus: newStatus,
       );
 
@@ -568,8 +591,18 @@ class SellerOrdersPage extends StatelessWidget {
         SnackBar(
           content: Text(
             '${isResellerOrder ? 'Reseller order' : 'Order'} '
-            'changed to ${_statusText(newStatus)}.\n'
-            'Buyer notification sent.',
+            'changed to ${_statusText(newStatus)}.',
+          ),
+        ),
+      );
+    } on FirebaseException catch (e) {
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not update order.\n'
+            '${e.message ?? e.code}',
           ),
         ),
       );
@@ -717,8 +750,7 @@ class SellerOrdersPage extends StatelessWidget {
     }
 
     return StreamBuilder<
-        List<QueryDocumentSnapshot<
-            Map<String, dynamic>>>>(
+        List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
       stream: _returnRefundRequestsStream(
         sellerId,
         orderId,
@@ -767,7 +799,14 @@ class SellerOrdersPage extends StatelessWidget {
     final customerAddress =
         data['customerAddress']?.toString() ?? '';
 
-    return customerAddress;
+    if (customerAddress.isNotEmpty) {
+      return customerAddress;
+    }
+
+    final deliveryAddress =
+        data['deliveryAddress']?.toString() ?? '';
+
+    return deliveryAddress;
   }
 
   // ===========================================================
@@ -834,9 +873,13 @@ class SellerOrdersPage extends StatelessWidget {
 
   Future<void> _showOrderDetails(
     BuildContext context,
-    Map<String, dynamic> data, {
-    required bool isResellerOrder,
-  }) async {
+    _SellerOrderEntry entry,
+  ) async {
+    final data = entry.data;
+    final isResellerOrder = entry.isResellerOrder;
+
+    final documentId = entry.documentId;
+
     final orderId =
         data['orderId']?.toString() ?? '';
 
@@ -870,6 +913,9 @@ class SellerOrdersPage extends StatelessWidget {
     final sellerId =
         data['sellerId']?.toString() ?? '';
 
+    final customerId =
+        data['customerId']?.toString() ?? '';
+
     final items = _items(data);
 
     final sellerSubtotal =
@@ -902,11 +948,6 @@ class SellerOrdersPage extends StatelessWidget {
     final sellerCode =
         data['sellerCode']?.toString() ?? '';
 
-    final orderDocumentId =
-        data['sellerOrderId']?.toString() ??
-            data['resellerOrderId']?.toString() ??
-            '';
-
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -929,6 +970,10 @@ class SellerOrdersPage extends StatelessWidget {
                   crossAxisAlignment:
                       CrossAxisAlignment.start,
                   children: [
+                    // -------------------------------------------------
+                    // HEADER
+                    // -------------------------------------------------
+
                     Row(
                       children: [
                         Expanded(
@@ -1018,6 +1063,10 @@ class SellerOrdersPage extends StatelessWidget {
                       ),
                     ],
 
+                    // -------------------------------------------------
+                    // RESELLER DELIVERY NOTICE
+                    // -------------------------------------------------
+
                     if (isResellerOrder) ...[
                       const SizedBox(height: 10),
                       Container(
@@ -1045,10 +1094,10 @@ class SellerOrdersPage extends StatelessWidget {
                             SizedBox(width: 10),
                             Expanded(
                               child: Text(
-                                'This is a reseller order. '
-                                'Deliver the product directly '
-                                'to this customer using the '
-                                'delivery details above.',
+                                'Reseller Order — Seller delivers '
+                                'directly to this customer. '
+                                'The product should not be sent '
+                                'to the reseller.',
                                 style: TextStyle(
                                   fontWeight: FontWeight.w600,
                                   height: 1.4,
@@ -1061,6 +1110,10 @@ class SellerOrdersPage extends StatelessWidget {
                     ],
 
                     const SizedBox(height: 14),
+
+                    // -------------------------------------------------
+                    // PAYMENT
+                    // -------------------------------------------------
 
                     Text(
                       'Payment: $paymentMethod',
@@ -1106,6 +1159,10 @@ class SellerOrdersPage extends StatelessWidget {
 
                     const SizedBox(height: 20),
 
+                    // -------------------------------------------------
+                    // PRODUCTS
+                    // -------------------------------------------------
+
                     const Text(
                       'Products',
                       style: TextStyle(
@@ -1116,11 +1173,23 @@ class SellerOrdersPage extends StatelessWidget {
 
                     const SizedBox(height: 10),
 
+                    if (items.isEmpty)
+                      const Text(
+                        'No product information found.',
+                        style: TextStyle(
+                          color: Colors.grey,
+                        ),
+                      ),
+
                     ...items.map(
                       (item) => _buildItemCard(item),
                     ),
 
                     const SizedBox(height: 10),
+
+                    // -------------------------------------------------
+                    // TOTALS
+                    // -------------------------------------------------
 
                     if (isResellerOrder) ...[
                       _moneyDetailRow(
@@ -1160,6 +1229,7 @@ class SellerOrdersPage extends StatelessWidget {
                     // -------------------------------------------------
                     // RETURN / REFUND
                     // -------------------------------------------------
+
                     if (!isResellerOrder)
                       _returnRefundButton(
                         context,
@@ -1169,43 +1239,46 @@ class SellerOrdersPage extends StatelessWidget {
 
                     const SizedBox(height: 12),
 
-                    if (orderDocumentId.isNotEmpty)
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            Navigator.pop(
-                              sheetContext,
-                            );
+                    // -------------------------------------------------
+                    // UPDATE STATUS
+                    // -------------------------------------------------
 
-                            _showStatusDialog(
-                              context,
-                              orderDocumentId:
-                                  orderDocumentId,
-                              mainOrderId:
-                                  orderId,
-                              sellerId:
-                                  sellerId,
-                              customerId:
-                                  data['customerId']
-                                          ?.toString() ??
-                                      '',
-                              currentStatus:
-                                  status.toLowerCase(),
-                              isResellerOrder:
-                                  isResellerOrder,
-                            );
-                          },
-                          icon: const Icon(
-                            Icons.edit_outlined,
-                          ),
-                          label: Text(
-                            isResellerOrder
-                                ? 'Update Reseller Order Status'
-                                : 'Update Order Status',
-                          ),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: sellerId.isEmpty
+                            ? null
+                            : () {
+                                Navigator.pop(
+                                  sheetContext,
+                                );
+
+                                _showStatusDialog(
+                                  context,
+                                  orderDocumentId:
+                                      documentId,
+                                  mainOrderId:
+                                      orderId,
+                                  sellerId:
+                                      sellerId,
+                                  customerId:
+                                      customerId,
+                                  currentStatus:
+                                      status.toLowerCase(),
+                                  isResellerOrder:
+                                      isResellerOrder,
+                                );
+                              },
+                        icon: const Icon(
+                          Icons.edit_outlined,
+                        ),
+                        label: Text(
+                          isResellerOrder
+                              ? 'Update Reseller Order Status'
+                              : 'Update Order Status',
                         ),
                       ),
+                    ),
                   ],
                 ),
               ),
@@ -1263,16 +1336,7 @@ class SellerOrdersPage extends StatelessWidget {
     final data = entry.data;
     final isResellerOrder = entry.isResellerOrder;
 
-    final orderDocumentId =
-        isResellerOrder
-            ? (
-                data['resellerOrderId']?.toString() ??
-                    document.id
-              )
-            : (
-                data['sellerOrderId']?.toString() ??
-                    document.id
-              );
+    final orderDocumentId = document.id;
 
     final mainOrderId =
         data['orderId']?.toString() ?? '';
@@ -1336,8 +1400,7 @@ class SellerOrdersPage extends StatelessWidget {
         onTap: () {
           _showOrderDetails(
             context,
-            data,
-            isResellerOrder: isResellerOrder,
+            entry,
           );
         },
         child: Padding(
@@ -1364,7 +1427,9 @@ class SellerOrdersPage extends StatelessWidget {
                           CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Order #$mainOrderId',
+                          mainOrderId.isNotEmpty
+                              ? 'Order #$mainOrderId'
+                              : 'Order',
                           maxLines: 1,
                           overflow:
                               TextOverflow.ellipsis,
@@ -1447,6 +1512,10 @@ class SellerOrdersPage extends StatelessWidget {
                   ),
                 ),
 
+              // -----------------------------------------------------
+              // RESELLER DELIVERY ADDRESS
+              // -----------------------------------------------------
+
               if (isResellerOrder &&
                   address.isNotEmpty)
                 Padding(
@@ -1466,7 +1535,7 @@ class SellerOrdersPage extends StatelessWidget {
                       Expanded(
                         child: Text(
                           address,
-                          maxLines: 2,
+                          maxLines: 3,
                           overflow:
                               TextOverflow.ellipsis,
                           style: TextStyle(
@@ -1492,6 +1561,46 @@ class SellerOrdersPage extends StatelessWidget {
                       fontSize: 12,
                       color: Colors.grey.shade700,
                     ),
+                  ),
+                ),
+
+              // -----------------------------------------------------
+              // SELLER DELIVERY NOTICE
+              // -----------------------------------------------------
+
+              if (isResellerOrder)
+                Container(
+                  margin: const EdgeInsets.only(
+                    top: 10,
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.deepPurple
+                        .withValues(alpha: 0.07),
+                    borderRadius:
+                        BorderRadius.circular(10),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(
+                        Icons.local_shipping_outlined,
+                        size: 18,
+                        color: Colors.deepPurple,
+                      ),
+                      SizedBox(width: 7),
+                      Expanded(
+                        child: Text(
+                          'Seller delivers directly to customer',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
 
@@ -1604,7 +1713,7 @@ class SellerOrdersPage extends StatelessWidget {
               ],
 
               // -----------------------------------------------------
-              // RETURN / REFUND - DIRECT ORDERS
+              // RETURN / REFUND - DIRECT ORDERS ONLY
               // -----------------------------------------------------
 
               if (!isResellerOrder)
@@ -1626,9 +1735,7 @@ class SellerOrdersPage extends StatelessWidget {
                   onPressed: () {
                     _showOrderDetails(
                       context,
-                      data,
-                      isResellerOrder:
-                          isResellerOrder,
+                      entry,
                     );
                   },
                   icon: const Icon(
@@ -1650,23 +1757,25 @@ class SellerOrdersPage extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: () {
-                    _showStatusDialog(
-                      context,
-                      orderDocumentId:
-                          orderDocumentId,
-                      mainOrderId:
-                          mainOrderId,
-                      sellerId:
-                          sellerId,
-                      customerId:
-                          customerId,
-                      currentStatus:
-                          status.toLowerCase(),
-                      isResellerOrder:
-                          isResellerOrder,
-                    );
-                  },
+                  onPressed: sellerId.isEmpty
+                      ? null
+                      : () {
+                          _showStatusDialog(
+                            context,
+                            orderDocumentId:
+                                orderDocumentId,
+                            mainOrderId:
+                                mainOrderId,
+                            sellerId:
+                                sellerId,
+                            customerId:
+                                customerId,
+                            currentStatus:
+                                status.toLowerCase(),
+                            isResellerOrder:
+                                isResellerOrder,
+                          );
+                        },
                   icon: const Icon(
                     Icons.edit_outlined,
                   ),
@@ -1804,8 +1913,7 @@ class SellerOrdersPage extends StatelessWidget {
         ],
       ),
       body: StreamBuilder<
-          QuerySnapshot<
-              Map<String, dynamic>>>(
+          QuerySnapshot<Map<String, dynamic>>>(
         stream: FirebaseFirestore.instance
             .collection('seller_orders')
             .where(
@@ -1838,144 +1946,4 @@ class SellerOrdersPage extends StatelessWidget {
           }
 
           final sellerDocuments =
-              sellerSnapshot.data?.docs.toList() ??
-                  [];
-
-          // -------------------------------------------------------
-          // LOAD RESELLER ORDERS FOR SAME SELLER
-          // -------------------------------------------------------
-
-          return StreamBuilder<
-              QuerySnapshot<
-                  Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
-                .collection('reseller_orders')
-                .where(
-                  'sellerId',
-                  isEqualTo: user.uid,
-                )
-                .snapshots(),
-            builder: (
-              context,
-              resellerSnapshot,
-            ) {
-              if (resellerSnapshot.hasError) {
-                return Center(
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.all(20),
-                    child: Text(
-                      'Unable to load reseller orders.\n\n'
-                      '${resellerSnapshot.error}',
-                      textAlign:
-                          TextAlign.center,
-                    ),
-                  ),
-                );
-              }
-
-              if (resellerSnapshot.connectionState ==
-                  ConnectionState.waiting) {
-                return const Center(
-                  child:
-                      CircularProgressIndicator(),
-                );
-              }
-
-              final resellerDocuments =
-                  resellerSnapshot.data?.docs.toList() ??
-                      [];
-
-              // -----------------------------------------------------
-              // COMBINE BOTH ORDER TYPES
-              // -----------------------------------------------------
-
-              final entries =
-                  <_SellerOrderEntry>[
-                ...sellerDocuments.map(
-                  (document) =>
-                      _SellerOrderEntry(
-                    document: document,
-                    isResellerOrder: false,
-                  ),
-                ),
-                ...resellerDocuments.map(
-                  (document) =>
-                      _SellerOrderEntry(
-                    document: document,
-                    isResellerOrder: true,
-                  ),
-                ),
-              ];
-
-              // -----------------------------------------------------
-              // SORT NEWEST FIRST
-              // -----------------------------------------------------
-
-              entries.sort(
-                (a, b) {
-                  final aTime =
-                      a.data['createdAt'];
-
-                  final bTime =
-                      b.data['createdAt'];
-
-                  if (aTime is Timestamp &&
-                      bTime is Timestamp) {
-                    return bTime.compareTo(
-                      aTime,
-                    );
-                  }
-
-                  if (aTime is Timestamp) {
-                    return -1;
-                  }
-
-                  if (bTime is Timestamp) {
-                    return 1;
-                  }
-
-                  return 0;
-                },
-              );
-
-              if (entries.isEmpty) {
-                return _emptyView();
-              }
-
-              return RefreshIndicator(
-                onRefresh: () async {
-                  // Both streams automatically refresh.
-                  // This small delay gives RefreshIndicator
-                  // enough time to complete its animation.
-                  await Future<void>.delayed(
-                    const Duration(
-                      milliseconds: 300,
-                    ),
-                  );
-                },
-                child: ListView.builder(
-                  padding:
-                      const EdgeInsets.all(14),
-                  physics:
-                      const AlwaysScrollableScrollPhysics(),
-                  itemCount:
-                      entries.length,
-                  itemBuilder: (
-                    context,
-                    index,
-                  ) {
-                    return _buildOrderCard(
-                      context,
-                      entries[index],
-                    );
-                  },
-                ),
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-}
+              seller
