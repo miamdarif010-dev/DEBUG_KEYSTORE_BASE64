@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "798069156907",
+    "project_id": "buynova-cc5dd",
+    "storage_bucket": "buynova-cc5dd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:798069156907:android:94de5b2eb36d8dcba04e6e",
+        "android_client_info": {
+          "package_name": "com.buynova.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "798069156907-huc8ni8ka6l9bj18cdrtuehk97riubt5.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB0BfAGF1Wr9VF7gTcffyC0aVc6FZGPD44"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "798069156907-huc8ni8ka6l9bj18cdrtuehk97riubt5.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
