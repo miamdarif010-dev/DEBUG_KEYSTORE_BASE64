@@ -24,6 +24,10 @@ class OrderTrackingPage extends StatelessWidget {
         return 'Delivered';
       case 'cancelled':
         return 'Cancelled';
+      case 'returned':
+        return 'Returned';
+      case 'refunded':
+        return 'Refunded';
       default:
         return 'Order Placed';
     }
@@ -43,6 +47,10 @@ class OrderTrackingPage extends StatelessWidget {
         return Colors.green;
       case 'cancelled':
         return Colors.red;
+      case 'returned':
+        return Colors.brown;
+      case 'refunded':
+        return Colors.teal;
       default:
         return Colors.grey;
     }
@@ -65,6 +73,85 @@ class OrderTrackingPage extends StatelessWidget {
     }
   }
 
+  double _number(dynamic value) {
+    if (value is num) {
+      return value.toDouble();
+    }
+
+    return double.tryParse(
+          value?.toString() ?? '',
+        ) ??
+        0;
+  }
+
+  int _int(dynamic value) {
+    if (value is num) {
+      return value.toInt();
+    }
+
+    return int.tryParse(
+          value?.toString() ?? '',
+        ) ??
+        0;
+  }
+
+  Map<String, dynamic> _itemMap(dynamic item) {
+    if (item is Map<String, dynamic>) {
+      return item;
+    }
+
+    if (item is Map) {
+      return Map<String, dynamic>.from(item);
+    }
+
+    return <String, dynamic>{};
+  }
+
+  /// Calculates the subtotal directly from seller order items.
+  double _calculateItemsSubtotal(
+    List<Map<String, dynamic>> items,
+  ) {
+    double subtotal = 0;
+
+    for (final item in items) {
+      final quantity = _int(
+        item['quantity'] ?? 1,
+      );
+
+      final price = _number(
+        item['price'] ??
+            item['sellingPrice'] ??
+            item['unitPrice'] ??
+            item['productPrice'],
+      );
+
+      subtotal += price * quantity;
+    }
+
+    return subtotal;
+  }
+
+  /// Gets seller subtotal from Firestore.
+  ///
+  /// If the stored subtotal is missing or 0,
+  /// it calculates the correct amount from the items.
+  double _getSellerSubtotal(
+    Map<String, dynamic> data,
+    List<Map<String, dynamic>> items,
+  ) {
+    final storedSubtotal = _number(
+      data['sellerSubtotal'] ??
+          data['subtotal'] ??
+          data['sellingTotal'],
+    );
+
+    if (storedSubtotal > 0) {
+      return storedSubtotal;
+    }
+
+    return _calculateItemsSubtotal(items);
+  }
+
   String _calculateOverallStatus(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> sellerDocs,
     String fallback,
@@ -75,26 +162,39 @@ class OrderTrackingPage extends StatelessWidget {
 
     final statuses = sellerDocs.map((doc) {
       final data = doc.data();
-      return (data['orderStatus'] ?? 'placed').toString();
+
+      return (
+        data['orderStatus'] ?? 'placed'
+      ).toString();
     }).toList();
 
-    if (statuses.every((status) => status == 'delivered')) {
+    if (statuses.every(
+      (status) => status == 'delivered',
+    )) {
       return 'delivered';
     }
 
-    if (statuses.every((status) => status == 'cancelled')) {
+    if (statuses.every(
+      (status) => status == 'cancelled',
+    )) {
       return 'cancelled';
     }
 
-    if (statuses.any((status) => status == 'shipped')) {
+    if (statuses.any(
+      (status) => status == 'shipped',
+    )) {
       return 'shipped';
     }
 
-    if (statuses.any((status) => status == 'processing')) {
+    if (statuses.any(
+      (status) => status == 'processing',
+    )) {
       return 'processing';
     }
 
-    if (statuses.any((status) => status == 'confirmed')) {
+    if (statuses.any(
+      (status) => status == 'confirmed',
+    )) {
       return 'confirmed';
     }
 
@@ -108,7 +208,8 @@ class OrderTrackingPage extends StatelessWidget {
     required bool completed,
   }) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment:
+          CrossAxisAlignment.start,
       children: [
         Column(
           children: [
@@ -122,7 +223,9 @@ class OrderTrackingPage extends StatelessWidget {
                     : Colors.grey.shade300,
               ),
               child: Icon(
-                completed ? Icons.check : icon,
+                completed
+                    ? Icons.check
+                    : icon,
                 color: completed || active
                     ? Colors.white
                     : Colors.grey.shade600,
@@ -140,15 +243,21 @@ class OrderTrackingPage extends StatelessWidget {
         ),
         const SizedBox(width: 14),
         Padding(
-          padding: const EdgeInsets.only(top: 10),
+          padding: const EdgeInsets.only(
+            top: 10,
+          ),
           child: Text(
             title,
             style: TextStyle(
               fontSize: 15,
               fontWeight:
-                  active || completed ? FontWeight.bold : FontWeight.normal,
+                  active || completed
+                      ? FontWeight.bold
+                      : FontWeight.normal,
               color:
-                  active || completed ? Colors.black : Colors.grey.shade600,
+                  active || completed
+                      ? Colors.black
+                      : Colors.grey.shade600,
             ),
           ),
         ),
@@ -157,33 +266,45 @@ class OrderTrackingPage extends StatelessWidget {
   }
 
   Widget _buildSellerOrderCard(
-    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+    QueryDocumentSnapshot<
+        Map<String, dynamic>> doc,
   ) {
     final data = doc.data();
 
-    final sellerCode =
-        (data['sellerCode'] ?? 'Seller').toString();
+    final sellerCode = (
+      data['sellerCode'] ?? 'Seller'
+    ).toString();
 
-    final status =
-        (data['orderStatus'] ?? 'placed').toString();
+    final status = (
+      data['orderStatus'] ?? 'placed'
+    ).toString();
 
-    final items =
-        List<Map<String, dynamic>>.from(
-      (data['items'] ?? []).map(
-        (item) => Map<String, dynamic>.from(item),
-      ),
+    final itemsRaw = data['items'];
+
+    final items = itemsRaw is List
+        ? itemsRaw
+            .map(_itemMap)
+            .where(
+              (item) => item.isNotEmpty,
+            )
+            .toList()
+        : <Map<String, dynamic>>[];
+
+    final subtotal = _getSellerSubtotal(
+      data,
+      items,
     );
 
-    final subtotal =
-        (data['sellerSubtotal'] as num?)?.toDouble() ?? 0;
-
     return Card(
-      margin: const EdgeInsets.only(bottom: 14),
+      margin: const EdgeInsets.only(
+        bottom: 14,
+      ),
       elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
           children: [
             Row(
               children: [
@@ -197,82 +318,120 @@ class OrderTrackingPage extends StatelessWidget {
                     sellerCode,
                     style: const TextStyle(
                       fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                      fontWeight:
+                          FontWeight.bold,
                     ),
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(
+                  padding:
+                      const EdgeInsets.symmetric(
                     horizontal: 10,
                     vertical: 6,
                   ),
-                  decoration: BoxDecoration(
-                    color: _statusColor(status).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
+                  decoration:
+                      BoxDecoration(
+                    color: _statusColor(
+                      status,
+                    ).withValues(
+                      alpha: 0.12,
+                    ),
+                    borderRadius:
+                        BorderRadius.circular(
+                      20,
+                    ),
                   ),
                   child: Text(
                     _statusText(status),
                     style: TextStyle(
-                      color: _statusColor(status),
-                      fontWeight: FontWeight.bold,
+                      color: _statusColor(
+                        status,
+                      ),
+                      fontWeight:
+                          FontWeight.bold,
                       fontSize: 12,
                     ),
                   ),
                 ),
               ],
             ),
+
             const SizedBox(height: 14),
-            ...items.map((item) {
-              final name =
-                  (item['name'] ?? 'Product').toString();
 
-              final quantity =
-                  (item['quantity'] as num?)?.toInt() ?? 1;
+            if (items.isNotEmpty)
+              ...items.map((item) {
+                final name = (
+                  item['name'] ?? 'Product'
+                ).toString();
 
-              final price =
-                  (item['price'] as num?)?.toDouble() ?? 0;
+                final quantity = _int(
+                  item['quantity'] ?? 1,
+                );
 
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.shopping_bag_outlined,
-                      size: 18,
-                      color: Colors.grey,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '$name × $quantity',
-                        style: const TextStyle(fontSize: 14),
+                final price = _number(
+                  item['price'] ??
+                      item['sellingPrice'] ??
+                      item['unitPrice'] ??
+                      item['productPrice'],
+                );
+
+                return Padding(
+                  padding:
+                      const EdgeInsets.only(
+                    bottom: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons
+                            .shopping_bag_outlined,
+                        size: 18,
+                        color: Colors.grey,
                       ),
-                    ),
-                    Text(
-                      '₩${(price * quantity).toStringAsFixed(0)}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '$name × $quantity',
+                          style:
+                              const TextStyle(
+                            fontSize: 14,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              );
-            }),
+                      Text(
+                        '৳${(price * quantity).toStringAsFixed(0)}',
+                        style:
+                            const TextStyle(
+                          fontWeight:
+                              FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+
             const Divider(),
+
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisAlignment:
+                  MainAxisAlignment
+                      .spaceBetween,
               children: [
                 const Text(
                   'Seller Subtotal',
                   style: TextStyle(
-                    fontWeight: FontWeight.bold,
+                    fontWeight:
+                        FontWeight.bold,
                   ),
                 ),
                 Text(
-                  '₩${subtotal.toStringAsFixed(0)}',
+                  '৳${subtotal.toStringAsFixed(0)}',
                   style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.redAccent,
+                    fontWeight:
+                        FontWeight.bold,
+                    color:
+                        Colors.redAccent,
                   ),
                 ),
               ],
@@ -283,12 +442,17 @@ class OrderTrackingPage extends StatelessWidget {
     );
   }
 
-  Widget _buildTracking(String status) {
+  Widget _buildTracking(
+    String status,
+  ) {
     if (status == 'cancelled') {
       return Card(
-        color: Colors.red.withValues(alpha: 0.08),
+        color: Colors.red.withValues(
+          alpha: 0.08,
+        ),
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding:
+              const EdgeInsets.all(20),
           child: Row(
             children: [
               const Icon(
@@ -301,8 +465,10 @@ class OrderTrackingPage extends StatelessWidget {
                 child: Text(
                   'This order has been cancelled.',
                   style: TextStyle(
-                    color: Colors.red.shade700,
-                    fontWeight: FontWeight.bold,
+                    color:
+                        Colors.red.shade700,
+                    fontWeight:
+                        FontWeight.bold,
                     fontSize: 15,
                   ),
                 ),
@@ -313,41 +479,48 @@ class OrderTrackingPage extends StatelessWidget {
       );
     }
 
-    final index = _statusIndex(status);
+    final index =
+        _statusIndex(status);
 
     return Card(
       elevation: 2,
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding:
+            const EdgeInsets.all(20),
         child: Column(
           children: [
             _buildStep(
               title: 'Order Placed',
-              icon: Icons.receipt_long_outlined,
+              icon:
+                  Icons.receipt_long_outlined,
               active: index >= 0,
               completed: index > 0,
             ),
             _buildStep(
               title: 'Confirmed',
-              icon: Icons.verified_outlined,
+              icon:
+                  Icons.verified_outlined,
               active: index >= 1,
               completed: index > 1,
             ),
             _buildStep(
               title: 'Processing',
-              icon: Icons.inventory_2_outlined,
+              icon:
+                  Icons.inventory_2_outlined,
               active: index >= 2,
               completed: index > 2,
             ),
             _buildStep(
               title: 'Shipped',
-              icon: Icons.local_shipping_outlined,
+              icon:
+                  Icons.local_shipping_outlined,
               active: index >= 3,
               completed: index > 3,
             ),
             _buildStep(
               title: 'Delivered',
-              icon: Icons.home_outlined,
+              icon:
+                  Icons.home_outlined,
               active: index >= 4,
               completed: false,
             ),
@@ -358,53 +531,91 @@ class OrderTrackingPage extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
+  Widget build(
+    BuildContext context,
+  ) {
+    final user =
+        FirebaseAuth.instance.currentUser;
 
     if (user == null) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Order Tracking'),
+          title:
+              const Text('Order Tracking'),
         ),
         body: const Center(
-          child: Text('Please login first.'),
+          child: Text(
+            'Please login first.',
+          ),
         ),
       );
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Order Tracking'),
+        title:
+            const Text('Order Tracking'),
         centerTitle: true,
       ),
-      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      body: StreamBuilder<
+          DocumentSnapshot<
+              Map<String, dynamic>>>(
         stream: FirebaseFirestore.instance
             .collection('orders')
             .doc(orderId)
             .snapshots(),
-        builder: (context, orderSnapshot) {
-          if (orderSnapshot.connectionState ==
+        builder: (
+          context,
+          orderSnapshot,
+        ) {
+          if (orderSnapshot
+                  .connectionState ==
               ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(),
+              child:
+                  CircularProgressIndicator(),
+            );
+          }
+
+          if (orderSnapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding:
+                    const EdgeInsets.all(20),
+                child: Text(
+                  'Unable to load order.\n\n'
+                  '${orderSnapshot.error}',
+                  textAlign:
+                      TextAlign.center,
+                ),
+              ),
             );
           }
 
           if (!orderSnapshot.hasData ||
-              !orderSnapshot.data!.exists) {
+              !orderSnapshot
+                  .data!
+                  .exists) {
             return const Center(
-              child: Text('Order not found.'),
+              child: Text(
+                'Order not found.',
+              ),
             );
           }
 
           final orderData =
-              orderSnapshot.data!.data() ?? {};
+              orderSnapshot.data!
+                      .data() ??
+                  {};
 
-          final fallbackStatus =
-              (orderData['orderStatus'] ?? 'placed').toString();
+          final fallbackStatus = (
+            orderData['orderStatus'] ??
+                'placed'
+          ).toString();
 
-          final customerId =
-              (orderData['userId'] ?? '').toString();
+          final customerId = (
+            orderData['userId'] ?? ''
+          ).toString();
 
           if (customerId != user.uid) {
             return const Center(
@@ -414,47 +625,67 @@ class OrderTrackingPage extends StatelessWidget {
             );
           }
 
-          // IMPORTANT:
-          // Query by customerId first so Firestore rules
-          // can verify that every returned seller order
-          // belongs to the logged-in customer.
+          // Query by customerId first.
+          // This matches the Firestore security rules:
+          // seller_orders can be read by the customer.
           return StreamBuilder<
-              QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
+              QuerySnapshot<
+                  Map<String, dynamic>>>(
+            stream: FirebaseFirestore
+                .instance
                 .collection('seller_orders')
                 .where(
                   'customerId',
                   isEqualTo: user.uid,
                 )
                 .snapshots(),
-            builder: (context, sellerSnapshot) {
-              if (sellerSnapshot.connectionState ==
+            builder: (
+              context,
+              sellerSnapshot,
+            ) {
+              if (sellerSnapshot
+                      .connectionState ==
                   ConnectionState.waiting) {
                 return const Center(
-                  child: CircularProgressIndicator(),
+                  child:
+                      CircularProgressIndicator(),
                 );
               }
 
               if (sellerSnapshot.hasError) {
                 return Center(
                   child: Padding(
-                    padding: const EdgeInsets.all(20),
+                    padding:
+                        const EdgeInsets.all(
+                      20,
+                    ),
                     child: Text(
                       'Unable to load seller orders.\n\n'
                       '${sellerSnapshot.error}',
-                      textAlign: TextAlign.center,
+                      textAlign:
+                          TextAlign.center,
                     ),
                   ),
                 );
               }
 
               final allSellerDocs =
-                  sellerSnapshot.data?.docs ?? [];
+                  sellerSnapshot
+                          .data
+                          ?.docs ??
+                      [];
 
-              final sellerDocs = allSellerDocs.where((doc) {
-                final data = doc.data();
-                return data['orderId']?.toString() == orderId;
-              }).toList();
+              final sellerDocs =
+                  allSellerDocs.where(
+                (doc) {
+                  final data =
+                      doc.data();
+
+                  return data['orderId']
+                          ?.toString() ==
+                      orderId;
+                },
+              ).toList();
 
               final overallStatus =
                   _calculateOverallStatus(
@@ -463,69 +694,106 @@ class OrderTrackingPage extends StatelessWidget {
               );
 
               return ListView(
-                padding: const EdgeInsets.all(16),
+                padding:
+                    const EdgeInsets.all(16),
                 children: [
                   Text(
                     'Order #$orderId',
-                    style: const TextStyle(
+                    style:
+                        const TextStyle(
                       fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                      fontWeight:
+                          FontWeight.bold,
                     ),
                   ),
 
-                  const SizedBox(height: 8),
+                  const SizedBox(
+                    height: 8,
+                  ),
 
                   Row(
                     children: [
                       const Text(
                         'Overall Status: ',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
+                        style:
+                            TextStyle(
+                          fontWeight:
+                              FontWeight.w600,
                         ),
                       ),
                       Text(
-                        _statusText(overallStatus),
+                        _statusText(
+                          overallStatus,
+                        ),
                         style: TextStyle(
-                          color: _statusColor(overallStatus),
-                          fontWeight: FontWeight.bold,
+                          color:
+                              _statusColor(
+                            overallStatus,
+                          ),
+                          fontWeight:
+                              FontWeight.bold,
                         ),
                       ),
                     ],
                   ),
 
-                  const SizedBox(height: 20),
+                  const SizedBox(
+                    height: 20,
+                  ),
 
-                  _buildTracking(overallStatus),
+                  _buildTracking(
+                    overallStatus,
+                  ),
 
-                  const SizedBox(height: 24),
+                  const SizedBox(
+                    height: 24,
+                  ),
 
                   if (sellerDocs.isNotEmpty) ...[
                     const Text(
                       'Seller Orders',
-                      style: TextStyle(
+                      style:
+                          TextStyle(
                         fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                        fontWeight:
+                            FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    ...sellerDocs.map(_buildSellerOrderCard),
+
+                    const SizedBox(
+                      height: 12,
+                    ),
+
+                    ...sellerDocs.map(
+                      _buildSellerOrderCard,
+                    ),
                   ],
 
                   if (sellerDocs.isEmpty)
                     Card(
                       child: Padding(
-                        padding: const EdgeInsets.all(20),
+                        padding:
+                            const EdgeInsets.all(
+                          20,
+                        ),
                         child: Column(
                           children: [
                             Icon(
-                              Icons.info_outline,
+                              Icons
+                                  .info_outline,
                               size: 40,
-                              color: Colors.grey.shade500,
+                              color: Colors
+                                  .grey
+                                  .shade500,
                             ),
-                            const SizedBox(height: 10),
+                            const SizedBox(
+                              height: 10,
+                            ),
                             const Text(
                               'Seller order details are not available yet.',
-                              textAlign: TextAlign.center,
+                              textAlign:
+                                  TextAlign
+                                      .center,
                             ),
                           ],
                         ),
