@@ -1945,5 +1945,4 @@ class SellerOrdersPage extends StatelessWidget {
             );
           }
 
-          final sellerDocuments =
-              seller
+          
