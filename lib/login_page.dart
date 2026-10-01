@@ -1,4 +1,4 @@
-// NOTE: This file now also uses flutter_facebook_auth for Facebook sign-in.
+// NOTE: This file also uses flutter_facebook_auth for Facebook sign-in.
 // Add this to your pubspec.yaml if it isn't already there:
 //
 //   dependencies:
@@ -22,6 +22,15 @@ import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 
 import 'home_page.dart';
 import 'register_page.dart';
+
+// ============================================================
+// TESTING SWITCH
+// true  = Google/Facebook errors show the real error text on screen
+//         (use this while fixing sign-in problems).
+// false = people only see a short friendly message.
+// Set this to false before uploading to the Play Store.
+// ============================================================
+const bool _showDebugErrors = true;
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -54,6 +63,14 @@ class _LoginPageState extends State<LoginPage> {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  /// Friendly message, plus the real error while testing.
+  String _failMessage(String friendly, Object error) {
+    if (_showDebugErrors) {
+      return '$friendly\n$error';
+    }
+    return friendly;
   }
 
   Future<void> _handleLogin() async {
@@ -164,9 +181,8 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
-      final userRef = FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid);
+      final userRef =
+          FirebaseFirestore.instance.collection('users').doc(user.uid);
 
       final userSnapshot = await userRef.get();
 
@@ -226,16 +242,19 @@ class _LoginPageState extends State<LoginPage> {
           break;
       }
 
-      _showMessage(errorMessage);
+      _showMessage(_failMessage(errorMessage, e.code));
     } catch (e) {
-      // Logged for developers only; the person just sees a plain, friendly
-      // message instead of an internal exception string. Check this line
-      // in `adb logcat` or your IDE's debug console when Google Sign-In
-      // fails, to see the real underlying error code (e.g. ApiException: 10
-      // usually means the app's SHA-1/SHA-256 fingerprint isn't registered
-      // in the Firebase console for the keystore this build was signed with).
+      // Common causes:
+      //  ApiException: 10  -> the SHA-1/SHA-256 of the key this APK was
+      //                       signed with is not in the Firebase console, or
+      //                       google-services.json is an old copy.
+      //  ApiException: 12500 -> Google provider or support email not set up
+      //                       in Firebase Authentication.
+      //  ApiException: 7   -> network problem.
       debugPrint('Google Sign-In error: $e');
-      _showMessage('Google Sign-In was cancelled or failed.');
+      _showMessage(
+        _failMessage('Google Sign-In was cancelled or failed.', e),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -261,8 +280,7 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
-      if (result.status != LoginStatus.success ||
-          result.accessToken == null) {
+      if (result.status != LoginStatus.success || result.accessToken == null) {
         _showMessage(
           result.message ?? 'Unable to sign in with Facebook.',
         );
@@ -353,13 +371,15 @@ class _LoginPageState extends State<LoginPage> {
           break;
       }
 
-      _showMessage(errorMessage);
+      _showMessage(_failMessage(errorMessage, e.code));
     } catch (e) {
-      // Logged for developers only. Check this in logcat/debug console â€”
-      // a common cause is the Facebook key hash for this build's keystore
-      // not being registered in the Facebook Developer Console.
+      // A common cause is the Facebook key hash for this build's keystore
+      // not being registered in the Facebook Developer Console, or the
+      // Facebook App ID missing in the Android resources.
       debugPrint('Facebook Sign-In error: $e');
-      _showMessage('Facebook Sign-In was cancelled or failed.');
+      _showMessage(
+        _failMessage('Facebook Sign-In was cancelled or failed.', e),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -444,6 +464,9 @@ class _LoginPageState extends State<LoginPage> {
         SnackBar(
           content: Text(message),
           backgroundColor: isError ? Colors.red : Colors.green,
+          duration: Duration(
+            seconds: (_showDebugErrors && isError) ? 10 : 4,
+          ),
         ),
       );
   }
@@ -533,8 +556,7 @@ class _LoginPageState extends State<LoginPage> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
-                    onPressed:
-                        isBusy ? null : _handleForgotPassword,
+                    onPressed: isBusy ? null : _handleForgotPassword,
                     child: _isResettingPassword
                         ? const SizedBox(
                             width: 18,
@@ -555,8 +577,7 @@ class _LoginPageState extends State<LoginPage> {
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF326295),
-                      disabledBackgroundColor:
-                          const Color(0xFF9DB1C8),
+                      disabledBackgroundColor: const Color(0xFF9DB1C8),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(25),
                       ),
@@ -614,8 +635,7 @@ class _LoginPageState extends State<LoginPage> {
                         color: Color(0xFF326295),
                       ),
                     ),
-                    onPressed:
-                        isBusy ? null : _handleGoogleLogin,
+                    onPressed: isBusy ? null : _handleGoogleLogin,
                     icon: _isGoogleLoading
                         ? const SizedBox(
                             width: 20,
@@ -648,8 +668,7 @@ class _LoginPageState extends State<LoginPage> {
                         borderRadius: BorderRadius.circular(25),
                       ),
                     ),
-                    onPressed:
-                        isBusy ? null : _handleFacebookLogin,
+                    onPressed: isBusy ? null : _handleFacebookLogin,
                     icon: _isFacebookLoading
                         ? const SizedBox(
                             width: 20,
