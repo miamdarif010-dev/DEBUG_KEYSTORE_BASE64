@@ -104,7 +104,6 @@ class MyOrdersPage extends StatelessWidget {
         0;
   }
 
-  /// Converts Firestore item data into a clean Map.
   Map<String, dynamic> _itemMap(dynamic item) {
     if (item is Map<String, dynamic>) {
       return item;
@@ -117,17 +116,15 @@ class MyOrdersPage extends StatelessWidget {
     return <String, dynamic>{};
   }
 
-  /// Calculates subtotal directly from order items.
-  ///
-  /// This is used as a fallback when sellerSubtotal/subtotal/
-  /// sellingTotal is missing or stored as 0.
   double _calculateItemsSubtotal(
     List<Map<String, dynamic>> items,
   ) {
     double subtotal = 0;
 
     for (final item in items) {
-      final quantity = _int(item['quantity'] ?? 1);
+      final quantity = _int(
+        item['quantity'] ?? 1,
+      );
 
       final price = _number(
         item['price'] ??
@@ -142,10 +139,6 @@ class MyOrdersPage extends StatelessWidget {
     return subtotal;
   }
 
-  /// Gets the seller/reseller subtotal.
-  ///
-  /// First uses the value stored in Firestore.
-  /// If it is missing/0, calculates it from the items.
   double _getSellerSubtotal(
     Map<String, dynamic> data,
     List<Map<String, dynamic>> items,
@@ -204,7 +197,9 @@ class MyOrdersPage extends StatelessWidget {
   Widget _buildProductItem(
     Map<String, dynamic> item,
   ) {
-    final name = (item['name'] ?? 'Product').toString();
+    final name = (
+      item['name'] ?? 'Product'
+    ).toString();
 
     final imageUrl = (
       item['imageUrl'] ??
@@ -247,18 +242,21 @@ class MyOrdersPage extends StatelessWidget {
         bottom: 12,
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
           image,
           const SizedBox(width: 12),
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
               children: [
                 Text(
                   name,
                   maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                  overflow:
+                      TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 14,
@@ -288,13 +286,44 @@ class MyOrdersPage extends StatelessWidget {
     );
   }
 
+  String _friendlyCancelError(Object error) {
+    final message = error.toString();
+
+    if (message.contains(
+      'permission-denied',
+    )) {
+      return 'You do not have permission to cancel this order.';
+    }
+
+    if (message.contains(
+      'not-found',
+    )) {
+      return 'This order could not be found.';
+    }
+
+    if (message.contains(
+      'You cannot cancel',
+    )) {
+      return 'You cannot cancel this order.';
+    }
+
+    if (message.contains(
+      'no longer be cancelled',
+    )) {
+      return 'This order can no longer be cancelled.';
+    }
+
+    return 'Could not cancel order. Please try again.';
+  }
+
   Future<void> _cancelSellerOrder(
     BuildContext context,
     String sellerOrderId,
     Map<String, dynamic> sellerOrderData, {
     String collectionName = 'seller_orders',
   }) async {
-    final currentUser = FirebaseAuth.instance.currentUser;
+    final currentUser =
+        FirebaseAuth.instance.currentUser;
 
     if (currentUser == null) {
       return;
@@ -305,7 +334,8 @@ class MyOrdersPage extends StatelessWidget {
     ).toString();
 
     if (customerId != currentUser.uid) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
         const SnackBar(
           content: Text(
             'You cannot cancel this order.',
@@ -320,7 +350,8 @@ class MyOrdersPage extends StatelessWidget {
     ).toString();
 
     if (!_canCancel(currentStatus)) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
         SnackBar(
           content: Text(
             'This order cannot be cancelled because it is already ${_statusText(currentStatus)}.',
@@ -334,7 +365,9 @@ class MyOrdersPage extends StatelessWidget {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Cancel Order?'),
+          title: const Text(
+            'Cancel Order?',
+          ),
           content: const Text(
             'Are you sure you want to cancel this order?',
           ),
@@ -346,7 +379,9 @@ class MyOrdersPage extends StatelessWidget {
                   false,
                 );
               },
-              child: const Text('No'),
+              child: const Text(
+                'No',
+              ),
             ),
             ElevatedButton(
               onPressed: () {
@@ -373,11 +408,13 @@ class MyOrdersPage extends StatelessWidget {
     }
 
     try {
-      final sellerOrderRef = FirebaseFirestore.instance
-          .collection(collectionName)
-          .doc(sellerOrderId);
+      final sellerOrderRef =
+          FirebaseFirestore.instance
+              .collection(collectionName)
+              .doc(sellerOrderId);
 
-      final latestSnapshot = await sellerOrderRef.get();
+      final latestSnapshot =
+          await sellerOrderRef.get();
 
       if (!latestSnapshot.exists) {
         throw Exception(
@@ -385,13 +422,15 @@ class MyOrdersPage extends StatelessWidget {
         );
       }
 
-      final latestData = latestSnapshot.data() ?? {};
+      final latestData =
+          latestSnapshot.data() ?? {};
 
       final latestCustomerId = (
         latestData['customerId'] ?? ''
       ).toString();
 
-      if (latestCustomerId != currentUser.uid) {
+      if (latestCustomerId !=
+          currentUser.uid) {
         throw Exception(
           'You cannot cancel this order.',
         );
@@ -410,12 +449,15 @@ class MyOrdersPage extends StatelessWidget {
       await sellerOrderRef.update({
         'orderStatus': 'cancelled',
         'cancelledBy': 'customer',
-        'cancelledAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
+        'cancelledAt':
+            FieldValue.serverTimestamp(),
+        'updatedAt':
+            FieldValue.serverTimestamp(),
       });
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context)
+            .showSnackBar(
           const SnackBar(
             content: Text(
               'Order cancelled successfully.',
@@ -426,10 +468,11 @@ class MyOrdersPage extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context)
+            .showSnackBar(
           SnackBar(
             content: Text(
-              'Could not cancel order: $e',
+              _friendlyCancelError(e),
             ),
             backgroundColor: Colors.red,
           ),
@@ -440,9 +483,12 @@ class MyOrdersPage extends StatelessWidget {
 
   Widget _buildSellerOrderCard(
     BuildContext context,
-    QueryDocumentSnapshot<Map<String, dynamic>> doc, {
-    String collectionName = 'seller_orders',
-    String fallbackLabel = 'Seller Order',
+    QueryDocumentSnapshot<
+        Map<String, dynamic>> doc, {
+    String collectionName =
+        'seller_orders',
+    String fallbackLabel =
+        'Seller Order',
   }) {
     final data = doc.data();
 
@@ -465,10 +511,19 @@ class MyOrdersPage extends StatelessWidget {
             .toList()
         : <Map<String, dynamic>>[];
 
-    final subtotal = _getSellerSubtotal(
+    final subtotal =
+        _getSellerSubtotal(
       data,
       items,
     );
+
+    final isResellerOrder =
+        collectionName == 'reseller_orders';
+
+    final subtotalLabel =
+        isResellerOrder
+            ? 'Reseller Subtotal'
+            : 'Seller Subtotal';
 
     return Card(
       margin: const EdgeInsets.only(
@@ -478,12 +533,17 @@ class MyOrdersPage extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                const Icon(
-                  Icons.storefront_outlined,
+                Icon(
+                  isResellerOrder
+                      ? Icons
+                          .storefront_outlined
+                      : Icons
+                          .storefront_outlined,
                   color: Colors.redAccent,
                 ),
                 const SizedBox(width: 8),
@@ -492,7 +552,8 @@ class MyOrdersPage extends StatelessWidget {
                     sellerCode,
                     style: const TextStyle(
                       fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                      fontWeight:
+                          FontWeight.bold,
                     ),
                   ),
                 ),
@@ -511,19 +572,22 @@ class MyOrdersPage extends StatelessWidget {
 
             Row(
               mainAxisAlignment:
-                  MainAxisAlignment.spaceBetween,
+                  MainAxisAlignment
+                      .spaceBetween,
               children: [
-                const Text(
-                  'Seller Subtotal',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
+                Text(
+                  subtotalLabel,
+                  style: const TextStyle(
+                    fontWeight:
+                        FontWeight.bold,
                   ),
                 ),
                 Text(
                   '৳${subtotal.toStringAsFixed(0)}',
                   style: const TextStyle(
                     color: Colors.redAccent,
-                    fontWeight: FontWeight.bold,
+                    fontWeight:
+                        FontWeight.bold,
                   ),
                 ),
               ],
@@ -540,7 +604,8 @@ class MyOrdersPage extends StatelessWidget {
                       context,
                       doc.id,
                       data,
-                      collectionName: collectionName,
+                      collectionName:
+                          collectionName,
                     );
                   },
                   icon: const Icon(
@@ -551,10 +616,12 @@ class MyOrdersPage extends StatelessWidget {
                     'Cancel Order',
                     style: TextStyle(
                       color: Colors.red,
-                      fontWeight: FontWeight.bold,
+                      fontWeight:
+                          FontWeight.bold,
                     ),
                   ),
-                  style: OutlinedButton.styleFrom(
+                  style:
+                      OutlinedButton.styleFrom(
                     side: const BorderSide(
                       color: Colors.red,
                     ),
@@ -569,8 +636,12 @@ class MyOrdersPage extends StatelessWidget {
 
   void _openOrderDetails(
     BuildContext context,
-    QueryDocumentSnapshot<Map<String, dynamic>> orderDoc,
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> sellerOrders,
+    QueryDocumentSnapshot<
+        Map<String, dynamic>> orderDoc,
+    List<
+            QueryDocumentSnapshot<
+                Map<String, dynamic>>>
+        sellerOrders,
   ) {
     Navigator.push(
       context,
@@ -586,9 +657,16 @@ class MyOrdersPage extends StatelessWidget {
 
   Widget _buildMainOrderCard(
     BuildContext context,
-    QueryDocumentSnapshot<Map<String, dynamic>> orderDoc,
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> sellerOrders, {
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> resellerOrders =
+    QueryDocumentSnapshot<
+        Map<String, dynamic>> orderDoc,
+    List<
+            QueryDocumentSnapshot<
+                Map<String, dynamic>>>
+        sellerOrders, {
+    List<
+            QueryDocumentSnapshot<
+                Map<String, dynamic>>>
+        resellerOrders =
         const [],
   }) {
     final data = orderDoc.data();
@@ -634,7 +712,8 @@ class MyOrdersPage extends StatelessWidget {
                   Expanded(
                     child: Column(
                       crossAxisAlignment:
-                          CrossAxisAlignment.start,
+                          CrossAxisAlignment
+                              .start,
                       children: [
                         const Text(
                           'Order',
@@ -646,15 +725,19 @@ class MyOrdersPage extends StatelessWidget {
                         const SizedBox(height: 3),
                         Text(
                           '#$orderId',
-                          style: const TextStyle(
+                          style:
+                              const TextStyle(
                             fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                            fontWeight:
+                                FontWeight.bold,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  _statusChip(mainStatus),
+                  _statusChip(
+                    mainStatus,
+                  ),
                 ],
               ),
 
@@ -673,20 +756,25 @@ class MyOrdersPage extends StatelessWidget {
               if (total > 0)
                 Row(
                   mainAxisAlignment:
-                      MainAxisAlignment.spaceBetween,
+                      MainAxisAlignment
+                          .spaceBetween,
                   children: [
                     const Text(
                       'Order Total',
                       style: TextStyle(
-                        fontWeight: FontWeight.w600,
+                        fontWeight:
+                            FontWeight.w600,
                       ),
                     ),
                     Text(
                       '৳${total.toStringAsFixed(0)}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
+                      style:
+                          const TextStyle(
+                        fontWeight:
+                            FontWeight.bold,
                         fontSize: 17,
-                        color: Colors.redAccent,
+                        color:
+                            Colors.redAccent,
                       ),
                     ),
                   ],
@@ -707,7 +795,8 @@ class MyOrdersPage extends StatelessWidget {
                     style: TextStyle(
                       color: Colors.redAccent,
                       fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                      fontWeight:
+                          FontWeight.w600,
                     ),
                   ),
                 ],
@@ -717,7 +806,8 @@ class MyOrdersPage extends StatelessWidget {
 
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton.icon(
+                child:
+                    ElevatedButton.icon(
                   onPressed: () {
                     Navigator.push(
                       context,
@@ -730,7 +820,8 @@ class MyOrdersPage extends StatelessWidget {
                     );
                   },
                   icon: const Icon(
-                    Icons.local_shipping_outlined,
+                    Icons
+                        .local_shipping_outlined,
                   ),
                   label: const Text(
                     'Track Order',
@@ -745,7 +836,8 @@ class MyOrdersPage extends StatelessWidget {
                   'Seller Orders',
                   style: TextStyle(
                     fontSize: 17,
-                    fontWeight: FontWeight.bold,
+                    fontWeight:
+                        FontWeight.bold,
                   ),
                 ),
 
@@ -767,7 +859,8 @@ class MyOrdersPage extends StatelessWidget {
                   'Reseller Store Orders',
                   style: TextStyle(
                     fontSize: 17,
-                    fontWeight: FontWeight.bold,
+                    fontWeight:
+                        FontWeight.bold,
                   ),
                 ),
 
@@ -800,7 +893,9 @@ class MyOrdersPage extends StatelessWidget {
     if (user == null) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('My Orders'),
+          title: const Text(
+            'My Orders',
+          ),
           centerTitle: true,
         ),
         body: const Center(
@@ -813,7 +908,9 @@ class MyOrdersPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Orders'),
+        title: const Text(
+          'My Orders',
+        ),
         centerTitle: true,
       ),
       body: StreamBuilder<
@@ -825,22 +922,28 @@ class MyOrdersPage extends StatelessWidget {
               isEqualTo: user.uid,
             )
             .snapshots(),
-        builder: (context, orderSnapshot) {
+        builder: (
+          context,
+          orderSnapshot,
+        ) {
           if (orderSnapshot.connectionState ==
               ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(),
+              child:
+                  CircularProgressIndicator(),
             );
           }
 
           if (orderSnapshot.hasError) {
             return Center(
               child: Padding(
-                padding: const EdgeInsets.all(20),
+                padding:
+                    const EdgeInsets.all(20),
                 child: Text(
                   'Unable to load orders.\n\n'
                   '${orderSnapshot.error}',
-                  textAlign: TextAlign.center,
+                  textAlign:
+                      TextAlign.center,
                 ),
               ),
             );
@@ -856,7 +959,8 @@ class MyOrdersPage extends StatelessWidget {
                     MainAxisAlignment.center,
                 children: [
                   Icon(
-                    Icons.shopping_bag_outlined,
+                    Icons
+                        .shopping_bag_outlined,
                     size: 70,
                     color: Colors.grey,
                   ),
@@ -865,7 +969,8 @@ class MyOrdersPage extends StatelessWidget {
                     'No Orders Yet',
                     style: TextStyle(
                       fontSize: 20,
-                      fontWeight: FontWeight.bold,
+                      fontWeight:
+                          FontWeight.bold,
                     ),
                   ),
                   SizedBox(height: 6),
@@ -880,16 +985,21 @@ class MyOrdersPage extends StatelessWidget {
             );
           }
 
-          final sortedOrders = [...orderDocs];
+          final sortedOrders =
+              [...orderDocs];
 
           sortedOrders.sort(
             (a, b) {
-              final aTime = a.data()['createdAt'];
-              final bTime = b.data()['createdAt'];
+              final aTime =
+                  a.data()['createdAt'];
+              final bTime =
+                  b.data()['createdAt'];
 
               if (aTime is Timestamp &&
                   bTime is Timestamp) {
-                return bTime.compareTo(aTime);
+                return bTime.compareTo(
+                  aTime,
+                );
               }
 
               return 0;
@@ -897,7 +1007,8 @@ class MyOrdersPage extends StatelessWidget {
           );
 
           return StreamBuilder<
-              QuerySnapshot<Map<String, dynamic>>>(
+              QuerySnapshot<
+                  Map<String, dynamic>>>(
             stream: FirebaseFirestore.instance
                 .collection('seller_orders')
                 .where(
@@ -909,37 +1020,47 @@ class MyOrdersPage extends StatelessWidget {
               context,
               sellerSnapshot,
             ) {
-              if (sellerSnapshot.connectionState ==
+              if (sellerSnapshot
+                      .connectionState ==
                   ConnectionState.waiting) {
                 return const Center(
-                  child: CircularProgressIndicator(),
+                  child:
+                      CircularProgressIndicator(),
                 );
               }
 
               if (sellerSnapshot.hasError) {
                 return Center(
                   child: Padding(
-                    padding: const EdgeInsets.all(20),
+                    padding:
+                        const EdgeInsets.all(
+                      20,
+                    ),
                     child: Text(
                       'Unable to load seller orders.\n\n'
                       '${sellerSnapshot.error}',
-                      textAlign: TextAlign.center,
+                      textAlign:
+                          TextAlign.center,
                     ),
                   ),
                 );
               }
 
               final sellerDocs =
-                  sellerSnapshot.data?.docs ?? [];
+                  sellerSnapshot.data?.docs ??
+                      [];
 
               final sellerOrdersByOrderId =
                   <String,
                       List<
                           QueryDocumentSnapshot<
-                              Map<String, dynamic>>>>{};
+                              Map<String,
+                                  dynamic>>>>{};
 
-              for (final sellerDoc in sellerDocs) {
-                final data = sellerDoc.data();
+              for (final sellerDoc
+                  in sellerDocs) {
+                final data =
+                    sellerDoc.data();
 
                 final orderId = (
                   data['orderId'] ?? ''
@@ -958,9 +1079,12 @@ class MyOrdersPage extends StatelessWidget {
               }
 
               return StreamBuilder<
-                  QuerySnapshot<Map<String, dynamic>>>(
+                  QuerySnapshot<
+                      Map<String, dynamic>>>(
                 stream: FirebaseFirestore.instance
-                    .collection('reseller_orders')
+                    .collection(
+                      'reseller_orders',
+                    )
                     .where(
                       'customerId',
                       isEqualTo: user.uid,
@@ -970,11 +1094,23 @@ class MyOrdersPage extends StatelessWidget {
                   context,
                   resellerSnapshot,
                 ) {
-                  if (resellerSnapshot.hasError) {
+                  if (resellerSnapshot
+                          .connectionState ==
+                      ConnectionState.waiting) {
+                    return const Center(
+                      child:
+                          CircularProgressIndicator(),
+                    );
+                  }
+
+                  if (resellerSnapshot
+                      .hasError) {
                     return Center(
                       child: Padding(
                         padding:
-                            const EdgeInsets.all(20),
+                            const EdgeInsets.all(
+                          20,
+                        ),
                         child: Text(
                           'Unable to load reseller orders.\n\n'
                           '${resellerSnapshot.error}',
@@ -986,22 +1122,27 @@ class MyOrdersPage extends StatelessWidget {
                   }
 
                   final resellerDocs =
-                      resellerSnapshot.data?.docs ??
+                      resellerSnapshot.data
+                              ?.docs ??
                           [];
 
                   final resellerOrdersByOrderId =
                       <String,
                           List<
                               QueryDocumentSnapshot<
-                                  Map<String, dynamic>>>>{};
+                                  Map<String,
+                                      dynamic>>>>{};
 
                   for (final resellerDoc
                       in resellerDocs) {
                     final resellerOrderId = (
-                      resellerDoc.data()['orderId'] ?? ''
+                      resellerDoc.data()[
+                              'orderId'] ??
+                          ''
                     ).toString();
 
-                    if (resellerOrderId.isEmpty) {
+                    if (resellerOrderId
+                        .isEmpty) {
                       continue;
                     }
 
@@ -1015,7 +1156,9 @@ class MyOrdersPage extends StatelessWidget {
 
                   return ListView.builder(
                     padding:
-                        const EdgeInsets.all(16),
+                        const EdgeInsets.all(
+                      16,
+                    ),
                     itemCount:
                         sortedOrders.length,
                     itemBuilder:
