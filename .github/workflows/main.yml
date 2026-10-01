@@ -82,7 +82,7 @@ jobs:
               echo "MISSING android/app/google-services.json"
             fi
             echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
