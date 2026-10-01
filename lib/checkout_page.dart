@@ -761,17 +761,22 @@ class _CheckoutPageState extends State<CheckoutPage> {
   String _friendlyError(Object error) {
     final text = error.toString().toLowerCase();
 
-    if (text.contains('insufficient')) {
+    // Firestore says "Missing or insufficient permissions", so this check
+    // must come BEFORE the wallet check below.
+    if (text.contains('permission-denied') ||
+        text.contains('missing or insufficient permissions')) {
+      return 'Order could not be saved (permission denied). '
+          'Please contact support.';
+    }
+    if (text.contains('insufficient wallet') ||
+        text.contains('wallet balance')) {
       return 'Your BuyNova Wallet balance is not enough for this order.';
     }
     if (text.contains('unauthenticated')) {
       return 'Please login again.';
     }
-    if (text.contains('permission-denied')) {
-      return 'You do not have permission to place this order.';
-    }
-    if (text.contains('not-found')) {
-      return 'Order or Wallet service was not found.';
+    if (text.contains('network') || text.contains('unavailable')) {
+      return 'Network error. Please check your connection.';
     }
 
     return 'Something went wrong. Please try again.';
