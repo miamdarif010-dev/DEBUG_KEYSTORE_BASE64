@@ -107,7 +107,6 @@ class OrderTrackingPage extends StatelessWidget {
     return <String, dynamic>{};
   }
 
-  /// Calculates the subtotal directly from seller order items.
   double _calculateItemsSubtotal(
     List<Map<String, dynamic>> items,
   ) {
@@ -131,10 +130,6 @@ class OrderTrackingPage extends StatelessWidget {
     return subtotal;
   }
 
-  /// Gets seller subtotal from Firestore.
-  ///
-  /// If the stored subtotal is missing or 0,
-  /// it calculates the correct amount from the items.
   double _getSellerSubtotal(
     Map<String, dynamic> data,
     List<Map<String, dynamic>> items,
@@ -168,16 +163,31 @@ class OrderTrackingPage extends StatelessWidget {
       ).toString();
     }).toList();
 
+    // Terminal states have priority.
     if (statuses.every(
-      (status) => status == 'delivered',
+      (status) => status == 'refunded',
     )) {
-      return 'delivered';
+      return 'refunded';
+    }
+
+    if (statuses.every(
+      (status) => status == 'returned',
+    )) {
+      return 'returned';
     }
 
     if (statuses.every(
       (status) => status == 'cancelled',
     )) {
       return 'cancelled';
+    }
+
+    // If at least one order is still active,
+    // use the furthest active progress.
+    if (statuses.any(
+      (status) => status == 'delivered',
+    )) {
+      return 'delivered';
     }
 
     if (statuses.any(
@@ -206,6 +216,7 @@ class OrderTrackingPage extends StatelessWidget {
     required IconData icon,
     required bool active,
     required bool completed,
+    required bool showLine,
   }) {
     return Row(
       crossAxisAlignment:
@@ -231,7 +242,7 @@ class OrderTrackingPage extends StatelessWidget {
                     : Colors.grey.shade600,
               ),
             ),
-            if (title != 'Delivered')
+            if (showLine)
               Container(
                 width: 2,
                 height: 38,
@@ -265,6 +276,145 @@ class OrderTrackingPage extends StatelessWidget {
     );
   }
 
+  Widget _buildTerminalStatus(
+    String status,
+  ) {
+    final color = _statusColor(status);
+
+    IconData icon;
+
+    switch (status) {
+      case 'cancelled':
+        icon = Icons.cancel_outlined;
+        break;
+      case 'returned':
+        icon = Icons.keyboard_return_outlined;
+        break;
+      case 'refunded':
+        icon = Icons.payments_outlined;
+        break;
+      default:
+        icon = Icons.info_outline;
+    }
+
+    String message;
+
+    switch (status) {
+      case 'cancelled':
+        message =
+            'This order has been cancelled.';
+        break;
+      case 'returned':
+        message =
+            'This order has been returned.';
+        break;
+      case 'refunded':
+        message =
+            'This order has been refunded.';
+        break;
+      default:
+        message = _statusText(status);
+    }
+
+    return Card(
+      color: color.withValues(
+        alpha: 0.08,
+      ),
+      child: Padding(
+        padding:
+            const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              color: color,
+              size: 32,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                message,
+                style: TextStyle(
+                  color: color,
+                  fontWeight:
+                      FontWeight.bold,
+                  fontSize: 15,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTracking(
+    String status,
+  ) {
+    if (status == 'cancelled' ||
+        status == 'returned' ||
+        status == 'refunded') {
+      return _buildTerminalStatus(
+        status,
+      );
+    }
+
+    final index =
+        _statusIndex(status);
+
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding:
+            const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            _buildStep(
+              title: 'Order Placed',
+              icon:
+                  Icons.receipt_long_outlined,
+              active: index >= 0,
+              completed: index > 0,
+              showLine: true,
+            ),
+            _buildStep(
+              title: 'Confirmed',
+              icon:
+                  Icons.verified_outlined,
+              active: index >= 1,
+              completed: index > 1,
+              showLine: true,
+            ),
+            _buildStep(
+              title: 'Processing',
+              icon:
+                  Icons.inventory_2_outlined,
+              active: index >= 2,
+              completed: index > 2,
+              showLine: true,
+            ),
+            _buildStep(
+              title: 'Shipped',
+              icon:
+                  Icons.local_shipping_outlined,
+              active: index >= 3,
+              completed: index > 3,
+              showLine: true,
+            ),
+            _buildStep(
+              title: 'Delivered',
+              icon:
+                  Icons.home_outlined,
+              active: index >= 4,
+              completed: false,
+              showLine: false,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildSellerOrderCard(
     QueryDocumentSnapshot<
         Map<String, dynamic>> doc,
@@ -290,7 +440,8 @@ class OrderTrackingPage extends StatelessWidget {
             .toList()
         : <Map<String, dynamic>>[];
 
-    final subtotal = _getSellerSubtotal(
+    final subtotal =
+        _getSellerSubtotal(
       data,
       items,
     );
@@ -301,7 +452,8 @@ class OrderTrackingPage extends StatelessWidget {
       ),
       elevation: 2,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding:
+            const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment:
               CrossAxisAlignment.start,
@@ -316,7 +468,8 @@ class OrderTrackingPage extends StatelessWidget {
                 Expanded(
                   child: Text(
                     sellerCode,
-                    style: const TextStyle(
+                    style:
+                        const TextStyle(
                       fontSize: 16,
                       fontWeight:
                           FontWeight.bold,
@@ -325,7 +478,8 @@ class OrderTrackingPage extends StatelessWidget {
                 ),
                 Container(
                   padding:
-                      const EdgeInsets.symmetric(
+                      const EdgeInsets
+                          .symmetric(
                     horizontal: 10,
                     vertical: 6,
                   ),
@@ -359,57 +513,65 @@ class OrderTrackingPage extends StatelessWidget {
             const SizedBox(height: 14),
 
             if (items.isNotEmpty)
-              ...items.map((item) {
-                final name = (
-                  item['name'] ?? 'Product'
-                ).toString();
+              ...items.map(
+                (item) {
+                  final name = (
+                    item['name'] ??
+                        'Product'
+                  ).toString();
 
-                final quantity = _int(
-                  item['quantity'] ?? 1,
-                );
+                  final quantity = _int(
+                    item['quantity'] ?? 1,
+                  );
 
-                final price = _number(
-                  item['price'] ??
-                      item['sellingPrice'] ??
-                      item['unitPrice'] ??
-                      item['productPrice'],
-                );
+                  final price = _number(
+                    item['price'] ??
+                        item[
+                            'sellingPrice'] ??
+                        item['unitPrice'] ??
+                        item[
+                            'productPrice'],
+                  );
 
-                return Padding(
-                  padding:
-                      const EdgeInsets.only(
-                    bottom: 8,
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons
-                            .shopping_bag_outlined,
-                        size: 18,
-                        color: Colors.grey,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '$name × $quantity',
-                          style:
-                              const TextStyle(
-                            fontSize: 14,
+                  return Padding(
+                    padding:
+                        const EdgeInsets
+                            .only(
+                      bottom: 8,
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons
+                              .shopping_bag_outlined,
+                          size: 18,
+                          color: Colors.grey,
+                        ),
+                        const SizedBox(
+                          width: 8,
+                        ),
+                        Expanded(
+                          child: Text(
+                            '$name × $quantity',
+                            style:
+                                const TextStyle(
+                              fontSize: 14,
+                            ),
                           ),
                         ),
-                      ),
-                      Text(
-                        '৳${(price * quantity).toStringAsFixed(0)}',
-                        style:
-                            const TextStyle(
-                          fontWeight:
-                              FontWeight.w600,
+                        Text(
+                          '৳${(price * quantity).toStringAsFixed(0)}',
+                          style:
+                              const TextStyle(
+                            fontWeight:
+                                FontWeight.w600,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
+                      ],
+                    ),
+                  );
+                },
+              ),
 
             const Divider(),
 
@@ -435,94 +597,6 @@ class OrderTrackingPage extends StatelessWidget {
                   ),
                 ),
               ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTracking(
-    String status,
-  ) {
-    if (status == 'cancelled') {
-      return Card(
-        color: Colors.red.withValues(
-          alpha: 0.08,
-        ),
-        child: Padding(
-          padding:
-              const EdgeInsets.all(20),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.cancel_outlined,
-                color: Colors.red,
-                size: 32,
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Text(
-                  'This order has been cancelled.',
-                  style: TextStyle(
-                    color:
-                        Colors.red.shade700,
-                    fontWeight:
-                        FontWeight.bold,
-                    fontSize: 15,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    final index =
-        _statusIndex(status);
-
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding:
-            const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            _buildStep(
-              title: 'Order Placed',
-              icon:
-                  Icons.receipt_long_outlined,
-              active: index >= 0,
-              completed: index > 0,
-            ),
-            _buildStep(
-              title: 'Confirmed',
-              icon:
-                  Icons.verified_outlined,
-              active: index >= 1,
-              completed: index > 1,
-            ),
-            _buildStep(
-              title: 'Processing',
-              icon:
-                  Icons.inventory_2_outlined,
-              active: index >= 2,
-              completed: index > 2,
-            ),
-            _buildStep(
-              title: 'Shipped',
-              icon:
-                  Icons.local_shipping_outlined,
-              active: index >= 3,
-              completed: index > 3,
-            ),
-            _buildStep(
-              title: 'Delivered',
-              icon:
-                  Icons.home_outlined,
-              active: index >= 4,
-              completed: false,
             ),
           ],
         ),
@@ -625,9 +699,6 @@ class OrderTrackingPage extends StatelessWidget {
             );
           }
 
-          // Query by customerId first.
-          // This matches the Firestore security rules:
-          // seller_orders can be read by the customer.
           return StreamBuilder<
               QuerySnapshot<
                   Map<String, dynamic>>>(
@@ -670,9 +741,7 @@ class OrderTrackingPage extends StatelessWidget {
               }
 
               final allSellerDocs =
-                  sellerSnapshot
-                          .data
-                          ?.docs ??
+                  sellerSnapshot.data?.docs ??
                       [];
 
               final sellerDocs =
