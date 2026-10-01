@@ -38,9 +38,24 @@ android {
         versionName = flutterVersionName
     }
 
+    // The GitHub workflow copies the persistent keystore to
+    // android/app/ci-debug.keystore before building. Using it explicitly
+    // guarantees every APK is signed with the SAME key (the one registered
+    // in Firebase), instead of a random debug key created on a fresh runner.
+    signingConfigs {
+        ci {
+            storeFile file("ci-debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
+
     buildTypes {
         release {
-            signingConfig = signingConfigs.debug
+            // Falls back to the normal debug key when building on your own
+            // computer (where ci-debug.keystore does not exist).
+            signingConfig = file("ci-debug.keystore").exists() ? signingConfigs.ci : signingConfigs.debug
         }
     }
 }
