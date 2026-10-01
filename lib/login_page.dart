@@ -1,12 +1,5 @@
-// NOTE: This file also uses flutter_facebook_auth for Facebook sign-in.
-// Add this to your pubspec.yaml if it isn't already there:
-//
-//   dependencies:
-//     flutter_facebook_auth: ^7.1.1
-//
-// Facebook sign-in needs a Facebook App ID configured in
-// AndroidManifest.xml / Info.plist per the flutter_facebook_auth setup guide,
-// and Facebook must be enabled as a sign-in provider in the Firebase console.
+// NOTE: Facebook sign-in is switched off for now (no app set up).
+// Email/password and Google sign-in are available.
 //
 // Email verification has been intentionally removed: logging in with a
 // correct email/password takes the person straight into HomePage, with no
@@ -18,14 +11,13 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 
 import 'home_page.dart';
 import 'register_page.dart';
 
 // ============================================================
 // TESTING SWITCH
-// true  = Google/Facebook errors show the real error text on screen
+// true  = Google errors show the real error text on screen
 //         (use this while fixing sign-in problems).
 // false = people only see a short friendly message.
 // Set this to false before uploading to the Play Store.
@@ -45,7 +37,6 @@ class _LoginPageState extends State<LoginPage> {
 
   bool _isLoading = false;
   bool _isGoogleLoading = false;
-  bool _isFacebookLoading = false;
   bool _isResettingPassword = false;
   bool _obscurePassword = true;
 
@@ -264,131 +255,6 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  Future<void> _handleFacebookLogin() async {
-    setState(() {
-      _isFacebookLoading = true;
-    });
-
-    try {
-      await FacebookAuth.instance.logOut();
-
-      final result = await FacebookAuth.instance.login(
-        permissions: ['email', 'public_profile'],
-      );
-
-      if (result.status == LoginStatus.cancelled) {
-        return;
-      }
-
-      if (result.status != LoginStatus.success || result.accessToken == null) {
-        _showMessage(
-          result.message ?? 'Unable to sign in with Facebook.',
-        );
-        return;
-      }
-
-      final facebookUserData = await FacebookAuth.instance.getUserData(
-        fields: 'name,email,picture.width(200)',
-      );
-
-      final credential = FacebookAuthProvider.credential(
-        result.accessToken!.tokenString,
-      );
-
-      final userCredential =
-          await FirebaseAuth.instance.signInWithCredential(credential);
-
-      final user = userCredential.user;
-
-      if (user == null) {
-        _showMessage('Unable to sign in with Facebook.');
-        return;
-      }
-
-      final userRef =
-          FirebaseFirestore.instance.collection('users').doc(user.uid);
-
-      final userSnapshot = await userRef.get();
-
-      final facebookName = facebookUserData['name'] as String?;
-      final facebookEmail = facebookUserData['email'] as String?;
-      final facebookPhotoUrl =
-          facebookUserData['picture']?['data']?['url'] as String?;
-
-      if (!userSnapshot.exists) {
-        await userRef.set(
-          {
-            'uid': user.uid,
-            'name': user.displayName ?? facebookName ?? '',
-            'email': user.email ?? facebookEmail ?? '',
-            'phone': '',
-            'profileImageUrl': user.photoURL ?? facebookPhotoUrl ?? '',
-            'sellerStatus': 'none',
-            'entrepreneurStatus': 'none',
-            'createdAt': FieldValue.serverTimestamp(),
-            'updatedAt': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
-      } else {
-        await userRef.set(
-          {
-            'uid': user.uid,
-            'email': user.email ?? facebookEmail ?? '',
-            'updatedAt': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
-      }
-
-      if (!mounted) return;
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const HomePage(),
-        ),
-      );
-    } on FirebaseAuthException catch (e) {
-      String errorMessage = 'Unable to sign in with Facebook.';
-
-      switch (e.code) {
-        case 'account-exists-with-different-credential':
-          errorMessage =
-              'An account already exists with this email using another sign-in method.';
-          break;
-        case 'credential-already-in-use':
-          errorMessage = 'This Facebook account is already in use.';
-          break;
-        case 'network-request-failed':
-          errorMessage = 'Network error. Please check your connection.';
-          break;
-        case 'user-disabled':
-          errorMessage = 'This account has been disabled.';
-          break;
-        case 'operation-not-allowed':
-          errorMessage = 'Facebook Sign-In is currently disabled.';
-          break;
-      }
-
-      _showMessage(_failMessage(errorMessage, e.code));
-    } catch (e) {
-      // A common cause is the Facebook key hash for this build's keystore
-      // not being registered in the Facebook Developer Console, or the
-      // Facebook App ID missing in the Android resources.
-      debugPrint('Facebook Sign-In error: $e');
-      _showMessage(
-        _failMessage('Facebook Sign-In was cancelled or failed.', e),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isFacebookLoading = false;
-        });
-      }
-    }
-  }
-
   Future<void> _handleForgotPassword() async {
     final email = _emailController.text.trim();
 
@@ -475,7 +341,6 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     final isBusy = _isLoading ||
         _isGoogleLoading ||
-        _isFacebookLoading ||
         _isResettingPassword;
 
     return Scaffold(
@@ -652,41 +517,6 @@ class _LoginPageState extends State<LoginPage> {
                       'Continue with Google',
                       style: TextStyle(
                         fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1877F2),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(25),
-                      ),
-                    ),
-                    onPressed: isBusy ? null : _handleFacebookLogin,
-                    icon: _isFacebookLoading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(
-                            Icons.facebook,
-                            color: Colors.white,
-                          ),
-                    label: const Text(
-                      'Continue with Facebook',
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: Colors.white,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
