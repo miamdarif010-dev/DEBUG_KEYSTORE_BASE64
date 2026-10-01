@@ -41,24 +41,45 @@ jobs:
           mkdir -p "$HOME/.android"
           echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | base64 --decode > "$HOME/.android/debug.keystore"
 
-      - name: Get SHA-1 (for verification)
+      - name: Get SHA-1 and SHA-256 of the keystore (for Firebase)
         run: |
           echo "========================================"
-          echo "BUY NOVA SHA-1"
+          echo "BUY NOVA KEYSTORE FINGERPRINTS"
           echo "========================================"
 
           keytool -list -v \
             -keystore "$HOME/.android/debug.keystore" \
             -storepass android \
-            -alias androiddebugkey | grep "SHA1:"
+            -alias androiddebugkey | grep -E "SHA1:|SHA256:"
 
           echo "========================================"
+
+      - name: Check google-services.json
+        run: |
+          if [ -f android/app/google-services.json ]; then
+            echo "google-services.json found."
+            echo "oauth_client entries:"
+            grep -c '"client_type"' android/app/google-services.json || true
+            echo "certificate_hash values in the file:"
+            grep '"certificate_hash"' android/app/google-services.json || echo "NONE (Google Sign-In will fail)"
+          else
+            echo "google-services.json is MISSING in android/app/"
+          fi
 
       - name: Analyze project
         run: flutter analyze
 
       - name: Build APK
         run: flutter build apk --release
+
+      - name: Show the certificate the APK was REALLY signed with
+        run: |
+          APKSIGNER=$(ls $ANDROID_HOME/build-tools/*/apksigner | sort -V | tail -1)
+          echo "========================================"
+          echo "APK SIGNING CERTIFICATE"
+          echo "========================================"
+          "$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-release.apk | grep -E "SHA-1|SHA-256"
+          echo "========================================"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
