@@ -61,6 +61,10 @@ class SellerOrdersPage extends StatelessWidget {
   // ===========================================================
 
   String _statusText(String status) {
+    if (status.isEmpty) {
+      return 'Placed';
+    }
+
     switch (status.toLowerCase()) {
       case 'placed':
         return 'Placed';
@@ -79,10 +83,6 @@ class SellerOrdersPage extends StatelessWidget {
       case 'refunded':
         return 'Refunded';
       default:
-        if (status.isEmpty) {
-          return 'Placed';
-        }
-
         return status[0].toUpperCase() + status.substring(1);
     }
   }
@@ -192,6 +192,26 @@ class SellerOrdersPage extends StatelessWidget {
     }
 
     return 'Date unavailable';
+  }
+
+  // ===========================================================
+  // PARSE DATE
+  // ===========================================================
+
+  DateTime? _parseDate(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate();
+    }
+
+    if (value is DateTime) {
+      return value;
+    }
+
+    if (value is String) {
+      return DateTime.tryParse(value);
+    }
+
+    return null;
   }
 
   // ===========================================================
@@ -333,18 +353,23 @@ class SellerOrdersPage extends StatelessWidget {
   Widget _buildItemCard(
     Map<String, dynamic> item,
   ) {
-    final name = item['productName']?.toString() ??
-        item['name']?.toString() ??
-        'Product';
+    final name =
+        item['productName']?.toString() ??
+            item['name']?.toString() ??
+            'Product';
 
-    final imageUrl = item['imageUrl']?.toString() ??
-        item['productImageUrl']?.toString() ??
-        '';
+    final imageUrl =
+        item['imageUrl']?.toString() ??
+            item['productImageUrl']?.toString() ??
+            '';
 
     final price = _number(item['price']);
 
-    final quantityValue = _int(item['quantity']);
-    final quantity = quantityValue > 0 ? quantityValue : 1;
+    final quantityValue =
+        _int(item['quantity']);
+
+    final quantity =
+        quantityValue > 0 ? quantityValue : 1;
 
     final totalValue = item['total'];
 
@@ -362,10 +387,12 @@ class SellerOrdersPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
           ClipRRect(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius:
+                BorderRadius.circular(10),
             child: imageUrl.isNotEmpty
                 ? Image.network(
                     imageUrl,
@@ -381,12 +408,14 @@ class SellerOrdersPage extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
               children: [
                 Text(
                   name,
                   maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                  overflow:
+                      TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 15,
@@ -430,7 +459,8 @@ class SellerOrdersPage extends StatelessWidget {
     return raw
         .whereType<Map>()
         .map(
-          (item) => Map<String, dynamic>.from(item),
+          (item) =>
+              Map<String, dynamic>.from(item),
         )
         .toList();
   }
@@ -451,7 +481,8 @@ class SellerOrdersPage extends StatelessWidget {
       return;
     }
 
-    final firestore = FirebaseFirestore.instance;
+    final firestore =
+        FirebaseFirestore.instance;
 
     final notificationRef = firestore
         .collection('users')
@@ -462,19 +493,22 @@ class SellerOrdersPage extends StatelessWidget {
     batch.set(
       notificationRef,
       {
-        'title': _notificationTitle(newStatus),
+        'title':
+            _notificationTitle(newStatus),
         'message': _notificationMessage(
           status: newStatus,
           sellerName: sellerName,
         ),
-        'type': _notificationType(newStatus),
+        'type':
+            _notificationType(newStatus),
         'orderId': orderId,
         'sellerId': sellerId,
         'sellerName': sellerName,
         'customerId': customerId,
         'orderStatus': newStatus,
         'isRead': false,
-        'createdAt': FieldValue.serverTimestamp(),
+        'createdAt':
+            FieldValue.serverTimestamp(),
       },
     );
   }
@@ -501,7 +535,8 @@ class SellerOrdersPage extends StatelessWidget {
     required String currentStatus,
     required bool isResellerOrder,
   }) async {
-    final user = FirebaseAuth.instance.currentUser;
+    final user =
+        FirebaseAuth.instance.currentUser;
 
     if (user == null) {
       return;
@@ -510,7 +545,8 @@ class SellerOrdersPage extends StatelessWidget {
     if (user.uid != sellerId) {
       if (!context.mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
         const SnackBar(
           content: Text(
             'You are not allowed to update this order.',
@@ -524,7 +560,8 @@ class SellerOrdersPage extends StatelessWidget {
     if (orderDocumentId.isEmpty) {
       if (!context.mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
         const SnackBar(
           content: Text(
             'Order document ID is missing.',
@@ -538,10 +575,12 @@ class SellerOrdersPage extends StatelessWidget {
     if (newStatus == currentStatus) {
       if (!context.mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
         SnackBar(
           content: Text(
-            'Order is already ${_statusText(currentStatus)}.',
+            'Order is already '
+            '${_statusText(currentStatus)}.',
           ),
         ),
       );
@@ -550,7 +589,8 @@ class SellerOrdersPage extends StatelessWidget {
     }
 
     try {
-      final firestore = FirebaseFirestore.instance;
+      final firestore =
+          FirebaseFirestore.instance;
 
       final collectionName =
           isResellerOrder
@@ -567,19 +607,25 @@ class SellerOrdersPage extends StatelessWidget {
         orderRef,
         {
           'orderStatus': newStatus,
-          'updatedAt': FieldValue.serverTimestamp(),
+          'updatedAt':
+              FieldValue.serverTimestamp(),
         },
       );
+
+      final sellerName =
+          user.displayName?.trim().isNotEmpty ==
+                  true
+              ? user.displayName!.trim()
+              : 'Seller';
 
       _addBuyerNotification(
         batch: batch,
         customerId: customerId,
-        orderId: mainOrderId,
+        orderId: mainOrderId.isNotEmpty
+            ? mainOrderId
+            : orderDocumentId,
         sellerId: sellerId,
-        sellerName:
-            user.displayName?.trim().isNotEmpty == true
-                ? user.displayName!.trim()
-                : 'Seller',
+        sellerName: sellerName,
         newStatus: newStatus,
       );
 
@@ -587,7 +633,8 @@ class SellerOrdersPage extends StatelessWidget {
 
       if (!context.mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
         SnackBar(
           content: Text(
             '${isResellerOrder ? 'Reseller order' : 'Order'} '
@@ -598,7 +645,8 @@ class SellerOrdersPage extends StatelessWidget {
     } on FirebaseException catch (e) {
       if (!context.mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
         SnackBar(
           content: Text(
             'Could not update order.\n'
@@ -609,7 +657,8 @@ class SellerOrdersPage extends StatelessWidget {
     } catch (e) {
       if (!context.mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
         SnackBar(
           content: Text(
             'Could not update order.\n$e',
@@ -654,7 +703,8 @@ class SellerOrdersPage extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: statuses.map(
               (status) {
-                final selected = status == currentStatus;
+                final selected =
+                    status == currentStatus;
 
                 return ListTile(
                   leading: Icon(
@@ -669,17 +719,26 @@ class SellerOrdersPage extends StatelessWidget {
                     _statusText(status),
                   ),
                   onTap: () async {
-                    Navigator.pop(dialogContext);
+                    Navigator.pop(
+                      dialogContext,
+                    );
 
                     await _updateStatus(
                       context: context,
-                      orderDocumentId: orderDocumentId,
-                      mainOrderId: mainOrderId,
-                      sellerId: sellerId,
-                      customerId: customerId,
-                      newStatus: status,
-                      currentStatus: currentStatus,
-                      isResellerOrder: isResellerOrder,
+                      orderDocumentId:
+                          orderDocumentId,
+                      mainOrderId:
+                          mainOrderId,
+                      sellerId:
+                          sellerId,
+                      customerId:
+                          customerId,
+                      newStatus:
+                          status,
+                      currentStatus:
+                          currentStatus,
+                      isResellerOrder:
+                          isResellerOrder,
                     );
                   },
                 );
@@ -701,16 +760,20 @@ class SellerOrdersPage extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => const SellerReturnRefundPage(),
+        builder: (_) =>
+            const SellerReturnRefundPage(),
       ),
     );
   }
 
   // ===========================================================
-  // CHECK RETURN / REFUND REQUESTS FOR ORDER
+  // CHECK RETURN / REFUND REQUESTS
   // ===========================================================
 
-  Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+  Stream<
+      List<
+          QueryDocumentSnapshot<
+              Map<String, dynamic>>>>
       _returnRefundRequestsStream(
     String sellerId,
     String orderId,
@@ -728,7 +791,8 @@ class SellerOrdersPage extends StatelessWidget {
           final data = doc.data();
 
           final requestOrderId =
-              data['orderId']?.toString() ?? '';
+              data['orderId']?.toString() ??
+                  '';
 
           return requestOrderId == orderId;
         }).toList();
@@ -745,31 +809,36 @@ class SellerOrdersPage extends StatelessWidget {
     required String sellerId,
     required String orderId,
   }) {
-    if (sellerId.isEmpty || orderId.isEmpty) {
+    if (sellerId.isEmpty ||
+        orderId.isEmpty) {
       return const SizedBox.shrink();
     }
 
     return StreamBuilder<
-        List<QueryDocumentSnapshot<Map<String, dynamic>>>>(
+        List<
+            QueryDocumentSnapshot<
+                Map<String, dynamic>>> >(
       stream: _returnRefundRequestsStream(
         sellerId,
         orderId,
       ),
       builder: (context, snapshot) {
-        final count = snapshot.data?.length ?? 0;
+        final count =
+            snapshot.data?.length ?? 0;
 
         if (count == 0) {
           return const SizedBox.shrink();
         }
 
         return Container(
-          margin: const EdgeInsets.only(
-            top: 10,
-          ),
+          margin:
+              const EdgeInsets.only(top: 10),
           width: double.infinity,
           child: OutlinedButton.icon(
             onPressed: () {
-              _openReturnRefundPage(context);
+              _openReturnRefundPage(
+                context,
+              );
             },
             icon: const Icon(
               Icons.assignment_return_outlined,
@@ -784,7 +853,13 @@ class SellerOrdersPage extends StatelessWidget {
   }
 
   // ===========================================================
-  // GET CUSTOMER ADDRESS
+  // CUSTOMER ADDRESS
+  //
+  // Supports:
+  // address: String
+  // customerAddress: String
+  // deliveryAddress: String
+  // deliveryAddress: Map
   // ===========================================================
 
   String _customerAddress(
@@ -793,49 +868,106 @@ class SellerOrdersPage extends StatelessWidget {
     final address =
         data['address']?.toString() ?? '';
 
-    if (address.isNotEmpty) {
+    if (address.isNotEmpty &&
+        address != 'null') {
       return address;
     }
 
     final customerAddress =
-        data['customerAddress']?.toString() ?? '';
+        data['customerAddress']
+            ?.toString() ??
+            '';
 
-    if (customerAddress.isNotEmpty) {
+    if (customerAddress.isNotEmpty &&
+        customerAddress != 'null') {
       return customerAddress;
     }
 
     final deliveryAddress =
-        data['deliveryAddress']?.toString() ?? '';
+        data['deliveryAddress'];
 
-    return deliveryAddress;
+    if (deliveryAddress is String) {
+      if (deliveryAddress.isNotEmpty &&
+          deliveryAddress != 'null') {
+        return deliveryAddress;
+      }
+    }
+
+    if (deliveryAddress is Map) {
+      final parts = <String>[];
+
+      void addPart(dynamic value) {
+        final text =
+            value?.toString().trim() ?? '';
+
+        if (text.isNotEmpty &&
+            text != 'null') {
+          parts.add(text);
+        }
+      }
+
+      addPart(deliveryAddress['address']);
+      addPart(deliveryAddress['addressLine']);
+      addPart(deliveryAddress['street']);
+      addPart(deliveryAddress['area']);
+      addPart(deliveryAddress['upazila']);
+      addPart(deliveryAddress['district']);
+      addPart(deliveryAddress['city']);
+      addPart(deliveryAddress['division']);
+      addPart(deliveryAddress['postalCode']);
+
+      return parts.join(', ');
+    }
+
+    return '';
   }
 
   // ===========================================================
-  // GET CUSTOMER PHONE
+  // CUSTOMER PHONE
   // ===========================================================
 
   String _customerPhone(
     Map<String, dynamic> data,
   ) {
     final customerPhone =
-        data['customerPhone']?.toString() ?? '';
+        data['customerPhone']
+            ?.toString() ??
+            '';
 
     if (customerPhone.isNotEmpty) {
       return customerPhone;
     }
 
-    return data['phone']?.toString() ?? '';
+    final phone =
+        data['phone']?.toString() ?? '';
+
+    if (phone.isNotEmpty) {
+      return phone;
+    }
+
+    final deliveryAddress =
+        data['deliveryAddress'];
+
+    if (deliveryAddress is Map) {
+      return deliveryAddress['phone']
+              ?.toString() ??
+          '';
+    }
+
+    return '';
   }
 
   // ===========================================================
-  // GET CUSTOMER EMAIL
+  // CUSTOMER EMAIL
   // ===========================================================
 
   String _customerEmail(
     Map<String, dynamic> data,
   ) {
     final customerEmail =
-        data['customerEmail']?.toString() ?? '';
+        data['customerEmail']
+            ?.toString() ??
+            '';
 
     if (customerEmail.isNotEmpty) {
       return customerEmail;
@@ -845,14 +977,16 @@ class SellerOrdersPage extends StatelessWidget {
   }
 
   // ===========================================================
-  // GET CUSTOMER NAME
+  // CUSTOMER NAME
   // ===========================================================
 
   String _customerName(
     Map<String, dynamic> data,
   ) {
     final customerName =
-        data['customerName']?.toString() ?? '';
+        data['customerName']
+            ?.toString() ??
+            '';
 
     if (customerName.isNotEmpty) {
       return customerName;
@@ -865,26 +999,30 @@ class SellerOrdersPage extends StatelessWidget {
       return name;
     }
 
+    final deliveryAddress =
+        data['deliveryAddress'];
+
+    if (deliveryAddress is Map) {
+      final addressName =
+          deliveryAddress['name']
+                  ?.toString() ??
+              '';
+
+      if (addressName.isNotEmpty) {
+        return addressName;
+      }
+    }
+
     return 'Customer';
   }
 
   // ===========================================================
-  // ORDER DETAILS
+  // DELIVERY INFORMATION CARD
   // ===========================================================
 
-  Future<void> _showOrderDetails(
-    BuildContext context,
-    _SellerOrderEntry entry,
-  ) async {
-    final data = entry.data;
-    final isResellerOrder =
-        entry.isResellerOrder;
-
-    final documentId = entry.documentId;
-
-    final orderId =
-        data['orderId']?.toString() ?? '';
-
+  Widget _deliveryInformationCard(
+    Map<String, dynamic> data,
+  ) {
     final customerName =
         _customerName(data);
 
@@ -898,18 +1036,185 @@ class SellerOrdersPage extends StatelessWidget {
         _customerAddress(data);
 
     final deliveryZone =
-        data['deliveryZone']?.toString() ?? '';
+        data['deliveryZone']
+                ?.toString() ??
+            '';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.blue.withValues(
+          alpha: 0.06,
+        ),
+        borderRadius:
+            BorderRadius.circular(14),
+        border: Border.all(
+          color: Colors.blue.withValues(
+            alpha: 0.12,
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(
+                Icons.local_shipping_outlined,
+                color: Colors.blue,
+              ),
+              SizedBox(width: 8),
+              Text(
+                'Customer Delivery Details',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          _infoRow(
+            Icons.person_outline,
+            'Customer',
+            customerName,
+          ),
+
+          if (phone.isNotEmpty)
+            _infoRow(
+              Icons.phone_outlined,
+              'Phone',
+              phone,
+            ),
+
+          if (email.isNotEmpty)
+            _infoRow(
+              Icons.email_outlined,
+              'Email',
+              email,
+            ),
+
+          if (address.isNotEmpty)
+            _infoRow(
+              Icons.location_on_outlined,
+              'Address',
+              address,
+            ),
+
+          if (deliveryZone.isNotEmpty)
+            _infoRow(
+              Icons.map_outlined,
+              'Delivery Zone',
+              deliveryZone,
+            ),
+
+          if (phone.isEmpty &&
+              email.isEmpty &&
+              address.isEmpty)
+            const Padding(
+              padding:
+                  EdgeInsets.only(top: 8),
+              child: Text(
+                'Some delivery information is '
+                'not available in this order.',
+                style: TextStyle(
+                  color: Colors.orange,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================
+  // INFO ROW
+  // ===========================================================
+
+  Widget _infoRow(
+    IconData icon,
+    String title,
+    String value,
+  ) {
+    return Padding(
+      padding:
+          const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
+        children: [
+          Icon(
+            icon,
+            size: 18,
+            color: Colors.grey.shade700,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: RichText(
+              text: TextSpan(
+                style: const TextStyle(
+                  color: Colors.black87,
+                  fontSize: 13,
+                ),
+                children: [
+                  TextSpan(
+                    text: '$title: ',
+                    style:
+                        const TextStyle(
+                      fontWeight:
+                          FontWeight.w600,
+                    ),
+                  ),
+                  TextSpan(
+                    text: value,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================
+  // ORDER DETAILS
+  // ===========================================================
+
+  Future<void> _showOrderDetails(
+    BuildContext context,
+    _SellerOrderEntry entry,
+  ) async {
+    final data = entry.data;
+
+    final isResellerOrder =
+        entry.isResellerOrder;
+
+    final documentId =
+        entry.documentId;
+
+    final orderId =
+        data['orderId']?.toString() ??
+            documentId;
 
     final paymentMethod =
-        data['paymentMethod']?.toString() ??
+        data['paymentMethod']
+                ?.toString() ??
             'Unknown';
 
     final paymentStatus =
-        data['paymentStatus']?.toString() ??
+        data['paymentStatus']
+                ?.toString() ??
             'pending';
 
     final status =
-        data['orderStatus']?.toString() ??
+        data['orderStatus']
+                ?.toString() ??
+            data['status']?.toString() ??
             'placed';
 
     final sellerId =
@@ -920,32 +1225,51 @@ class SellerOrdersPage extends StatelessWidget {
 
     final items = _items(data);
 
-    final sellerSubtotal = _number(
+    final sellerSubtotal =
+        _number(
       data['sellerSubtotal'] ??
           data['subtotal'],
     );
 
-    final sellingTotal = _number(
+    final sellingTotal =
+        _number(
       data['sellingTotal'] ??
           data['total'],
     );
 
     final supplierTotal =
-        _number(data['supplierTotal']);
+        _number(
+      data['supplierTotal'],
+    );
 
-    final resellerProfit = _number(
+    final resellerProfit =
+        _number(
       data['resellerProfit'] ??
           data['profit'],
+    );
+
+    final netSellerEarnings =
+        _number(
+      data['netSellerEarnings'] ??
+          data['sellerEarnings'],
     );
 
     final deliveryFee =
         _number(data['deliveryFee']);
 
     final discount =
-        _number(data['discount']);
+        _number(
+      data['couponDiscount'] ??
+          data['discount'],
+    );
+
+    final couponCode =
+        data['couponCode']?.toString() ?? '';
 
     final entrepreneurCode =
-        data['entrepreneurCode']?.toString() ?? '';
+        data['entrepreneurCode']
+                ?.toString() ??
+            '';
 
     final sellerCode =
         data['sellerCode']?.toString() ?? '';
@@ -958,16 +1282,20 @@ class SellerOrdersPage extends StatelessWidget {
         return SafeArea(
           child: SizedBox(
             height:
-                MediaQuery.of(sheetContext).size.height *
+                MediaQuery.of(sheetContext)
+                        .size
+                        .height *
                     0.90,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(
+              padding:
+                  const EdgeInsets.fromLTRB(
                 20,
                 10,
                 20,
                 24,
               ),
-              child: SingleChildScrollView(
+              child:
+                  SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment:
                       CrossAxisAlignment.start,
@@ -979,9 +1307,11 @@ class SellerOrdersPage extends StatelessWidget {
                             isResellerOrder
                                 ? 'Reseller Order Details'
                                 : 'Order Details',
-                            style: const TextStyle(
+                            style:
+                                const TextStyle(
                               fontSize: 22,
-                              fontWeight: FontWeight.bold,
+                              fontWeight:
+                                  FontWeight.bold,
                             ),
                           ),
                         ),
@@ -991,7 +1321,8 @@ class SellerOrdersPage extends StatelessWidget {
                               sheetContext,
                             );
                           },
-                          icon: const Icon(
+                          icon:
+                              const Icon(
                             Icons.close,
                           ),
                         ),
@@ -1008,89 +1339,74 @@ class SellerOrdersPage extends StatelessWidget {
 
                     Text(
                       'Order ID: $orderId',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
+                      style:
+                          const TextStyle(
+                        fontWeight:
+                            FontWeight.bold,
                       ),
                     ),
 
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
 
-                    const Text(
-                      'Customer Delivery Details',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    _deliveryInformationCard(
+                      data,
                     ),
-
-                    const SizedBox(height: 10),
-
-                    Text(
-                      'Customer: $customerName',
-                    ),
-
-                    if (phone.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        'Phone: $phone',
-                      ),
-                    ],
-
-                    if (email.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        'Email: $email',
-                      ),
-                    ],
-
-                    if (address.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        'Delivery Address: $address',
-                      ),
-                    ],
-
-                    if (deliveryZone.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        'Delivery Zone: $deliveryZone',
-                      ),
-                    ],
 
                     if (isResellerOrder) ...[
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 12),
                       Container(
-                        width: double.infinity,
+                        width:
+                            double.infinity,
                         padding:
-                            const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.deepPurple
-                              .withValues(alpha: 0.08),
+                            const EdgeInsets.all(
+                          12,
+                        ),
+                        decoration:
+                            BoxDecoration(
+                          color: Colors
+                              .deepPurple
+                              .withValues(
+                            alpha: 0.08,
+                          ),
                           borderRadius:
-                              BorderRadius.circular(12),
+                              BorderRadius
+                                  .circular(
+                            12,
+                          ),
                           border: Border.all(
-                            color: Colors.deepPurple
-                                .withValues(alpha: 0.15),
+                            color: Colors
+                                .deepPurple
+                                .withValues(
+                              alpha: 0.15,
+                            ),
                           ),
                         ),
-                        child: const Row(
+                        child:
+                            const Row(
                           crossAxisAlignment:
-                              CrossAxisAlignment.start,
+                              CrossAxisAlignment
+                                  .start,
                           children: [
                             Icon(
-                              Icons.local_shipping_outlined,
-                              color: Colors.deepPurple,
+                              Icons
+                                  .local_shipping_outlined,
+                              color: Colors
+                                  .deepPurple,
                             ),
-                            SizedBox(width: 10),
+                            SizedBox(
+                              width: 10,
+                            ),
                             Expanded(
                               child: Text(
-                                'Reseller Order — Seller delivers '
-                                'directly to this customer. '
-                                'The product should not be sent '
-                                'to the reseller.',
-                                style: TextStyle(
+                                'Reseller Order — Seller '
+                                'delivers directly to this '
+                                'customer. The product should '
+                                'not be sent to the reseller.',
+                                style:
+                                    TextStyle(
                                   fontWeight:
-                                      FontWeight.w600,
+                                      FontWeight
+                                          .w600,
                                   height: 1.4,
                                 ),
                               ),
@@ -1112,21 +1428,25 @@ class SellerOrdersPage extends StatelessWidget {
                       'Payment Status: $paymentStatus',
                     ),
 
-                    if (entrepreneurCode.isNotEmpty) ...[
+                    if (entrepreneurCode
+                        .isNotEmpty) ...[
                       const SizedBox(height: 6),
                       Text(
-                        'Entrepreneur ID: $entrepreneurCode',
+                        'Entrepreneur ID: '
+                        '$entrepreneurCode',
                       ),
                     ],
 
-                    if (sellerCode.isNotEmpty) ...[
+                    if (sellerCode
+                        .isNotEmpty) ...[
                       const SizedBox(height: 6),
                       Text(
                         'Seller ID: $sellerCode',
                       ),
                     ],
 
-                    if (sellerId.isNotEmpty) ...[
+                    if (sellerId
+                        .isNotEmpty) ...[
                       const SizedBox(height: 6),
                       Text(
                         'Seller UID: $sellerId',
@@ -1148,9 +1468,11 @@ class SellerOrdersPage extends StatelessWidget {
 
                     const Text(
                       'Products',
-                      style: TextStyle(
+                      style:
+                          TextStyle(
                         fontSize: 17,
-                        fontWeight: FontWeight.bold,
+                        fontWeight:
+                            FontWeight.bold,
                       ),
                     ),
 
@@ -1159,13 +1481,17 @@ class SellerOrdersPage extends StatelessWidget {
                     if (items.isEmpty)
                       const Text(
                         'No product information found.',
-                        style: TextStyle(
+                        style:
+                            TextStyle(
                           color: Colors.grey,
                         ),
                       ),
 
                     ...items.map(
-                      (item) => _buildItemCard(item),
+                      (item) =>
+                          _buildItemCard(
+                        item,
+                      ),
                     ),
 
                     const SizedBox(height: 10),
@@ -1189,11 +1515,20 @@ class SellerOrdersPage extends StatelessWidget {
                         'Seller Subtotal',
                         sellerSubtotal,
                       ),
+                      if (netSellerEarnings >
+                          0)
+                        _moneyDetailRow(
+                          'Net Seller Earnings',
+                          netSellerEarnings,
+                          green: true,
+                        ),
                     ],
 
                     if (discount > 0)
                       _moneyDetailRow(
-                        'Discount',
+                        couponCode.isNotEmpty
+                            ? 'Coupon Discount ($couponCode)'
+                            : 'Coupon Discount',
                         discount,
                       ),
 
@@ -1205,43 +1540,47 @@ class SellerOrdersPage extends StatelessWidget {
 
                     const SizedBox(height: 10),
 
-                    if (!isResellerOrder)
-                      _returnRefundButton(
-                        context,
-                        sellerId: sellerId,
-                        orderId: orderId,
-                      ),
+                    _returnRefundButton(
+                      context,
+                      sellerId: sellerId,
+                      orderId: orderId,
+                    ),
 
                     const SizedBox(height: 12),
 
                     SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: sellerId.isEmpty
-                            ? null
-                            : () {
-                                Navigator.pop(
-                                  sheetContext,
-                                );
+                      width:
+                          double.infinity,
+                      child:
+                          OutlinedButton.icon(
+                        onPressed:
+                            sellerId.isEmpty
+                                ? null
+                                : () {
+                                    Navigator.pop(
+                                      sheetContext,
+                                    );
 
-                                _showStatusDialog(
-                                  context,
-                                  orderDocumentId:
-                                      documentId,
-                                  mainOrderId:
-                                      orderId,
-                                  sellerId:
-                                      sellerId,
-                                  customerId:
-                                      customerId,
-                                  currentStatus:
-                                      status.toLowerCase(),
-                                  isResellerOrder:
-                                      isResellerOrder,
-                                );
-                              },
+                                    _showStatusDialog(
+                                      context,
+                                      orderDocumentId:
+                                          documentId,
+                                      mainOrderId:
+                                          orderId,
+                                      sellerId:
+                                          sellerId,
+                                      customerId:
+                                          customerId,
+                                      currentStatus:
+                                          status
+                                              .toLowerCase(),
+                                      isResellerOrder:
+                                          isResellerOrder,
+                                    );
+                                  },
                         icon: const Icon(
-                          Icons.edit_outlined,
+                          Icons
+                              .edit_outlined,
                         ),
                         label: Text(
                           isResellerOrder
@@ -1270,23 +1609,30 @@ class SellerOrdersPage extends StatelessWidget {
     bool green = false,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(
+      padding:
+          const EdgeInsets.symmetric(
         vertical: 5,
       ),
       child: Row(
         mainAxisAlignment:
             MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontWeight: FontWeight.w600,
+          Expanded(
+            child: Text(
+              title,
+              style:
+                  const TextStyle(
+                fontWeight:
+                    FontWeight.w600,
+              ),
             ),
           ),
+          const SizedBox(width: 12),
           Text(
             _money(value),
             style: TextStyle(
-              fontWeight: FontWeight.bold,
+              fontWeight:
+                  FontWeight.bold,
               color: green
                   ? Colors.green
                   : null,
@@ -1305,15 +1651,21 @@ class SellerOrdersPage extends StatelessWidget {
     BuildContext context,
     _SellerOrderEntry entry,
   ) {
-    final document = entry.document;
-    final data = entry.data;
+    final document =
+        entry.document;
+
+    final data =
+        entry.data;
+
     final isResellerOrder =
         entry.isResellerOrder;
 
-    final orderDocumentId = document.id;
+    final orderDocumentId =
+        document.id;
 
     final mainOrderId =
-        data['orderId']?.toString() ?? '';
+        data['orderId']?.toString() ??
+            orderDocumentId;
 
     final sellerId =
         data['sellerId']?.toString() ?? '';
@@ -1331,17 +1683,22 @@ class SellerOrdersPage extends StatelessWidget {
         _customerAddress(data);
 
     final deliveryZone =
-        data['deliveryZone']?.toString() ?? '';
+        data['deliveryZone']
+                ?.toString() ??
+            '';
 
     final status =
         data['orderStatus']?.toString() ??
+            data['status']?.toString() ??
             'placed';
 
     final paymentStatus =
-        data['paymentStatus']?.toString() ??
+        data['paymentStatus']
+                ?.toString() ??
             'pending';
 
-    final items = _items(data);
+    final items =
+        _items(data);
 
     final total = isResellerOrder
         ? _number(
@@ -1354,18 +1711,28 @@ class SellerOrdersPage extends StatelessWidget {
           );
 
     final supplierTotal =
-        _number(data['supplierTotal']);
+        _number(
+      data['supplierTotal'],
+    );
 
-    final resellerProfit = _number(
+    final resellerProfit =
+        _number(
       data['resellerProfit'] ??
           data['profit'],
+    );
+
+    final netSellerEarnings =
+        _number(
+      data['netSellerEarnings'] ??
+          data['sellerEarnings'],
     );
 
     final createdAt =
         _formatDate(data['createdAt']);
 
     return Card(
-      margin: const EdgeInsets.only(
+      margin:
+          const EdgeInsets.only(
         bottom: 14,
       ),
       elevation: 2,
@@ -1379,45 +1746,57 @@ class SellerOrdersPage extends StatelessWidget {
           );
         },
         child: Padding(
-          padding: const EdgeInsets.all(15),
+          padding:
+              const EdgeInsets.all(15),
           child: Column(
             crossAxisAlignment:
                 CrossAxisAlignment.start,
             children: [
               Row(
                 crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                    CrossAxisAlignment
+                        .start,
                 children: [
                   const Icon(
-                    Icons.receipt_long_outlined,
+                    Icons
+                        .receipt_long_outlined,
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment:
-                          CrossAxisAlignment.start,
+                          CrossAxisAlignment
+                              .start,
                       children: [
                         Text(
-                          mainOrderId.isNotEmpty
+                          mainOrderId
+                                  .isNotEmpty
                               ? 'Order #$mainOrderId'
                               : 'Order',
                           maxLines: 1,
                           overflow:
-                              TextOverflow.ellipsis,
-                          style: const TextStyle(
+                              TextOverflow
+                                  .ellipsis,
+                          style:
+                              const TextStyle(
                             fontWeight:
-                                FontWeight.bold,
+                                FontWeight
+                                    .bold,
                             fontSize: 16,
                           ),
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(
+                          height: 6,
+                        ),
                         _orderTypeChip(
                           isResellerOrder,
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(
+                    width: 8,
+                  ),
                   _statusChip(status),
                 ],
               ),
@@ -1427,7 +1806,8 @@ class SellerOrdersPage extends StatelessWidget {
               Text(
                 createdAt,
                 style: TextStyle(
-                  color: Colors.grey.shade600,
+                  color:
+                      Colors.grey.shade600,
                   fontSize: 12,
                 ),
               ),
@@ -1438,17 +1818,20 @@ class SellerOrdersPage extends StatelessWidget {
 
               Row(
                 crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                    CrossAxisAlignment
+                        .start,
                 children: [
                   const Icon(
-                    Icons.person_outline_rounded,
+                    Icons
+                        .person_outline_rounded,
                     size: 20,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       customerName,
-                      style: const TextStyle(
+                      style:
+                          const TextStyle(
                         fontWeight:
                             FontWeight.w600,
                       ),
@@ -1460,52 +1843,67 @@ class SellerOrdersPage extends StatelessWidget {
               if (phone.isNotEmpty)
                 Padding(
                   padding:
-                      const EdgeInsets.only(top: 6),
+                      const EdgeInsets.only(
+                    top: 6,
+                  ),
                   child: Row(
                     children: [
                       const Icon(
-                        Icons.phone_outlined,
+                        Icons
+                            .phone_outlined,
                         size: 17,
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(
+                        width: 8,
+                      ),
                       Text(
                         phone,
                         style: TextStyle(
                           fontSize: 12,
-                          color:
-                              Colors.grey.shade700,
+                          color: Colors
+                              .grey
+                              .shade700,
                         ),
                       ),
                     ],
                   ),
                 ),
 
-              if (isResellerOrder &&
-                  address.isNotEmpty)
+              if (address.isNotEmpty)
                 Padding(
                   padding:
-                      const EdgeInsets.only(top: 6),
+                      const EdgeInsets.only(
+                    top: 6,
+                  ),
                   child: Row(
                     crossAxisAlignment:
-                        CrossAxisAlignment.start,
+                        CrossAxisAlignment
+                            .start,
                     children: [
-                      const Icon(
-                        Icons.location_on_outlined,
+                      Icon(
+                        Icons
+                            .location_on_outlined,
                         size: 18,
-                        color:
-                            Colors.deepPurple,
+                        color: isResellerOrder
+                            ? Colors
+                                .deepPurple
+                            : Colors.redAccent,
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(
+                        width: 8,
+                      ),
                       Expanded(
                         child: Text(
                           address,
                           maxLines: 3,
                           overflow:
-                              TextOverflow.ellipsis,
+                              TextOverflow
+                                  .ellipsis,
                           style: TextStyle(
                             fontSize: 12,
-                            color:
-                                Colors.grey.shade700,
+                            color: Colors
+                                .grey
+                                .shade700,
                           ),
                         ),
                       ),
@@ -1513,17 +1911,21 @@ class SellerOrdersPage extends StatelessWidget {
                   ),
                 ),
 
-              if (isResellerOrder &&
-                  deliveryZone.isNotEmpty)
+              if (deliveryZone
+                  .isNotEmpty)
                 Padding(
                   padding:
-                      const EdgeInsets.only(top: 5),
+                      const EdgeInsets.only(
+                    top: 5,
+                  ),
                   child: Text(
-                    'Delivery Zone: $deliveryZone',
+                    'Delivery Zone: '
+                    '$deliveryZone',
                     style: TextStyle(
                       fontSize: 12,
-                      color:
-                          Colors.grey.shade700,
+                      color: Colors
+                          .grey
+                          .shade700,
                     ),
                   ),
                 ),
@@ -1531,34 +1933,49 @@ class SellerOrdersPage extends StatelessWidget {
               if (isResellerOrder)
                 Container(
                   margin:
-                      const EdgeInsets.only(top: 10),
+                      const EdgeInsets.only(
+                    top: 10,
+                  ),
                   padding:
-                      const EdgeInsets.symmetric(
+                      const EdgeInsets
+                          .symmetric(
                     horizontal: 10,
                     vertical: 8,
                   ),
-                  decoration: BoxDecoration(
-                    color: Colors.deepPurple
-                        .withValues(alpha: 0.07),
+                  decoration:
+                      BoxDecoration(
+                    color: Colors
+                        .deepPurple
+                        .withValues(
+                      alpha: 0.07,
+                    ),
                     borderRadius:
-                        BorderRadius.circular(10),
+                        BorderRadius
+                            .circular(10),
                   ),
-                  child: const Row(
+                  child:
+                      const Row(
                     children: [
                       Icon(
-                        Icons.local_shipping_outlined,
+                        Icons
+                            .local_shipping_outlined,
                         size: 18,
-                        color:
-                            Colors.deepPurple,
+                        color: Colors
+                            .deepPurple,
                       ),
-                      SizedBox(width: 7),
+                      SizedBox(
+                        width: 7,
+                      ),
                       Expanded(
                         child: Text(
-                          'Seller delivers directly to customer',
-                          style: TextStyle(
+                          'Seller delivers directly '
+                          'to customer',
+                          style:
+                              TextStyle(
                             fontSize: 12,
                             fontWeight:
-                                FontWeight.w600,
+                                FontWeight
+                                    .w600,
                           ),
                         ),
                       ),
@@ -1570,7 +1987,8 @@ class SellerOrdersPage extends StatelessWidget {
 
               Text(
                 '${items.length} product(s)',
-                style: const TextStyle(
+                style:
+                    const TextStyle(
                   fontWeight:
                       FontWeight.w600,
                 ),
@@ -1578,24 +1996,25 @@ class SellerOrdersPage extends StatelessWidget {
 
               if (items.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                ...items
-                    .take(2)
-                    .map(
-                      (item) =>
-                          _buildItemCard(item),
-                    ),
+                ...items.take(2).map(
+                  (item) =>
+                      _buildItemCard(item),
+                ),
               ],
 
               if (items.length > 2)
                 Padding(
                   padding:
-                      const EdgeInsets.only(top: 4),
+                      const EdgeInsets.only(
+                    top: 4,
+                  ),
                   child: Text(
                     '+ ${items.length - 2} '
                     'more product(s)',
                     style: TextStyle(
-                      color:
-                          Colors.grey.shade600,
+                      color: Colors
+                          .grey
+                          .shade600,
                     ),
                   ),
                 ),
@@ -1632,24 +2051,52 @@ class SellerOrdersPage extends StatelessWidget {
                 Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        'Seller Total: ${_money(total)}',
-                        style:
-                            const TextStyle(
-                          fontWeight:
-                              FontWeight.bold,
-                          fontSize: 16,
-                        ),
+                      child: Column(
+                        crossAxisAlignment:
+                            CrossAxisAlignment
+                                .start,
+                        children: [
+                          Text(
+                            'Seller Total: '
+                            '${_money(total)}',
+                            style:
+                                const TextStyle(
+                              fontWeight:
+                                  FontWeight
+                                      .bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          if (netSellerEarnings >
+                              0) ...[
+                            const SizedBox(
+                              height: 3,
+                            ),
+                            Text(
+                              'Net Earnings: '
+                              '${_money(netSellerEarnings)}',
+                              style:
+                                  const TextStyle(
+                                color:
+                                    Colors.green,
+                                fontWeight:
+                                    FontWeight
+                                        .w600,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                     Text(
-                      'Payment: $paymentStatus',
+                      'Payment: '
+                      '$paymentStatus',
                       style: TextStyle(
-                        color:
-                            paymentStatus ==
-                                    'paid'
-                                ? Colors.green
-                                : Colors.orange,
+                        color: paymentStatus ==
+                                'paid'
+                            ? Colors.green
+                            : Colors.orange,
                         fontWeight:
                             FontWeight.w600,
                         fontSize: 12,
@@ -1661,12 +2108,13 @@ class SellerOrdersPage extends StatelessWidget {
               if (isResellerOrder) ...[
                 const SizedBox(height: 8),
                 Text(
-                  'Payment: $paymentStatus',
+                  'Payment: '
+                  '$paymentStatus',
                   style: TextStyle(
-                    color:
-                        paymentStatus == 'paid'
-                            ? Colors.green
-                            : Colors.orange,
+                    color: paymentStatus ==
+                            'paid'
+                        ? Colors.green
+                        : Colors.orange,
                     fontWeight:
                         FontWeight.w600,
                     fontSize: 12,
@@ -1674,18 +2122,19 @@ class SellerOrdersPage extends StatelessWidget {
                 ),
               ],
 
-              if (!isResellerOrder)
-                _returnRefundButton(
-                  context,
-                  sellerId: sellerId,
-                  orderId: mainOrderId,
-                ),
+              _returnRefundButton(
+                context,
+                sellerId: sellerId,
+                orderId: mainOrderId,
+              ),
 
               const SizedBox(height: 10),
 
               SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
+                width:
+                    double.infinity,
+                child:
+                    OutlinedButton.icon(
                   onPressed: () {
                     _showOrderDetails(
                       context,
@@ -1693,10 +2142,12 @@ class SellerOrdersPage extends StatelessWidget {
                     );
                   },
                   icon: const Icon(
-                    Icons.visibility_outlined,
+                    Icons
+                        .visibility_outlined,
                     size: 18,
                   ),
-                  label: const Text(
+                  label:
+                      const Text(
                     'View Order',
                   ),
                 ),
@@ -1705,27 +2156,31 @@ class SellerOrdersPage extends StatelessWidget {
               const SizedBox(height: 8),
 
               SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: sellerId.isEmpty
-                      ? null
-                      : () {
-                          _showStatusDialog(
-                            context,
-                            orderDocumentId:
-                                orderDocumentId,
-                            mainOrderId:
-                                mainOrderId,
-                            sellerId:
-                                sellerId,
-                            customerId:
-                                customerId,
-                            currentStatus:
-                                status.toLowerCase(),
-                            isResellerOrder:
-                                isResellerOrder,
-                          );
-                        },
+                width:
+                    double.infinity,
+                child:
+                    OutlinedButton.icon(
+                  onPressed:
+                      sellerId.isEmpty
+                          ? null
+                          : () {
+                              _showStatusDialog(
+                                context,
+                                orderDocumentId:
+                                    orderDocumentId,
+                                mainOrderId:
+                                    mainOrderId,
+                                sellerId:
+                                    sellerId,
+                                customerId:
+                                    customerId,
+                                currentStatus:
+                                    status
+                                        .toLowerCase(),
+                                isResellerOrder:
+                                    isResellerOrder,
+                              );
+                            },
                   icon: const Icon(
                     Icons.edit_outlined,
                   ),
@@ -1767,10 +2222,12 @@ class SellerOrdersPage extends StatelessWidget {
         Text(
           _money(value),
           maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+          overflow:
+              TextOverflow.ellipsis,
           style: TextStyle(
             fontSize: 12,
-            fontWeight: FontWeight.bold,
+            fontWeight:
+                FontWeight.bold,
             color: green
                 ? Colors.green
                 : null,
@@ -1793,24 +2250,28 @@ class SellerOrdersPage extends StatelessWidget {
               MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.receipt_long_outlined,
+              Icons
+                  .receipt_long_outlined,
               size: 70,
               color: Colors.grey,
             ),
             SizedBox(height: 16),
             Text(
               'No Seller Orders Yet',
-              textAlign: TextAlign.center,
+              textAlign:
+                  TextAlign.center,
               style: TextStyle(
                 fontSize: 20,
-                fontWeight: FontWeight.bold,
+                fontWeight:
+                    FontWeight.bold,
               ),
             ),
             SizedBox(height: 8),
             Text(
               'Orders containing your products '
               'will appear here.',
-              textAlign: TextAlign.center,
+              textAlign:
+                  TextAlign.center,
               style: TextStyle(
                 color: Colors.grey,
               ),
@@ -1826,18 +2287,22 @@ class SellerOrdersPage extends StatelessWidget {
   // ===========================================================
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     final user =
         FirebaseAuth.instance.currentUser;
 
     if (user == null) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text(
+          title:
+              const Text(
             'Seller Orders',
           ),
         ),
-        body: const Center(
+        body:
+            const Center(
           child: Text(
             'Please login to view seller orders.',
           ),
@@ -1847,38 +2312,52 @@ class SellerOrdersPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
+        title:
+            const Text(
           'Seller Orders',
         ),
         actions: [
           IconButton(
-            tooltip: 'Return / Refund',
+            tooltip:
+                'Return / Refund',
             onPressed: () {
               _openReturnRefundPage(
                 context,
               );
             },
-            icon: const Icon(
-              Icons.assignment_return_outlined,
+            icon:
+                const Icon(
+              Icons
+                  .assignment_return_outlined,
             ),
           ),
         ],
       ),
       body: StreamBuilder<
-          QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('seller_orders')
+          QuerySnapshot<
+              Map<String, dynamic>>>(
+        stream: FirebaseFirestore
+            .instance
+            .collection(
+              'seller_orders',
+            )
             .where(
               'sellerId',
               isEqualTo: user.uid,
             )
             .snapshots(),
-        builder: (context, sellerSnapshot) {
-          if (sellerSnapshot.hasError) {
+        builder: (
+          context,
+          sellerSnapshot,
+        ) {
+          if (sellerSnapshot
+              .hasError) {
             return Center(
               child: Padding(
                 padding:
-                    const EdgeInsets.all(20),
+                    const EdgeInsets.all(
+                  20,
+                ),
                 child: Text(
                   'Unable to load seller orders.\n\n'
                   '${sellerSnapshot.error}',
@@ -1889,7 +2368,8 @@ class SellerOrdersPage extends StatelessWidget {
             );
           }
 
-          if (sellerSnapshot.connectionState ==
+          if (sellerSnapshot
+                  .connectionState ==
               ConnectionState.waiting) {
             return const Center(
               child:
@@ -1899,13 +2379,14 @@ class SellerOrdersPage extends StatelessWidget {
 
           final sellerDocuments =
               sellerSnapshot.data?.docs ??
-              <QueryDocumentSnapshot<
-                  Map<String, dynamic>>>[];
+                  <QueryDocumentSnapshot<
+                      Map<String, dynamic>>>[];
 
           return StreamBuilder<
               QuerySnapshot<
                   Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
+            stream: FirebaseFirestore
+                .instance
                 .collection(
                   'reseller_orders',
                 )
@@ -1914,13 +2395,18 @@ class SellerOrdersPage extends StatelessWidget {
                   isEqualTo: user.uid,
                 )
                 .snapshots(),
-            builder:
-                (context, resellerSnapshot) {
-              if (resellerSnapshot.hasError) {
+            builder: (
+              context,
+              resellerSnapshot,
+            ) {
+              if (resellerSnapshot
+                  .hasError) {
                 return Center(
                   child: Padding(
                     padding:
-                        const EdgeInsets.all(20),
+                        const EdgeInsets.all(
+                      20,
+                    ),
                     child: Text(
                       'Unable to load reseller orders.\n\n'
                       '${resellerSnapshot.error}',
@@ -1941,61 +2427,48 @@ class SellerOrdersPage extends StatelessWidget {
               }
 
               final resellerDocuments =
-                  resellerSnapshot.data?.docs ??
-                  <QueryDocumentSnapshot<
-                      Map<String, dynamic>>>[];
+                  resellerSnapshot.data
+                          ?.docs ??
+                      <QueryDocumentSnapshot<
+                          Map<String, dynamic>>>[];
 
-              // -------------------------------------------------
-              // COMBINE DIRECT + RESELLER ORDERS
-              // -------------------------------------------------
+              // ------------------------------------------------
+              // COMBINE DIRECT + RESELLER
+              // ------------------------------------------------
 
               final entries =
                   <_SellerOrderEntry>[
                 ...sellerDocuments.map(
-                  (doc) => _SellerOrderEntry(
+                  (doc) =>
+                      _SellerOrderEntry(
                     document: doc,
-                    isResellerOrder: false,
+                    isResellerOrder:
+                        false,
                   ),
                 ),
                 ...resellerDocuments.map(
-                  (doc) => _SellerOrderEntry(
+                  (doc) =>
+                      _SellerOrderEntry(
                     document: doc,
-                    isResellerOrder: true,
+                    isResellerOrder:
+                        true,
                   ),
                 ),
               ];
 
-              // -------------------------------------------------
+              // ------------------------------------------------
               // SORT NEWEST FIRST
-              // -------------------------------------------------
-
-              DateTime? parseDate(
-                dynamic value,
-              ) {
-                if (value is Timestamp) {
-                  return value.toDate();
-                }
-
-                if (value is DateTime) {
-                  return value;
-                }
-
-                if (value is String) {
-                  return DateTime.tryParse(
-                    value,
-                  );
-                }
-
-                return null;
-              }
+              // ------------------------------------------------
 
               entries.sort(
                 (a, b) {
-                  final aDate = parseDate(
+                  final aDate =
+                      _parseDate(
                     a.data['createdAt'],
                   );
 
-                  final bDate = parseDate(
+                  final bDate =
+                      _parseDate(
                     b.data['createdAt'],
                   );
 
@@ -2018,17 +2491,17 @@ class SellerOrdersPage extends StatelessWidget {
                 },
               );
 
-              // -------------------------------------------------
+              // ------------------------------------------------
               // EMPTY
-              // -------------------------------------------------
+              // ------------------------------------------------
 
               if (entries.isEmpty) {
                 return _emptyView();
               }
 
-              // -------------------------------------------------
+              // ------------------------------------------------
               // ORDER LIST
-              // -------------------------------------------------
+              // ------------------------------------------------
 
               return RefreshIndicator(
                 onRefresh: () async {
@@ -2038,11 +2511,13 @@ class SellerOrdersPage extends StatelessWidget {
                     ),
                   );
                 },
-                child: ListView.builder(
+                child:
+                    ListView.builder(
                   physics:
                       const AlwaysScrollableScrollPhysics(),
                   padding:
-                      const EdgeInsets.fromLTRB(
+                      const EdgeInsets
+                          .fromLTRB(
                     12,
                     12,
                     12,
