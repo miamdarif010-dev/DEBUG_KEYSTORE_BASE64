@@ -741,6 +741,37 @@ class _UserProfilePageState extends State<UserProfilePage> {
   Widget _buildOwnProfile() {
     final user = currentUser;
 
+    // Seller menu changes only according to the current seller status.
+    // All other profile sections remain unchanged.
+    final sellerStatus =
+        _sellerStatus.trim().toLowerCase();
+
+    final String sellerTitle;
+    final String sellerSubtitle;
+    final IconData sellerIcon;
+    final Color sellerIconColor;
+
+    if (sellerStatus == 'approved') {
+      sellerTitle = 'Seller';
+      sellerSubtitle = 'Approved seller';
+      sellerIcon = Icons.store;
+      sellerIconColor = Colors.green;
+    } else if (sellerStatus == 'pending') {
+      sellerTitle = 'Seller Request Pending';
+      sellerSubtitle =
+          'Your seller request is waiting for approval';
+      sellerIcon = Icons.hourglass_top;
+      sellerIconColor = Colors.orange;
+    } else {
+      sellerTitle = 'Become a Seller';
+      sellerSubtitle =
+          sellerStatus == 'rejected'
+              ? 'Your previous request was rejected. Apply again'
+              : 'Apply to become a BuyNova seller';
+      sellerIcon = Icons.storefront;
+      sellerIconColor = Colors.redAccent;
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xfff6f6f6),
       appBar: AppBar(
@@ -917,12 +948,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       icon: Icons.storefront,
                       children: [
                         _menuItem(
-                          icon: Icons.store,
-                          title: 'Seller',
-                          subtitle:
-                              _isSellerApproved
-                                  ? 'Approved seller'
-                                  : 'Manage seller account',
+                          icon: sellerIcon,
+                          title: sellerTitle,
+                          subtitle: sellerSubtitle,
+                          iconColor: sellerIconColor,
                           onTap: _openSeller,
                         ),
                       ],
