@@ -8,6 +8,10 @@ import 'order_details_page.dart';
 class MyOrdersPage extends StatelessWidget {
   const MyOrdersPage({super.key});
 
+  // ============================================================
+  // STATUS
+  // ============================================================
+
   String _statusText(String status) {
     switch (status) {
       case 'placed':
@@ -60,6 +64,10 @@ class MyOrdersPage extends StatelessWidget {
         status == 'processing';
   }
 
+  // ============================================================
+  // HELPERS
+  // ============================================================
+
   String _formatDate(dynamic value) {
     if (value is Timestamp) {
       final date = value.toDate();
@@ -70,16 +78,37 @@ class MyOrdersPage extends StatelessWidget {
 
       final hour = date.hour == 0
           ? 12
-          : (date.hour > 12 ? date.hour - 12 : date.hour);
+          : (date.hour > 12
+              ? date.hour - 12
+              : date.hour);
 
-      final minute = date.minute.toString().padLeft(2, '0');
+      final minute =
+          date.minute.toString().padLeft(2, '0');
 
-      final period = date.hour >= 12 ? 'PM' : 'AM';
+      final period =
+          date.hour >= 12 ? 'PM' : 'AM';
 
-      return '$day/$month/$year $hour:$minute $period';
+      return '$day/$month/$year '
+          '$hour:$minute $period';
     }
 
     return 'Date unavailable';
+  }
+
+  DateTime? _dateValue(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate();
+    }
+
+    if (value is DateTime) {
+      return value;
+    }
+
+    if (value is String) {
+      return DateTime.tryParse(value);
+    }
+
+    return null;
   }
 
   double _number(dynamic value) {
@@ -115,6 +144,10 @@ class MyOrdersPage extends StatelessWidget {
 
     return <String, dynamic>{};
   }
+
+  // ============================================================
+  // SUBTOTAL
+  // ============================================================
 
   double _calculateItemsSubtotal(
     List<Map<String, dynamic>> items,
@@ -156,6 +189,10 @@ class MyOrdersPage extends StatelessWidget {
     return _calculateItemsSubtotal(items);
   }
 
+  // ============================================================
+  // STATUS CHIP
+  // ============================================================
+
   Widget _statusChip(String status) {
     final color = _statusColor(status);
 
@@ -179,6 +216,10 @@ class MyOrdersPage extends StatelessWidget {
     );
   }
 
+  // ============================================================
+  // IMAGE
+  // ============================================================
+
   Widget _imagePlaceholder() {
     return Container(
       width: 64,
@@ -194,12 +235,15 @@ class MyOrdersPage extends StatelessWidget {
     );
   }
 
+  // ============================================================
+  // PRODUCT ITEM
+  // ============================================================
+
   Widget _buildProductItem(
     Map<String, dynamic> item,
   ) {
-    final name = (
-      item['name'] ?? 'Product'
-    ).toString();
+    final name =
+        (item['name'] ?? 'Product').toString();
 
     final imageUrl = (
       item['imageUrl'] ??
@@ -222,7 +266,8 @@ class MyOrdersPage extends StatelessWidget {
 
     if (imageUrl.isNotEmpty) {
       image = ClipRRect(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius:
+            BorderRadius.circular(10),
         child: Image.network(
           imageUrl,
           width: 64,
@@ -238,9 +283,8 @@ class MyOrdersPage extends StatelessWidget {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(
-        bottom: 12,
-      ),
+      padding:
+          const EdgeInsets.only(bottom: 12),
       child: Row(
         crossAxisAlignment:
             CrossAxisAlignment.start,
@@ -258,7 +302,8 @@ class MyOrdersPage extends StatelessWidget {
                   overflow:
                       TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontWeight: FontWeight.w600,
+                    fontWeight:
+                        FontWeight.w600,
                     fontSize: 14,
                   ),
                 ),
@@ -266,7 +311,8 @@ class MyOrdersPage extends StatelessWidget {
                 Text(
                   'Quantity: $quantity',
                   style: TextStyle(
-                    color: Colors.grey.shade600,
+                    color:
+                        Colors.grey.shade600,
                     fontSize: 13,
                   ),
                 ),
@@ -274,7 +320,8 @@ class MyOrdersPage extends StatelessWidget {
                 Text(
                   '৳${(price * quantity).toStringAsFixed(0)}',
                   style: const TextStyle(
-                    fontWeight: FontWeight.bold,
+                    fontWeight:
+                        FontWeight.bold,
                     color: Colors.redAccent,
                   ),
                 ),
@@ -286,12 +333,384 @@ class MyOrdersPage extends StatelessWidget {
     );
   }
 
-  String _friendlyCancelError(Object error) {
-    final message = error.toString();
+  // ============================================================
+  // ORDER TYPE
+  // ============================================================
+
+  String _orderTypeLabel(
+    String collectionName,
+  ) {
+    if (collectionName == 'reseller_orders') {
+      return 'Reseller Order';
+    }
+
+    return 'Seller Order';
+  }
+
+  // ============================================================
+  // CUSTOMER DELIVERY SUMMARY
+  // ============================================================
+
+  Widget _buildDeliverySummary(
+    Map<String, dynamic> data, {
+    required bool isResellerOrder,
+  }) {
+    final customerName =
+        (data['customerName'] ?? '').toString();
+
+    final customerPhone =
+        (data['customerPhone'] ??
+                data['phone'] ??
+                '')
+            .toString();
+
+    final address =
+        (data['address'] ?? '').toString();
+
+    final city =
+        (data['city'] ?? '').toString();
+
+    final district =
+        (data['district'] ?? '').toString();
+
+    final deliveryZone =
+        (data['deliveryZone'] ?? '').toString();
+
+    final hasAddress =
+        customerName.isNotEmpty ||
+        customerPhone.isNotEmpty ||
+        address.isNotEmpty ||
+        city.isNotEmpty ||
+        district.isNotEmpty;
+
+    if (!hasAddress) {
+      return const SizedBox.shrink();
+    }
+
+    final zoneText =
+        deliveryZone == 'inside_dhaka'
+            ? 'Inside Dhaka'
+            : deliveryZone == 'outside_dhaka'
+                ? 'Outside Dhaka'
+                : '';
+
+    return Container(
+      width: double.infinity,
+      margin:
+          const EdgeInsets.only(top: 12),
+      padding:
+          const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius:
+            BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.grey.shade300,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.location_on_outlined,
+                size: 19,
+                color: Colors.redAccent,
+              ),
+              const SizedBox(width: 7),
+              const Expanded(
+                child: Text(
+                  'Delivery Information',
+                  style: TextStyle(
+                    fontWeight:
+                        FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          if (customerName.isNotEmpty)
+            Text(
+              customerName,
+              style: const TextStyle(
+                fontWeight:
+                    FontWeight.w600,
+              ),
+            ),
+
+          if (customerPhone.isNotEmpty)
+            Padding(
+              padding:
+                  const EdgeInsets.only(
+                top: 3,
+              ),
+              child: Text(
+                customerPhone,
+              ),
+            ),
+
+          if (address.isNotEmpty)
+            Padding(
+              padding:
+                  const EdgeInsets.only(
+                top: 3,
+              ),
+              child: Text(address),
+            ),
+
+          if (city.isNotEmpty ||
+              district.isNotEmpty)
+            Padding(
+              padding:
+                  const EdgeInsets.only(
+                top: 3,
+              ),
+              child: Text(
+                [
+                  city,
+                  district,
+                ]
+                    .where(
+                      (e) => e.isNotEmpty,
+                    )
+                    .join(', '),
+              ),
+            ),
+
+          if (zoneText.isNotEmpty)
+            Padding(
+              padding:
+                  const EdgeInsets.only(
+                top: 6,
+              ),
+              child: Text(
+                zoneText,
+                style: TextStyle(
+                  color:
+                      Colors.grey.shade700,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+
+          if (isResellerOrder) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding:
+                  const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.blue
+                    .withValues(alpha: 0.07),
+                borderRadius:
+                    BorderRadius.circular(8),
+              ),
+              child: const Row(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.local_shipping_outlined,
+                    size: 18,
+                    color: Colors.blue,
+                  ),
+                  SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      'The Seller will deliver this order '
+                      'directly to you. The Reseller does '
+                      'not receive or ship the product.',
+                      style: TextStyle(
+                        color: Colors.blue,
+                        fontSize: 12,
+                        fontWeight:
+                            FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // COUPON / EARNINGS SUMMARY
+  // ============================================================
+
+  Widget _buildFinancialSummary(
+    Map<String, dynamic> data, {
+    required bool isResellerOrder,
+    required double subtotal,
+  }) {
+    final couponDiscount = _number(
+      data['couponDiscount'] ??
+          data['discount'],
+    );
+
+    final netSellerEarnings =
+        _number(
+      data['netSellerEarnings'] ??
+          data['sellerEarnings'],
+    );
+
+    final netSellingTotal =
+        _number(
+      data['netSellingTotal'],
+    );
+
+    final supplierTotal =
+        _number(
+      data['supplierTotal'],
+    );
+
+    final resellerProfit =
+        _number(
+      data['resellerProfit'] ??
+          data['profit'],
+    );
+
+    final hasCoupon =
+        couponDiscount > 0;
+
+    final hasResellerFinancialData =
+        isResellerOrder &&
+        (netSellingTotal > 0 ||
+            supplierTotal > 0 ||
+            resellerProfit != 0);
+
+    final hasSellerEarnings =
+        !isResellerOrder &&
+        netSellerEarnings > 0;
+
+    if (!hasCoupon &&
+        !hasResellerFinancialData &&
+        !hasSellerEarnings) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: double.infinity,
+      margin:
+          const EdgeInsets.only(top: 12),
+      padding:
+          const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius:
+            BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          if (hasCoupon)
+            _financialRow(
+              'Coupon Discount',
+              -couponDiscount,
+              valueColor:
+                  Colors.green,
+            ),
+
+          if (isResellerOrder &&
+              netSellingTotal > 0)
+            _financialRow(
+              'Net Selling Total',
+              netSellingTotal,
+            ),
+
+          if (isResellerOrder &&
+              supplierTotal > 0)
+            _financialRow(
+              'Supplier Cost',
+              supplierTotal,
+            ),
+
+          if (isResellerOrder &&
+              (resellerProfit != 0 ||
+                  supplierTotal > 0))
+            _financialRow(
+              'Reseller Profit',
+              resellerProfit,
+              valueColor:
+                  resellerProfit >= 0
+                      ? Colors.green
+                      : Colors.red,
+            ),
+
+          if (!isResellerOrder &&
+              hasSellerEarnings)
+            _financialRow(
+              'Seller Net Earnings',
+              netSellerEarnings,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _financialRow(
+    String title,
+    double value, {
+    Color? valueColor,
+  }) {
+    final isNegative = value < 0;
+
+    return Padding(
+      padding:
+          const EdgeInsets.only(
+        bottom: 6,
+      ),
+      child: Row(
+        mainAxisAlignment:
+            MainAxisAlignment
+                .spaceBetween,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              color:
+                  Colors.grey.shade700,
+              fontSize: 13,
+            ),
+          ),
+          Text(
+            '${isNegative ? '- ' : ''}'
+            '৳${value.abs().toStringAsFixed(2)}',
+            style: TextStyle(
+              color: valueColor,
+              fontWeight:
+                  FontWeight.w600,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // CANCEL ERROR
+  // ============================================================
+
+  String _friendlyCancelError(
+    Object error,
+  ) {
+    final message =
+        error.toString().toLowerCase();
 
     if (message.contains(
-      'permission-denied',
-    )) {
+          'permission-denied',
+        ) ||
+        message.contains(
+          'missing or insufficient permissions',
+        )) {
       return 'You do not have permission to cancel this order.';
     }
 
@@ -302,7 +721,7 @@ class MyOrdersPage extends StatelessWidget {
     }
 
     if (message.contains(
-      'You cannot cancel',
+      'you cannot cancel',
     )) {
       return 'You cannot cancel this order.';
     }
@@ -316,11 +735,16 @@ class MyOrdersPage extends StatelessWidget {
     return 'Could not cancel order. Please try again.';
   }
 
+  // ============================================================
+  // CANCEL SELLER / RESELLER ORDER
+  // ============================================================
+
   Future<void> _cancelSellerOrder(
     BuildContext context,
     String sellerOrderId,
     Map<String, dynamic> sellerOrderData, {
-    String collectionName = 'seller_orders',
+    String collectionName =
+        'seller_orders',
   }) async {
     final currentUser =
         FirebaseAuth.instance.currentUser;
@@ -330,10 +754,14 @@ class MyOrdersPage extends StatelessWidget {
     }
 
     final customerId = (
-      sellerOrderData['customerId'] ?? ''
+      sellerOrderData['customerId'] ??
+          sellerOrderData['userId'] ??
+          sellerOrderData['buyerId'] ??
+          ''
     ).toString();
 
-    if (customerId != currentUser.uid) {
+    if (customerId !=
+        currentUser.uid) {
       ScaffoldMessenger.of(context)
           .showSnackBar(
         const SnackBar(
@@ -346,7 +774,9 @@ class MyOrdersPage extends StatelessWidget {
     }
 
     final currentStatus = (
-      sellerOrderData['orderStatus'] ?? 'placed'
+      sellerOrderData['orderStatus'] ??
+          sellerOrderData['status'] ??
+          'placed'
     ).toString();
 
     if (!_canCancel(currentStatus)) {
@@ -354,14 +784,16 @@ class MyOrdersPage extends StatelessWidget {
           .showSnackBar(
         SnackBar(
           content: Text(
-            'This order cannot be cancelled because it is already ${_statusText(currentStatus)}.',
+            'This order cannot be cancelled because '
+            'it is already ${_statusText(currentStatus)}.',
           ),
         ),
       );
       return;
     }
 
-    final confirmed = await showDialog<bool>(
+    final confirmed =
+        await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
@@ -390,9 +822,12 @@ class MyOrdersPage extends StatelessWidget {
                   true,
                 );
               },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
+              style:
+                  ElevatedButton.styleFrom(
+                backgroundColor:
+                    Colors.red,
+                foregroundColor:
+                    Colors.white,
               ),
               child: const Text(
                 'Yes, Cancel',
@@ -408,13 +843,13 @@ class MyOrdersPage extends StatelessWidget {
     }
 
     try {
-      final sellerOrderRef =
+      final orderRef =
           FirebaseFirestore.instance
               .collection(collectionName)
               .doc(sellerOrderId);
 
       final latestSnapshot =
-          await sellerOrderRef.get();
+          await orderRef.get();
 
       if (!latestSnapshot.exists) {
         throw Exception(
@@ -426,7 +861,10 @@ class MyOrdersPage extends StatelessWidget {
           latestSnapshot.data() ?? {};
 
       final latestCustomerId = (
-        latestData['customerId'] ?? ''
+        latestData['customerId'] ??
+            latestData['userId'] ??
+            latestData['buyerId'] ??
+            ''
       ).toString();
 
       if (latestCustomerId !=
@@ -437,7 +875,9 @@ class MyOrdersPage extends StatelessWidget {
       }
 
       final latestStatus = (
-        latestData['orderStatus'] ?? 'placed'
+        latestData['orderStatus'] ??
+            latestData['status'] ??
+            'placed'
       ).toString();
 
       if (!_canCancel(latestStatus)) {
@@ -446,7 +886,7 @@ class MyOrdersPage extends StatelessWidget {
         );
       }
 
-      await sellerOrderRef.update({
+      await orderRef.update({
         'orderStatus': 'cancelled',
         'cancelledBy': 'customer',
         'cancelledAt':
@@ -462,7 +902,8 @@ class MyOrdersPage extends StatelessWidget {
             content: Text(
               'Order cancelled successfully.',
             ),
-            backgroundColor: Colors.green,
+            backgroundColor:
+                Colors.green,
           ),
         );
       }
@@ -474,12 +915,17 @@ class MyOrdersPage extends StatelessWidget {
             content: Text(
               _friendlyCancelError(e),
             ),
-            backgroundColor: Colors.red,
+            backgroundColor:
+                Colors.red,
           ),
         );
       }
     }
   }
+
+  // ============================================================
+  // SELLER / RESELLER ORDER CARD
+  // ============================================================
 
   Widget _buildSellerOrderCard(
     BuildContext context,
@@ -492,12 +938,20 @@ class MyOrdersPage extends StatelessWidget {
   }) {
     final data = doc.data();
 
+    final isResellerOrder =
+        collectionName ==
+            'reseller_orders';
+
     final sellerCode = (
-      data['sellerCode'] ?? fallbackLabel
+      data['sellerCode'] ??
+          data['sellerName'] ??
+          fallbackLabel
     ).toString();
 
     final status = (
-      data['orderStatus'] ?? 'placed'
+      data['orderStatus'] ??
+          data['status'] ??
+          'placed'
     ).toString();
 
     final itemsRaw = data['items'];
@@ -506,7 +960,8 @@ class MyOrdersPage extends StatelessWidget {
         ? itemsRaw
             .map(_itemMap)
             .where(
-              (item) => item.isNotEmpty,
+              (item) =>
+                  item.isNotEmpty,
             )
             .toList()
         : <Map<String, dynamic>>[];
@@ -517,21 +972,20 @@ class MyOrdersPage extends StatelessWidget {
       items,
     );
 
-    final isResellerOrder =
-        collectionName == 'reseller_orders';
-
     final subtotalLabel =
         isResellerOrder
             ? 'Reseller Subtotal'
             : 'Seller Subtotal';
 
     return Card(
-      margin: const EdgeInsets.only(
+      margin:
+          const EdgeInsets.only(
         bottom: 14,
       ),
       elevation: 2,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding:
+            const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment:
               CrossAxisAlignment.start,
@@ -544,13 +998,15 @@ class MyOrdersPage extends StatelessWidget {
                           .storefront_outlined
                       : Icons
                           .storefront_outlined,
-                  color: Colors.redAccent,
+                  color:
+                      Colors.redAccent,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     sellerCode,
-                    style: const TextStyle(
+                    style:
+                        const TextStyle(
                       fontSize: 16,
                       fontWeight:
                           FontWeight.bold,
@@ -559,6 +1015,45 @@ class MyOrdersPage extends StatelessWidget {
                 ),
                 _statusChip(status),
               ],
+            ),
+
+            const SizedBox(height: 8),
+
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 4,
+              ),
+              decoration:
+                  BoxDecoration(
+                color: isResellerOrder
+                    ? Colors.blue
+                        .withValues(
+                        alpha: 0.08,
+                      )
+                    : Colors.redAccent
+                        .withValues(
+                        alpha: 0.08,
+                      ),
+                borderRadius:
+                    BorderRadius.circular(
+                  6,
+                ),
+              ),
+              child: Text(
+                _orderTypeLabel(
+                  collectionName,
+                ),
+                style: TextStyle(
+                  color: isResellerOrder
+                      ? Colors.blue
+                      : Colors.redAccent,
+                  fontSize: 11,
+                  fontWeight:
+                      FontWeight.bold,
+                ),
+              ),
             ),
 
             const SizedBox(height: 14),
@@ -577,15 +1072,18 @@ class MyOrdersPage extends StatelessWidget {
               children: [
                 Text(
                   subtotalLabel,
-                  style: const TextStyle(
+                  style:
+                      const TextStyle(
                     fontWeight:
                         FontWeight.bold,
                   ),
                 ),
                 Text(
                   '৳${subtotal.toStringAsFixed(0)}',
-                  style: const TextStyle(
-                    color: Colors.redAccent,
+                  style:
+                      const TextStyle(
+                    color:
+                        Colors.redAccent,
                     fontWeight:
                         FontWeight.bold,
                   ),
@@ -593,12 +1091,25 @@ class MyOrdersPage extends StatelessWidget {
               ],
             ),
 
-            const SizedBox(height: 12),
+            _buildFinancialSummary(
+              data,
+              isResellerOrder:
+                  isResellerOrder,
+              subtotal: subtotal,
+            ),
 
-            if (_canCancel(status))
+            _buildDeliverySummary(
+              data,
+              isResellerOrder:
+                  isResellerOrder,
+            ),
+
+            if (_canCancel(status)) ...[
+              const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
-                child: OutlinedButton.icon(
+                child:
+                    OutlinedButton.icon(
                   onPressed: () {
                     _cancelSellerOrder(
                       context,
@@ -622,17 +1133,23 @@ class MyOrdersPage extends StatelessWidget {
                   ),
                   style:
                       OutlinedButton.styleFrom(
-                    side: const BorderSide(
+                    side:
+                        const BorderSide(
                       color: Colors.red,
                     ),
                   ),
                 ),
               ),
+            ],
           ],
         ),
       ),
     );
   }
+
+  // ============================================================
+  // ORDER DETAILS
+  // ============================================================
 
   void _openOrderDetails(
     BuildContext context,
@@ -646,14 +1163,21 @@ class MyOrdersPage extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => OrderDetailsPage(
+        builder: (_) =>
+            OrderDetailsPage(
           orderId: orderDoc.id,
-          orderData: orderDoc.data(),
-          sellerOrders: sellerOrders,
+          orderData:
+              orderDoc.data(),
+          sellerOrders:
+              sellerOrders,
         ),
       ),
     );
   }
+
+  // ============================================================
+  // MAIN ORDER CARD
+  // ============================================================
 
   Widget _buildMainOrderCard(
     BuildContext context,
@@ -671,26 +1195,38 @@ class MyOrdersPage extends StatelessWidget {
   }) {
     final data = orderDoc.data();
 
-    final orderId = orderDoc.id;
+    final orderId =
+        orderDoc.id;
 
     final mainStatus = (
-      data['orderStatus'] ?? 'placed'
+      data['orderStatus'] ??
+          data['status'] ??
+          'placed'
     ).toString();
 
     final total = _number(
-      data['total'],
+      data['total'] ??
+          data['grandTotal'] ??
+          data['totalAmount'],
     );
 
-    final createdAt = _formatDate(
+    final createdAt =
+        _formatDate(
       data['createdAt'],
     );
 
+    final deliveryZone =
+        (data['deliveryZone'] ?? '')
+            .toString();
+
     return Card(
-      margin: const EdgeInsets.only(
+      margin:
+          const EdgeInsets.only(
         bottom: 22,
       ),
       elevation: 3,
-      clipBehavior: Clip.antiAlias,
+      clipBehavior:
+          Clip.antiAlias,
       child: InkWell(
         onTap: () {
           _openOrderDetails(
@@ -700,7 +1236,8 @@ class MyOrdersPage extends StatelessWidget {
           );
         },
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding:
+              const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment:
                 CrossAxisAlignment.start,
@@ -717,19 +1254,25 @@ class MyOrdersPage extends StatelessWidget {
                       children: [
                         const Text(
                           'Order',
-                          style: TextStyle(
-                            color: Colors.grey,
-                            fontSize: 12,
+                          style:
+                              TextStyle(
+                            color:
+                                Colors.grey,
+                            fontSize:
+                                12,
                           ),
                         ),
-                        const SizedBox(height: 3),
+                        const SizedBox(
+                          height: 3,
+                        ),
                         Text(
                           '#$orderId',
                           style:
                               const TextStyle(
                             fontSize: 16,
                             fontWeight:
-                                FontWeight.bold,
+                                FontWeight
+                                    .bold,
                           ),
                         ),
                       ],
@@ -746,10 +1289,32 @@ class MyOrdersPage extends StatelessWidget {
               Text(
                 createdAt,
                 style: TextStyle(
-                  color: Colors.grey.shade600,
+                  color:
+                      Colors.grey.shade600,
                   fontSize: 12,
                 ),
               ),
+
+              if (deliveryZone
+                  .isNotEmpty) ...[
+                const SizedBox(
+                  height: 6,
+                ),
+                Text(
+                  deliveryZone ==
+                          'inside_dhaka'
+                      ? 'Delivery: Inside Dhaka'
+                      : deliveryZone ==
+                              'outside_dhaka'
+                          ? 'Delivery: Outside Dhaka'
+                          : 'Delivery: $deliveryZone',
+                  style: TextStyle(
+                    color:
+                        Colors.grey.shade700,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
 
               const SizedBox(height: 14),
 
@@ -761,7 +1326,8 @@ class MyOrdersPage extends StatelessWidget {
                   children: [
                     const Text(
                       'Order Total',
-                      style: TextStyle(
+                      style:
+                          TextStyle(
                         fontWeight:
                             FontWeight.w600,
                       ),
@@ -785,15 +1351,19 @@ class MyOrdersPage extends StatelessWidget {
               const Row(
                 children: [
                   Icon(
-                    Icons.touch_app_outlined,
+                    Icons
+                        .touch_app_outlined,
                     size: 16,
-                    color: Colors.redAccent,
+                    color:
+                        Colors.redAccent,
                   ),
                   SizedBox(width: 5),
                   Text(
                     'Tap this order to view details',
-                    style: TextStyle(
-                      color: Colors.redAccent,
+                    style:
+                        TextStyle(
+                      color:
+                          Colors.redAccent,
                       fontSize: 12,
                       fontWeight:
                           FontWeight.w600,
@@ -814,7 +1384,8 @@ class MyOrdersPage extends StatelessWidget {
                       MaterialPageRoute(
                         builder: (_) =>
                             OrderTrackingPage(
-                          orderId: orderId,
+                          orderId:
+                              orderId,
                         ),
                       ),
                     );
@@ -829,42 +1400,58 @@ class MyOrdersPage extends StatelessWidget {
                 ),
               ),
 
-              if (sellerOrders.isNotEmpty) ...[
-                const SizedBox(height: 18),
+              if (sellerOrders
+                  .isNotEmpty) ...[
+                const SizedBox(
+                  height: 18,
+                ),
 
                 const Text(
                   'Seller Orders',
-                  style: TextStyle(
+                  style:
+                      TextStyle(
                     fontSize: 17,
                     fontWeight:
                         FontWeight.bold,
                   ),
                 ),
 
-                const SizedBox(height: 12),
+                const SizedBox(
+                  height: 12,
+                ),
 
                 ...sellerOrders.map(
                   (sellerOrder) =>
                       _buildSellerOrderCard(
                     context,
                     sellerOrder,
+                    collectionName:
+                        'seller_orders',
+                    fallbackLabel:
+                        'Seller Order',
                   ),
                 ),
               ],
 
-              if (resellerOrders.isNotEmpty) ...[
-                const SizedBox(height: 18),
+              if (resellerOrders
+                  .isNotEmpty) ...[
+                const SizedBox(
+                  height: 18,
+                ),
 
                 const Text(
                   'Reseller Store Orders',
-                  style: TextStyle(
+                  style:
+                      TextStyle(
                     fontSize: 17,
                     fontWeight:
                         FontWeight.bold,
                   ),
                 ),
 
-                const SizedBox(height: 12),
+                const SizedBox(
+                  height: 12,
+                ),
 
                 ...resellerOrders.map(
                   (resellerOrder) =>
@@ -885,17 +1472,59 @@ class MyOrdersPage extends StatelessWidget {
     );
   }
 
+  // ============================================================
+  // EMPTY STATE
+  // ============================================================
+
+  Widget _emptyOrders() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment:
+            MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons
+                .shopping_bag_outlined,
+            size: 70,
+            color: Colors.grey,
+          ),
+          SizedBox(height: 14),
+          Text(
+            'No Orders Yet',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight:
+                  FontWeight.bold,
+            ),
+          ),
+          SizedBox(height: 6),
+          Text(
+            'Your orders will appear here.',
+            style: TextStyle(
+              color: Colors.grey,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     final user =
         FirebaseAuth.instance.currentUser;
 
     if (user == null) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text(
-            'My Orders',
-          ),
+          title:
+              const Text('My Orders'),
           centerTitle: true,
         ),
         body: const Center(
@@ -908,25 +1537,27 @@ class MyOrdersPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'My Orders',
-        ),
+        title:
+            const Text('My Orders'),
         centerTitle: true,
       ),
       body: StreamBuilder<
-          QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('orders')
-            .where(
-              'userId',
-              isEqualTo: user.uid,
-            )
-            .snapshots(),
+          QuerySnapshot<
+              Map<String, dynamic>>>(
+        stream:
+            FirebaseFirestore.instance
+                .collection('orders')
+                .where(
+                  'userId',
+                  isEqualTo: user.uid,
+                )
+                .snapshots(),
         builder: (
           context,
           orderSnapshot,
         ) {
-          if (orderSnapshot.connectionState ==
+          if (orderSnapshot
+                  .connectionState ==
               ConnectionState.waiting) {
             return const Center(
               child:
@@ -938,7 +1569,9 @@ class MyOrdersPage extends StatelessWidget {
             return Center(
               child: Padding(
                 padding:
-                    const EdgeInsets.all(20),
+                    const EdgeInsets.all(
+                  20,
+                ),
                 child: Text(
                   'Unable to load orders.\n\n'
                   '${orderSnapshot.error}',
@@ -950,72 +1583,58 @@ class MyOrdersPage extends StatelessWidget {
           }
 
           final orderDocs =
-              orderSnapshot.data?.docs ?? [];
-
-          if (orderDocs.isEmpty) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment:
-                    MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons
-                        .shopping_bag_outlined,
-                    size: 70,
-                    color: Colors.grey,
-                  ),
-                  SizedBox(height: 14),
-                  Text(
-                    'No Orders Yet',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight:
-                          FontWeight.bold,
-                    ),
-                  ),
-                  SizedBox(height: 6),
-                  Text(
-                    'Your orders will appear here.',
-                    style: TextStyle(
-                      color: Colors.grey,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }
+              orderSnapshot.data?.docs ??
+                  [];
 
           final sortedOrders =
               [...orderDocs];
 
           sortedOrders.sort(
             (a, b) {
-              final aTime =
-                  a.data()['createdAt'];
-              final bTime =
-                  b.data()['createdAt'];
+              final aDate =
+                  _dateValue(
+                a.data()['createdAt'],
+              );
 
-              if (aTime is Timestamp &&
-                  bTime is Timestamp) {
-                return bTime.compareTo(
-                  aTime,
-                );
+              final bDate =
+                  _dateValue(
+                b.data()['createdAt'],
+              );
+
+              if (aDate == null &&
+                  bDate == null) {
+                return 0;
               }
 
-              return 0;
+              if (aDate == null) {
+                return 1;
+              }
+
+              if (bDate == null) {
+                return -1;
+              }
+
+              return bDate.compareTo(
+                aDate,
+              );
             },
           );
 
           return StreamBuilder<
               QuerySnapshot<
-                  Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
-                .collection('seller_orders')
-                .where(
-                  'customerId',
-                  isEqualTo: user.uid,
-                )
-                .snapshots(),
+                  Map<String,
+                      dynamic>>>(
+            stream:
+                FirebaseFirestore.instance
+                    .collection(
+                      'seller_orders',
+                    )
+                    .where(
+                      'customerId',
+                      isEqualTo:
+                          user.uid,
+                    )
+                    .snapshots(),
             builder: (
               context,
               sellerSnapshot,
@@ -1047,11 +1666,13 @@ class MyOrdersPage extends StatelessWidget {
               }
 
               final sellerDocs =
-                  sellerSnapshot.data?.docs ??
+                  sellerSnapshot.data
+                          ?.docs ??
                       [];
 
               final sellerOrdersByOrderId =
-                  <String,
+                  <
+                      String,
                       List<
                           QueryDocumentSnapshot<
                               Map<String,
@@ -1063,7 +1684,8 @@ class MyOrdersPage extends StatelessWidget {
                     sellerDoc.data();
 
                 final orderId = (
-                  data['orderId'] ?? ''
+                  data['orderId'] ??
+                      ''
                 ).toString();
 
                 if (orderId.isEmpty) {
@@ -1080,16 +1702,20 @@ class MyOrdersPage extends StatelessWidget {
 
               return StreamBuilder<
                   QuerySnapshot<
-                      Map<String, dynamic>>>(
-                stream: FirebaseFirestore.instance
-                    .collection(
-                      'reseller_orders',
-                    )
-                    .where(
-                      'customerId',
-                      isEqualTo: user.uid,
-                    )
-                    .snapshots(),
+                      Map<String,
+                          dynamic>>>(
+                stream:
+                    FirebaseFirestore
+                        .instance
+                        .collection(
+                          'reseller_orders',
+                        )
+                        .where(
+                          'customerId',
+                          isEqualTo:
+                              user.uid,
+                        )
+                        .snapshots(),
                 builder: (
                   context,
                   resellerSnapshot,
@@ -1127,7 +1753,8 @@ class MyOrdersPage extends StatelessWidget {
                           [];
 
                   final resellerOrdersByOrderId =
-                      <String,
+                      <
+                          String,
                           List<
                               QueryDocumentSnapshot<
                                   Map<String,
@@ -1135,24 +1762,39 @@ class MyOrdersPage extends StatelessWidget {
 
                   for (final resellerDoc
                       in resellerDocs) {
-                    final resellerOrderId = (
-                      resellerDoc.data()[
-                              'orderId'] ??
+                    final data =
+                        resellerDoc.data();
+
+                    final orderId = (
+                      data['orderId'] ??
                           ''
                     ).toString();
 
-                    if (resellerOrderId
-                        .isEmpty) {
+                    if (orderId.isEmpty) {
                       continue;
                     }
 
                     resellerOrdersByOrderId
                         .putIfAbsent(
-                      resellerOrderId,
+                      orderId,
                       () => [],
                     )
-                        .add(resellerDoc);
+                        .add(
+                          resellerDoc,
+                        );
                   }
+
+                  // ==================================================
+                  // EMPTY STATE
+                  // ==================================================
+
+                  if (sortedOrders.isEmpty) {
+                    return _emptyOrders();
+                  }
+
+                  // ==================================================
+                  // ORDER LIST
+                  // ==================================================
 
                   return ListView.builder(
                     padding:
