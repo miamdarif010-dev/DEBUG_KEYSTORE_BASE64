@@ -195,6 +195,17 @@ class MyOrdersPage extends StatelessWidget {
   // ============================================================
   // CUSTOMER FINAL AMOUNT
   // ============================================================
+  //
+  // IMPORTANT:
+  // netSellerEarnings / sellerEarnings are Seller-side earnings.
+  // They must NEVER be used as the customer's payable amount.
+  //
+  // Customer amount:
+  //     Subtotal - Coupon Discount
+  //
+  // Delivery fee is handled separately by the main checkout/order
+  // total and is not changed here.
+  // ============================================================
 
   double _getCustomerOrderAmount(
     Map<String, dynamic> data,
@@ -204,25 +215,6 @@ class MyOrdersPage extends StatelessWidget {
       data['couponDiscount'] ??
           data['discount'],
     );
-
-    final storedNetSellingTotal = _number(
-      data['netSellingTotal'],
-    );
-
-    final storedNetSellerEarnings = _number(
-      data['netSellerEarnings'] ??
-          data['sellerEarnings'],
-    );
-
-    if (storedNetSellingTotal > 0) {
-      return storedNetSellingTotal;
-    }
-
-    // This field is only a compatibility fallback.
-    // It is not displayed as seller earnings.
-    if (storedNetSellerEarnings > 0) {
-      return storedNetSellerEarnings;
-    }
 
     final calculated = subtotal - couponDiscount;
 
@@ -1761,5 +1753,4 @@ class MyOrdersPage extends StatelessWidget {
     );
   }
 }
-
 
