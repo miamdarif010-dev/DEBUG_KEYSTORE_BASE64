@@ -1132,8 +1132,11 @@ class _SellerMembershipPaymentCardState
 
     final freeCampaign = _isFreeCampaignActive();
 
-    final displayedFee =
-        freeCampaign ? 0 : _sellerFee;
+    // FIX 1:
+    // Use 0.0 so Dart keeps this value as double
+    // instead of inferring num.
+    final double displayedFee =
+        freeCampaign ? 0.0 : _sellerFee;
 
     final confirmed =
         await _showPaymentConfirmation(
@@ -1480,8 +1483,10 @@ class _SellerMembershipPaymentCardState
     final freeCampaign =
         _isFreeCampaignActive();
 
-    final displayedFee =
-        freeCampaign ? 0 : _sellerFee;
+    // FIX 2:
+    // Use 0.0 so this value is explicitly a double.
+    final double displayedFee =
+        freeCampaign ? 0.0 : _sellerFee;
 
     return Container(
       margin: const EdgeInsets.only(
