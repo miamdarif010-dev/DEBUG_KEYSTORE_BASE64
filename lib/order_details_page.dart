@@ -19,8 +19,7 @@ class OrderDetailsPage extends StatefulWidget {
   });
 
   @override
-  State<OrderDetailsPage> createState() =>
-      _OrderDetailsPageState();
+  State<OrderDetailsPage> createState() => _OrderDetailsPageState();
 }
 
 class _OrderDetailsPageState extends State<OrderDetailsPage> {
@@ -115,7 +114,6 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
               : date.hour);
 
       final minute = date.minute.toString().padLeft(2, '0');
-
       final period = date.hour >= 12 ? 'PM' : 'AM';
 
       return '$day/$month/$year $hour:$minute $period';
@@ -185,8 +183,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
         vertical: 7,
       ),
       child: Row(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (icon != null) ...[
             Icon(
@@ -213,9 +210,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight:
-                    bold
-                        ? FontWeight.bold
-                        : FontWeight.w500,
+                    bold ? FontWeight.bold : FontWeight.w500,
               ),
             ),
           ),
@@ -230,8 +225,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
       height: 76,
       decoration: BoxDecoration(
         color: Colors.grey.shade200,
-        borderRadius:
-            BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Icon(
         Icons.image_outlined,
@@ -247,8 +241,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
     }
 
     return ClipRRect(
-      borderRadius:
-          BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(12),
       child: Image.network(
         imageUrl,
         width: 76,
@@ -276,82 +269,67 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                 '')
             .toString();
 
-    final quantity =
-        _int(item['quantity'] ?? 1);
+    final quantity = _int(
+      item['quantity'] ?? 1,
+    );
 
-    final price =
-        _number(item['price']);
+    final price = _number(
+      item['price'],
+    );
 
-    final itemTotal =
-        _number(item['total']);
+    final itemTotal = _number(
+      item['total'],
+    );
 
-    final calculatedTotal =
-        price * quantity;
+    final calculatedTotal = price * quantity;
 
     final total = itemTotal > 0
         ? itemTotal
         : calculatedTotal;
 
     return Card(
-      margin:
-          const EdgeInsets.only(
+      margin: const EdgeInsets.only(
         bottom: 10,
       ),
       elevation: 1,
-      shape:
-          RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.circular(14),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Padding(
-        padding:
-            const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(12),
         child: Row(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _productImage(imageUrl),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     name,
                     maxLines: 2,
-                    overflow:
-                        TextOverflow.ellipsis,
-                    style:
-                        const TextStyle(
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
                       fontSize: 15,
-                      fontWeight:
-                          FontWeight.bold,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(
-                    height: 6,
-                  ),
+                  const SizedBox(height: 6),
                   Text(
                     '৳${price.toStringAsFixed(0)} × $quantity',
                     style: TextStyle(
-                      color:
-                          Colors.grey.shade600,
+                      color: Colors.grey.shade600,
                       fontSize: 13,
                     ),
                   ),
-                  const SizedBox(
-                    height: 5,
-                  ),
+                  const SizedBox(height: 5),
                   Text(
                     '৳${total.toStringAsFixed(0)}',
-                    style:
-                        const TextStyle(
-                      color:
-                          Colors.redAccent,
+                    style: const TextStyle(
+                      color: Colors.redAccent,
                       fontSize: 15,
-                      fontWeight:
-                          FontWeight.bold,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ],
@@ -378,8 +356,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
             .toString();
 
     final productId =
-        (item['productId'] ?? '')
-            .toString();
+        (item['productId'] ?? '').toString();
 
     final imageUrl =
         (item['imageUrl'] ??
@@ -387,14 +364,17 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                 '')
             .toString();
 
-    final quantity =
-        _int(item['quantity'] ?? 1);
+    final quantity = _int(
+      item['quantity'] ?? 1,
+    );
 
-    final price =
-        _number(item['price']);
+    final price = _number(
+      item['price'],
+    );
 
-    final itemTotal =
-        _number(item['total']);
+    final itemTotal = _number(
+      item['total'],
+    );
 
     final total = itemTotal > 0
         ? itemTotal
@@ -408,24 +388,19 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
         productId.isNotEmpty;
 
     return Card(
-      margin:
-          const EdgeInsets.only(
+      margin: const EdgeInsets.only(
         bottom: 10,
       ),
       elevation: 1,
-      shape:
-          RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.circular(14),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Padding(
-        padding:
-            const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(12),
         child: Column(
           children: [
             Row(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _productImage(imageUrl),
                 const SizedBox(width: 12),
@@ -437,38 +412,27 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                       Text(
                         name,
                         maxLines: 2,
-                        overflow:
-                            TextOverflow.ellipsis,
-                        style:
-                            const TextStyle(
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
                           fontSize: 15,
-                          fontWeight:
-                              FontWeight.bold,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(
-                        height: 6,
-                      ),
+                      const SizedBox(height: 6),
                       Text(
                         '৳${price.toStringAsFixed(0)} × $quantity',
                         style: TextStyle(
-                          color:
-                              Colors.grey.shade600,
+                          color: Colors.grey.shade600,
                           fontSize: 13,
                         ),
                       ),
-                      const SizedBox(
-                        height: 5,
-                      ),
+                      const SizedBox(height: 5),
                       Text(
                         '৳${total.toStringAsFixed(0)}',
-                        style:
-                            const TextStyle(
-                          color:
-                              Colors.redAccent,
+                        style: const TextStyle(
+                          color: Colors.redAccent,
                           fontSize: 15,
-                          fontWeight:
-                              FontWeight.bold,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ],
@@ -479,73 +443,48 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
             if (canRequest) ...[
               const SizedBox(height: 12),
               SizedBox(
-                width:
-                    double.infinity,
-                child:
-                    OutlinedButton.icon(
+                width: double.infinity,
+                child: OutlinedButton.icon(
                   onPressed: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) =>
                             ReturnRefundRequestPage(
-                          orderId:
-                              widget.orderId,
-                          sellerOrderId:
-                              sellerOrderId,
-                          sellerId:
-                              sellerId,
-                          sellerCode:
-                              sellerCode,
+                          orderId: widget.orderId,
+                          sellerOrderId: sellerOrderId,
+                          sellerId: sellerId,
+                          sellerCode: sellerCode,
                           product: {
-                            'productId':
-                                productId,
-                            'productName':
-                                name,
-                            'imageUrl':
-                                imageUrl,
-                            'quantity':
-                                quantity,
-                            'price':
-                                price,
-                            'total':
-                                total,
+                            'productId': productId,
+                            'productName': name,
+                            'imageUrl': imageUrl,
+                            'quantity': quantity,
+                            'price': price,
+                            'total': total,
                           },
                         ),
                       ),
                     );
                   },
-                  icon:
-                      const Icon(
-                    Icons
-                        .assignment_return_outlined,
-                    color:
-                        Colors.redAccent,
+                  icon: const Icon(
+                    Icons.assignment_return_outlined,
+                    color: Colors.redAccent,
                   ),
-                  label:
-                      const Text(
+                  label: const Text(
                     'Return / Refund',
-                    style:
-                        TextStyle(
-                      color:
-                          Colors.redAccent,
-                      fontWeight:
-                          FontWeight.bold,
+                    style: TextStyle(
+                      color: Colors.redAccent,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                  style:
-                      OutlinedButton.styleFrom(
-                    side:
-                        const BorderSide(
-                      color:
-                          Colors.redAccent,
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(
+                      color: Colors.redAccent,
                     ),
-                    shape:
-                        RoundedRectangleBorder(
+                    shape: RoundedRectangleBorder(
                       borderRadius:
-                          BorderRadius.circular(
-                        12,
-                      ),
+                          BorderRadius.circular(12),
                     ),
                   ),
                 ),
@@ -558,8 +497,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
   }
 
   List<Map<String, dynamic>> _mainItems() {
-    final raw =
-        widget.orderData['items'];
+    final raw = widget.orderData['items'];
 
     if (raw is! List) {
       return [];
@@ -568,10 +506,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
     return raw
         .whereType<Map>()
         .map(
-          (item) =>
-              Map<String, dynamic>.from(
-            item,
-          ),
+          (item) => Map<String, dynamic>.from(item),
         )
         .toList();
   }
@@ -597,12 +532,10 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
       return;
     }
 
-    final data =
-        orderDoc.data();
+    final data = orderDoc.data();
 
     final customerId =
-        (data['customerId'] ?? '')
-            .toString();
+        (data['customerId'] ?? '').toString();
 
     if (customerId != user.uid) {
       _showMessage(
@@ -613,9 +546,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
     }
 
     final status =
-        (data['orderStatus'] ??
-                'placed')
-            .toString();
+        (data['orderStatus'] ?? 'placed').toString();
 
     if (!_canCancel(status)) {
       _showMessage(
@@ -625,16 +556,13 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
       return;
     }
 
-    final confirmed =
-        await showDialog<bool>(
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title:
-              const Text('Cancel Order?'),
+          title: const Text('Cancel Order?'),
           content: Text(
-            collectionName ==
-                    'reseller_orders'
+            collectionName == 'reseller_orders'
                 ? 'Are you sure you want to cancel this reseller order?'
                 : 'Are you sure you want to cancel this seller order?',
           ),
@@ -646,8 +574,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                   false,
                 );
               },
-              child:
-                  const Text('No'),
+              child: const Text('No'),
             ),
             ElevatedButton(
               onPressed: () {
@@ -656,17 +583,11 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                   true,
                 );
               },
-              style:
-                  ElevatedButton.styleFrom(
-                backgroundColor:
-                    Colors.red,
-                foregroundColor:
-                    Colors.white,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
               ),
-              child:
-                  const Text(
-                'Yes, Cancel',
-              ),
+              child: const Text('Yes, Cancel'),
             ),
           ],
         );
@@ -682,55 +603,40 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
     });
 
     try {
-      final ref =
-          FirebaseFirestore.instance
-              .collection(
-                collectionName,
-              )
-              .doc(orderDoc.id);
+      final ref = FirebaseFirestore.instance
+          .collection(collectionName)
+          .doc(orderDoc.id);
 
-      final latest =
-          await ref.get();
+      final latest = await ref.get();
 
       if (!latest.exists) {
-        throw Exception(
-          'Order not found.',
-        );
+        throw Exception('Order not found.');
       }
 
-      final latestData =
-          latest.data() ?? {};
+      final latestData = latest.data() ?? {};
 
       final latestCustomerId =
-          (latestData['customerId'] ??
-                  '')
-              .toString();
+          (latestData['customerId'] ?? '').toString();
 
-      if (latestCustomerId !=
-          user.uid) {
+      if (latestCustomerId != user.uid) {
         throw Exception(
           'You cannot cancel this order.',
         );
       }
 
       final latestStatus =
-          (latestData['orderStatus'] ??
-                  'placed')
+          (latestData['orderStatus'] ?? 'placed')
               .toString();
 
-      if (!_canCancel(
-        latestStatus,
-      )) {
+      if (!_canCancel(latestStatus)) {
         throw Exception(
           'This order can no longer be cancelled.',
         );
       }
 
       await ref.update({
-        'orderStatus':
-            'cancelled',
-        'cancelledBy':
-            'customer',
+        'orderStatus': 'cancelled',
+        'cancelledBy': 'customer',
         'cancelledAt':
             FieldValue.serverTimestamp(),
         'updatedAt':
@@ -742,8 +648,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
       }
 
       _showMessage(
-        collectionName ==
-                'reseller_orders'
+        collectionName == 'reseller_orders'
             ? 'Reseller order cancelled successfully.'
             : 'Order cancelled successfully.',
       );
@@ -754,14 +659,11 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
 
       String message;
 
-      if (e.code ==
-          'permission-denied') {
+      if (e.code == 'permission-denied') {
         message =
             'You do not have permission to cancel this order.';
-      } else if (e.code ==
-          'not-found') {
-        message =
-            'Order was not found.';
+      } else if (e.code == 'not-found') {
+        message = 'Order was not found.';
       } else {
         message =
             'Could not cancel order: ${e.message ?? e.code}';
@@ -797,16 +699,51 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
       return;
     }
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         backgroundColor:
-            error
-                ? Colors.red
-                : Colors.green,
-        behavior:
-            SnackBarBehavior.floating,
+            error ? Colors.red : Colors.green,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Widget _resellerDeliveryNotice() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(
+        top: 10,
+        bottom: 12,
+      ),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.blue.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.local_shipping_outlined,
+            color: Colors.blue,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'The Seller will deliver this order directly to you. '
+              'The Reseller does not receive or ship the product.',
+              style: TextStyle(
+                color: Colors.blue.shade800,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -817,8 +754,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
         orderDoc,
     required bool isResellerOrder,
   }) {
-    final data =
-        orderDoc.data();
+    final data = orderDoc.data();
 
     final sellerCode =
         (data['sellerCode'] ??
@@ -829,26 +765,18 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
             .toString();
 
     final sellerEmail =
-        (data['sellerEmail'] ??
-                '')
-            .toString();
+        (data['sellerEmail'] ?? '').toString();
 
     final sellerId =
-        (data['sellerId'] ?? '')
-            .toString();
+        (data['sellerId'] ?? '').toString();
 
     final entrepreneurUid =
-        (data['entrepreneurUid'] ??
-                '')
-            .toString();
+        (data['entrepreneurUid'] ?? '').toString();
 
     final status =
-        (data['orderStatus'] ??
-                'placed')
-            .toString();
+        (data['orderStatus'] ?? 'placed').toString();
 
-    final subtotal =
-        _number(
+    final subtotal = _number(
       isResellerOrder
           ? (data['sellingTotal'] ??
               data['subtotal'] ??
@@ -857,36 +785,38 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
               data['subtotal']),
     );
 
-    final rawItems =
-        data['items'];
+    final couponDiscount = _number(
+      data['couponDiscount'] ??
+          data['discount'],
+    );
 
-    final items =
-        rawItems is List
-            ? rawItems
-                .whereType<Map>()
-                .map(
-                  (item) =>
-                      Map<String, dynamic>.from(
-                    item,
-                  ),
-                )
-                .toList()
-            : <Map<String, dynamic>>[];
+    final customerAmount =
+        (subtotal - couponDiscount) < 0
+            ? 0
+            : (subtotal - couponDiscount);
+
+    final rawItems = data['items'];
+
+    final items = rawItems is List
+        ? rawItems
+            .whereType<Map>()
+            .map(
+              (item) =>
+                  Map<String, dynamic>.from(item),
+            )
+            .toList()
+        : <Map<String, dynamic>>[];
 
     return Card(
-      margin:
-          const EdgeInsets.only(
+      margin: const EdgeInsets.only(
         bottom: 14,
       ),
       elevation: 2,
-      shape:
-          RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.circular(14),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Padding(
-        padding:
-            const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment:
               CrossAxisAlignment.start,
@@ -895,14 +825,9 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
               crossAxisAlignment:
                   CrossAxisAlignment.start,
               children: [
-                Icon(
-                  isResellerOrder
-                      ? Icons
-                          .storefront_outlined
-                      : Icons
-                          .storefront_outlined,
-                  color:
-                      Colors.redAccent,
+                const Icon(
+                  Icons.storefront_outlined,
+                  color: Colors.redAccent,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -912,11 +837,9 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                     children: [
                       Text(
                         sellerCode,
-                        style:
-                            const TextStyle(
+                        style: const TextStyle(
                           fontSize: 16,
-                          fontWeight:
-                              FontWeight.bold,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                       if (sellerId.isNotEmpty)
@@ -927,18 +850,15 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                           ),
                           child: Text(
                             'Seller ID: $sellerId',
-                            style:
-                                TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
-                              color: Colors
-                                  .grey
-                                  .shade600,
+                              color:
+                                  Colors.grey.shade600,
                             ),
                           ),
                         ),
                       if (isResellerOrder &&
-                          entrepreneurUid
-                              .isNotEmpty)
+                          entrepreneurUid.isNotEmpty)
                         Padding(
                           padding:
                               const EdgeInsets.only(
@@ -946,12 +866,10 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                           ),
                           child: Text(
                             'Reseller ID: $entrepreneurUid',
-                            style:
-                                TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
-                              color: Colors
-                                  .grey
-                                  .shade600,
+                              color:
+                                  Colors.grey.shade600,
                             ),
                           ),
                         ),
@@ -967,26 +885,23 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
               _infoRow(
                 'Seller Email',
                 sellerEmail,
-                icon:
-                    Icons.email_outlined,
+                icon: Icons.email_outlined,
               ),
             ],
+
+            if (isResellerOrder)
+              _resellerDeliveryNotice(),
 
             const SizedBox(height: 12),
 
             if (items.isNotEmpty)
               ...items.map(
-                (item) =>
-                    _sellerProductCard(
+                (item) => _sellerProductCard(
                   item: item,
-                  sellerId:
-                      sellerId,
-                  sellerCode:
-                      sellerCode,
-                  sellerOrderId:
-                      orderDoc.id,
-                  sellerStatus:
-                      status,
+                  sellerId: sellerId,
+                  sellerCode: sellerCode,
+                  sellerOrderId: orderDoc.id,
+                  sellerStatus: status,
                   isResellerOrder:
                       isResellerOrder,
                 ),
@@ -1002,92 +917,72 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
               bold: true,
             ),
 
-            if (isResellerOrder) ...[
-              const SizedBox(height: 4),
+            if (couponDiscount > 0)
               _infoRow(
-                'Supplier Total',
-                '৳${_number(data['supplierTotal']).toStringAsFixed(0)}',
+                'Coupon Discount',
+                '-৳${couponDiscount.toStringAsFixed(0)}',
               ),
-              _infoRow(
-                'Reseller Profit',
-                '৳${_number(data['resellerProfit'] ?? data['profit']).toStringAsFixed(0)}',
-              ),
-            ],
+
+            _infoRow(
+              'Your Order Amount',
+              '৳${customerAmount.toStringAsFixed(0)}',
+              bold: true,
+            ),
 
             const SizedBox(height: 8),
 
             if (_canCancel(status))
               SizedBox(
-                width:
-                    double.infinity,
-                child:
-                    OutlinedButton.icon(
-                  onPressed:
-                      _isCancelling
-                          ? null
-                          : () =>
-                              _cancelOrder(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _isCancelling
+                      ? null
+                      : () => _cancelOrder(
                             collectionName:
                                 isResellerOrder
                                     ? 'reseller_orders'
                                     : 'seller_orders',
-                            orderDoc:
-                                orderDoc,
+                            orderDoc: orderDoc,
                           ),
-                  icon:
-                      const Icon(
-                    Icons
-                        .cancel_outlined,
+                  icon: const Icon(
+                    Icons.cancel_outlined,
                     color: Colors.red,
                   ),
-                  label:
-                      const Text(
+                  label: const Text(
                     'Cancel Order',
-                    style:
-                        TextStyle(
-                      color:
-                          Colors.red,
-                      fontWeight:
-                          FontWeight.bold,
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                  style:
-                      OutlinedButton.styleFrom(
-                    side:
-                        const BorderSide(
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(
                       color: Colors.red,
                     ),
                   ),
                 ),
               ),
 
-            if (status !=
-                'cancelled') ...[
+            if (status != 'cancelled') ...[
               const SizedBox(height: 8),
               SizedBox(
-                width:
-                    double.infinity,
-                child:
-                    OutlinedButton.icon(
+                width: double.infinity,
+                child: OutlinedButton.icon(
                   onPressed: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) =>
                             OrderTrackingPage(
-                          orderId:
-                              widget.orderId,
+                          orderId: widget.orderId,
                         ),
                       ),
                     );
                   },
-                  icon:
-                      const Icon(
-                    Icons
-                        .local_shipping_outlined,
+                  icon: const Icon(
+                    Icons.local_shipping_outlined,
                   ),
-                  label:
-                      const Text(
+                  label: const Text(
                     'Track This Order',
                   ),
                 ),
@@ -1100,46 +995,38 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
   }
 
   Widget _orderSummaryCard() {
-    final subtotal =
-        _number(
+    final subtotal = _number(
       widget.orderData['subtotal'],
     );
 
-    final deliveryFee =
-        _number(
+    final deliveryFee = _number(
       widget.orderData['deliveryFee'],
     );
 
-    final discount =
-        _number(
-      widget.orderData['discount'],
+    final discount = _number(
+      widget.orderData['discount'] ??
+          widget.orderData['couponDiscount'],
     );
 
-    final total =
-        _number(
+    final total = _number(
       widget.orderData['total'],
     );
 
-    final itemCount =
-        _int(
+    final itemCount = _int(
       widget.orderData['itemCount'],
     );
 
-    final totalQuantity =
-        _int(
+    final totalQuantity = _int(
       widget.orderData['totalQuantity'],
     );
 
     return Card(
       elevation: 2,
-      shape:
-          RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.circular(14),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Padding(
-        padding:
-            const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
           children: [
             _infoRow(
@@ -1163,9 +1050,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
               'Delivery Fee',
               '৳${deliveryFee.toStringAsFixed(0)}',
             ),
-            const Divider(
-              height: 20,
-            ),
+            const Divider(height: 20),
             _infoRow(
               'Total',
               '৳${total.toStringAsFixed(0)}',
@@ -1179,42 +1064,48 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
 
   Widget _deliveryCard() {
     final name =
-        (widget.orderData[
-                    'customerName'] ??
-                '')
+        (widget.orderData['customerName'] ?? '')
             .toString();
 
     final phone =
-        (widget.orderData['phone'] ??
+        (widget.orderData['customerPhone'] ??
+                widget.orderData['phone'] ??
+                '')
+            .toString();
+
+    final email =
+        (widget.orderData['customerEmail'] ??
+                widget.orderData['userEmail'] ??
                 '')
             .toString();
 
     final address =
-        (widget.orderData['address'] ??
-                '')
+        (widget.orderData['address'] ?? '')
             .toString();
 
     final city =
-        (widget.orderData['city'] ??
-                '')
+        (widget.orderData['city'] ?? '')
             .toString();
 
     final district =
-        (widget.orderData[
-                    'district'] ??
-                '')
+        (widget.orderData['district'] ?? '')
+            .toString();
+
+    final postalCode =
+        (widget.orderData['postalCode'] ?? '')
+            .toString();
+
+    final deliveryZone =
+        (widget.orderData['deliveryZone'] ?? '')
             .toString();
 
     return Card(
       elevation: 2,
-      shape:
-          RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.circular(14),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Padding(
-        padding:
-            const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
           children: [
             _infoRow(
@@ -1222,17 +1113,21 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
               name.isEmpty
                   ? 'Not available'
                   : name,
-              icon:
-                  Icons.person_outline,
+              icon: Icons.person_outline,
             ),
             _infoRow(
               'Phone',
               phone.isEmpty
                   ? 'Not available'
                   : phone,
-              icon:
-                  Icons.phone_outlined,
+              icon: Icons.phone_outlined,
             ),
+            if (email.isNotEmpty)
+              _infoRow(
+                'Email',
+                email,
+                icon: Icons.email_outlined,
+              ),
             _infoRow(
               'Address',
               address.isEmpty
@@ -1251,6 +1146,16 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                 'District',
                 district,
               ),
+            if (postalCode.isNotEmpty)
+              _infoRow(
+                'Postal Code',
+                postalCode,
+              ),
+            if (deliveryZone.isNotEmpty)
+              _infoRow(
+                'Delivery Zone',
+                deliveryZone,
+              ),
           ],
         ),
       ),
@@ -1259,40 +1164,32 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
 
   Widget _paymentCard() {
     final paymentMethod =
-        (widget.orderData[
-                    'paymentMethod'] ??
+        (widget.orderData['paymentMethod'] ??
                 'Not available')
             .toString();
 
     final paymentStatus =
-        (widget.orderData[
-                    'paymentStatus'] ??
+        (widget.orderData['paymentStatus'] ??
                 'pending')
             .toString();
 
     final currency =
-        (widget.orderData[
-                    'currency'] ??
-                'BDT')
+        (widget.orderData['currency'] ?? 'BDT')
             .toString();
 
     return Card(
       elevation: 2,
-      shape:
-          RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.circular(14),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Padding(
-        padding:
-            const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
           children: [
             _infoRow(
               'Payment Method',
               paymentMethod,
-              icon:
-                  Icons.payments_outlined,
+              icon: Icons.payments_outlined,
             ),
             _infoRow(
               'Payment Status',
@@ -1316,82 +1213,66 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
 
   Widget _mainOrderInfoCard() {
     final status =
-        (widget.orderData[
-                    'orderStatus'] ??
+        (widget.orderData['orderStatus'] ??
                 'placed')
             .toString();
 
-    final createdAt =
-        _formatDate(
+    final createdAt = _formatDate(
       widget.orderData['createdAt'],
     );
 
     final userEmail =
-        (widget.orderData[
-                    'userEmail'] ??
+        (widget.orderData['userEmail'] ??
+                widget.orderData['customerEmail'] ??
                 '')
             .toString();
 
     return Card(
       elevation: 2,
-      shape:
-          RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.circular(14),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Padding(
-        padding:
-            const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
           children: [
             Row(
               children: [
                 const Icon(
                   Icons.receipt_long_outlined,
-                  color:
-                      Colors.redAccent,
+                  color: Colors.redAccent,
                 ),
                 const SizedBox(width: 10),
                 const Expanded(
                   child: Text(
                     'Order Status',
-                    style:
-                        TextStyle(
-                      fontWeight:
-                          FontWeight.bold,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
                 _statusChip(status),
               ],
             ),
-
-            const Divider(
-              height: 24,
-            ),
-
+            const Divider(height: 24),
             _infoRow(
               'Order ID',
               '#${widget.orderId}',
               icon:
-                  Icons
-                      .confirmation_number_outlined,
+                  Icons.confirmation_number_outlined,
               bold: true,
             ),
-
             _infoRow(
               'Order Date',
               createdAt,
               icon:
                   Icons.calendar_today_outlined,
             ),
-
             if (userEmail.isNotEmpty)
               _infoRow(
                 'Customer Email',
                 userEmail,
-                icon:
-                    Icons.email_outlined,
+                icon: Icons.email_outlined,
               ),
           ],
         ),
@@ -1421,11 +1302,9 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
           (snapshot) {
             return snapshot.docs.where(
               (doc) {
-                final data =
-                    doc.data();
+                final data = doc.data();
 
-                return data['orderId']
-                        ?.toString() ==
+                return data['orderId']?.toString() ==
                     widget.orderId;
               },
             ).toList();
@@ -1434,37 +1313,29 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
-    final items =
-        _mainItems();
+  Widget build(BuildContext context) {
+    final items = _mainItems();
 
     final mainStatus =
-        (widget.orderData[
-                    'orderStatus'] ??
+        (widget.orderData['orderStatus'] ??
                 'placed')
             .toString();
 
     return Scaffold(
       appBar: AppBar(
-        title:
-            const Text('Order Details'),
+        title: const Text('Order Details'),
         centerTitle: true,
-        backgroundColor:
-            Colors.redAccent,
-        foregroundColor:
-            Colors.white,
+        backgroundColor: Colors.redAccent,
+        foregroundColor: Colors.white,
       ),
       body: StreamBuilder<
           List<QueryDocumentSnapshot<
-              Map<String, dynamic>>>>(
-        stream:
-            _sellerOrdersStream(
+              Map<String, dynamic>>>>
+          (
+        stream: _sellerOrdersStream(
           'seller_orders',
         ),
-        initialData:
-            widget.sellerOrders,
+        initialData: widget.sellerOrders,
         builder: (
           context,
           sellerSnapshot,
@@ -1477,8 +1348,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
               List<QueryDocumentSnapshot<
                   Map<String, dynamic>>>>
               (
-            stream:
-                _sellerOrdersStream(
+            stream: _sellerOrdersStream(
               'reseller_orders',
             ),
             builder: (
@@ -1486,34 +1356,26 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
               resellerSnapshot,
             ) {
               final resellerOrders =
-                  resellerSnapshot.data ??
-                      [];
+                  resellerSnapshot.data ?? [];
 
               return ListView(
                 padding:
-                    const EdgeInsets.all(
-                  16,
-                ),
+                    const EdgeInsets.all(16),
                 children: [
                   _mainOrderInfoCard(),
 
-                  const SizedBox(
-                    height: 20,
-                  ),
+                  const SizedBox(height: 20),
 
                   _sectionTitle(
                     'Products',
-                    Icons
-                        .shopping_bag_outlined,
+                    Icons.shopping_bag_outlined,
                   ),
 
                   if (items.isEmpty)
                     const Card(
                       child: Padding(
                         padding:
-                            EdgeInsets.all(
-                          20,
-                        ),
+                            EdgeInsets.all(20),
                         child: Text(
                           'No product information available.',
                           textAlign:
@@ -1522,102 +1384,71 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                       ),
                     )
                   else
-                    ...items.map(
-                      _productCard,
-                    ),
+                    ...items.map(_productCard),
 
-                  const SizedBox(
-                    height: 10,
-                  ),
+                  const SizedBox(height: 10),
 
                   _sectionTitle(
                     'Order Summary',
-                    Icons
-                        .calculate_outlined,
+                    Icons.calculate_outlined,
                   ),
 
                   _orderSummaryCard(),
 
-                  const SizedBox(
-                    height: 20,
-                  ),
+                  const SizedBox(height: 20),
 
                   _sectionTitle(
                     'Delivery Information',
-                    Icons
-                        .local_shipping_outlined,
+                    Icons.local_shipping_outlined,
                   ),
 
                   _deliveryCard(),
 
-                  const SizedBox(
-                    height: 20,
-                  ),
+                  const SizedBox(height: 20),
 
                   _sectionTitle(
                     'Payment',
-                    Icons
-                        .payments_outlined,
+                    Icons.payments_outlined,
                   ),
 
                   _paymentCard(),
 
-                  const SizedBox(
-                    height: 20,
-                  ),
+                  const SizedBox(height: 20),
 
-                  if (sellerOrders
-                      .isNotEmpty) ...[
+                  if (sellerOrders.isNotEmpty) ...[
                     _sectionTitle(
                       'Seller Orders',
-                      Icons
-                          .storefront_outlined,
+                      Icons.storefront_outlined,
                     ),
-
                     ...sellerOrders.map(
-                      (doc) =>
-                          _orderCard(
+                      (doc) => _orderCard(
                         orderDoc: doc,
-                        isResellerOrder:
-                            false,
+                        isResellerOrder: false,
                       ),
                     ),
                   ],
 
-                  if (resellerOrders
-                      .isNotEmpty) ...[
-                    const SizedBox(
-                      height: 10,
-                    ),
-
+                  if (resellerOrders.isNotEmpty) ...[
+                    const SizedBox(height: 10),
                     _sectionTitle(
                       'Reseller Store Orders',
-                      Icons
-                          .storefront_outlined,
+                      Icons.storefront_outlined,
                     ),
-
                     ...resellerOrders.map(
-                      (doc) =>
-                          _orderCard(
+                      (doc) => _orderCard(
                         orderDoc: doc,
-                        isResellerOrder:
-                            true,
+                        isResellerOrder: true,
                       ),
                     ),
                   ],
 
-                  const SizedBox(
-                    height: 10,
-                  ),
+                  const SizedBox(height: 10),
 
-                  if (mainStatus !=
-                      'cancelled') ...[
+                  if (mainStatus != 'cancelled')
                     SizedBox(
-                      width:
-                          double.infinity,
+                      width: double.infinity,
                       height: 52,
-                      child:
-                          ElevatedButton.icon(
+                      child: ElevatedButton.icon(
                         onPressed: () {
                           Navigator.push(
                             context,
@@ -1630,29 +1461,21 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                             ),
                           );
                         },
-                        icon:
-                            const Icon(
-                          Icons
-                              .local_shipping_outlined,
+                        icon: const Icon(
+                          Icons.local_shipping_outlined,
                         ),
-                        label:
-                            const Text(
+                        label: const Text(
                           'Track Order',
-                          style:
-                              TextStyle(
-                            fontSize:
-                                16,
+                          style: TextStyle(
+                            fontSize: 16,
                             fontWeight:
                                 FontWeight.bold,
                           ),
                         ),
                       ),
                     ),
-                  ],
 
-                  const SizedBox(
-                    height: 30,
-                  ),
+                  const SizedBox(height: 30),
                 ],
               );
             },
