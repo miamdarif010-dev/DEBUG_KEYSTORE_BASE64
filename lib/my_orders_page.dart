@@ -618,103 +618,6 @@ class MyOrdersPage extends StatelessWidget {
   }
 
   // ============================================================
-  // CUSTOMER FINANCIAL SUMMARY
-  // ============================================================
-
-  Widget _buildFinancialSummary(
-    Map<String, dynamic> data, {
-    required bool isResellerOrder,
-    required double subtotal,
-  }) {
-    final couponDiscount = _number(
-      data['couponDiscount'] ??
-          data['discount'],
-    );
-
-    if (couponDiscount <= 0) {
-      return const SizedBox.shrink();
-    }
-
-    final finalAmount =
-        _getCustomerOrderAmount(
-      data,
-      subtotal,
-    );
-
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(top: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          _financialRow(
-            'Subtotal',
-            subtotal,
-          ),
-          _financialRow(
-            'Coupon Discount',
-            couponDiscount,
-            valueColor: Colors.green,
-            negative: true,
-          ),
-          const Divider(height: 14),
-          _financialRow(
-            'Order Amount',
-            finalAmount,
-            valueColor: Colors.redAccent,
-            bold: true,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _financialRow(
-    String title,
-    double value, {
-    Color? valueColor,
-    bool negative = false,
-    bool bold = false,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(
-        bottom: 6,
-      ),
-      child: Row(
-        mainAxisAlignment:
-            MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              color: Colors.grey.shade700,
-              fontSize: 13,
-              fontWeight:
-                  bold ? FontWeight.bold : null,
-            ),
-          ),
-          Text(
-            '${negative ? '- ' : ''}'
-            '৳${value.abs().toStringAsFixed(2)}',
-            style: TextStyle(
-              color: valueColor,
-              fontWeight:
-                  bold
-                      ? FontWeight.bold
-                      : FontWeight.w600,
-              fontSize: 13,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ============================================================
   // CANCEL ERROR
   // ============================================================
 
@@ -1753,4 +1656,3 @@ class MyOrdersPage extends StatelessWidget {
     );
   }
 }
-
