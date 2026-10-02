@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -191,6 +192,121 @@ class SellerPage extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  // =========================================================
+  // MEMBERSHIP FEE CARD
+  // =========================================================
+
+  Widget _membershipCard({
+    required BuildContext context,
+    required String sellerStatus,
+    required Map<String, dynamic> userData,
+  }) {
+    final normalizedStatus = sellerStatus.toLowerCase();
+
+    // Already approved.
+    if (normalizedStatus == 'approved') {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.green.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: Colors.green.withValues(alpha: 0.25),
+          ),
+        ),
+        child: const Row(
+          children: [
+            Icon(
+              Icons.verified,
+              color: Colors.green,
+              size: 30,
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Seller Membership Active',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Your Seller membership is already approved.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Payment/request is already pending.
+    if (normalizedStatus == 'pending') {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.orange.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: Colors.orange.withValues(alpha: 0.25),
+          ),
+        ),
+        child: const Row(
+          children: [
+            Icon(
+              Icons.hourglass_top,
+              color: Colors.orange,
+              size: 30,
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Seller Request Pending',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Your Seller registration request is waiting for Admin approval.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return _SellerMembershipPaymentCard(
+      sellerStatus: sellerStatus,
+      userData: userData,
     );
   }
 
@@ -654,6 +770,19 @@ class SellerPage extends StatelessWidget {
                       ),
                     ),
 
+                    // =================================================
+                    // MEMBERSHIP PAYMENT
+                    // =================================================
+
+                    if (!isApproved) ...[
+                      const SizedBox(height: 16),
+                      _membershipCard(
+                        context: context,
+                        sellerStatus: sellerStatus,
+                        userData: userData,
+                      ),
+                    ],
+
                     const SizedBox(height: 24),
 
                     // =================================================
@@ -690,7 +819,6 @@ class SellerPage extends StatelessWidget {
                             _openMyProducts(context);
                           },
                         ),
-
                         _statCard(
                           context: context,
                           title: 'Stock',
@@ -702,7 +830,6 @@ class SellerPage extends StatelessWidget {
                             _openSellerStock(context);
                           },
                         ),
-
                         _statCard(
                           context: context,
                           title: 'Sales',
@@ -714,7 +841,6 @@ class SellerPage extends StatelessWidget {
                             _openSellerOrders(context);
                           },
                         ),
-
                         _statCard(
                           context: context,
                           title: 'Views',
@@ -827,6 +953,816 @@ class SellerPage extends StatelessWidget {
             },
           );
         },
+      ),
+    );
+  }
+}
+
+// =====================================================================
+// SELLER MEMBERSHIP PAYMENT CARD
+// =====================================================================
+
+class _SellerMembershipPaymentCard extends StatefulWidget {
+  final String sellerStatus;
+  final Map<String, dynamic> userData;
+
+  const _SellerMembershipPaymentCard({
+    required this.sellerStatus,
+    required this.userData,
+  });
+
+  @override
+  State<_SellerMembershipPaymentCard> createState() =>
+      _SellerMembershipPaymentCardState();
+}
+
+class _SellerMembershipPaymentCardState
+    extends State<_SellerMembershipPaymentCard> {
+  final FirebaseFirestore _db =
+      FirebaseFirestore.instance;
+
+  bool _processing = false;
+
+  double _sellerFee = 1000;
+  bool _freeCampaignEnabled = false;
+  DateTime? _campaignStart;
+  DateTime? _campaignEnd;
+
+  // =========================================================
+  // LOAD MONETIZATION SETTINGS
+  // =========================================================
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    try {
+      final snapshot = await _db
+          .collection('platformSettings')
+          .doc('monetization')
+          .get();
+
+      if (!mounted) return;
+
+      final data = snapshot.data();
+
+      if (data == null) {
+        return;
+      }
+
+      setState(() {
+        _sellerFee =
+            _toDouble(data['sellerMembershipFee']) ??
+                1000;
+
+        _freeCampaignEnabled =
+            data['freeCampaignEnabled'] == true;
+
+        _campaignStart =
+            _toDateTime(data['freeCampaignStart']);
+
+        _campaignEnd =
+            _toDateTime(data['freeCampaignEnd']);
+      });
+    } catch (_) {
+      // Keep safe default values if settings cannot load.
+    }
+  }
+
+  // =========================================================
+  // HELPERS
+  // =========================================================
+
+  double? _toDouble(dynamic value) {
+    if (value is num) {
+      return value.toDouble();
+    }
+
+    return double.tryParse(
+      value?.toString() ?? '',
+    );
+  }
+
+  DateTime? _toDateTime(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate();
+    }
+
+    if (value is DateTime) {
+      return value;
+    }
+
+    return null;
+  }
+
+  bool _isFreeCampaignActive() {
+    if (!_freeCampaignEnabled) {
+      return false;
+    }
+
+    final now = DateTime.now();
+
+    if (_campaignStart != null &&
+        now.isBefore(_campaignStart!)) {
+      return false;
+    }
+
+    if (_campaignEnd != null &&
+        now.isAfter(_campaignEnd!)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  String _formatMoney(double amount) {
+    if (amount == amount.roundToDouble()) {
+      return '৳${amount.toStringAsFixed(0)}';
+    }
+
+    return '৳${amount.toStringAsFixed(2)}';
+  }
+
+  String _formatDate(DateTime? date) {
+    if (date == null) {
+      return 'Not set';
+    }
+
+    final day =
+        date.day.toString().padLeft(2, '0');
+    final month =
+        date.month.toString().padLeft(2, '0');
+    final year =
+        date.year.toString();
+
+    return '$day/$month/$year';
+  }
+
+  // =========================================================
+  // PAY MEMBERSHIP
+  // =========================================================
+
+  Future<void> _payMembership() async {
+    if (_processing) {
+      return;
+    }
+
+    final user =
+        FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      _showMessage(
+        'Please login first.',
+        isError: true,
+      );
+      return;
+    }
+
+    if (widget.sellerStatus.toLowerCase() ==
+        'approved') {
+      _showMessage(
+        'Your Seller membership is already approved.',
+        isError: true,
+      );
+      return;
+    }
+
+    final freeCampaign = _isFreeCampaignActive();
+
+    final displayedFee =
+        freeCampaign ? 0 : _sellerFee;
+
+    final confirmed =
+        await _showPaymentConfirmation(
+      displayedFee,
+      freeCampaign,
+    );
+
+    if (!confirmed || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _processing = true;
+    });
+
+    try {
+      final functions =
+          FirebaseFunctions.instanceFor(
+        region: 'asia-northeast3',
+      );
+
+      final callable = functions.httpsCallable(
+        'payMembershipRegistrationFee',
+      );
+
+      // IMPORTANT:
+      // The Cloud Function decides the actual fee from
+      // platformSettings/monetization.
+      //
+      // We send only the role.
+      final result = await callable.call({
+        'role': 'seller',
+      });
+
+      if (!mounted) return;
+
+      final raw =
+          result.data is Map
+              ? Map<String, dynamic>.from(
+                  result.data as Map,
+                )
+              : <String, dynamic>{};
+
+      final success =
+          raw['success'] == true;
+
+      final free =
+          raw['freeCampaign'] == true;
+
+      final amount =
+          _toDouble(raw['amount']) ?? 0;
+
+      final newBalance =
+          _toDouble(raw['newBalance']);
+
+      if (success) {
+        String message;
+
+        if (free || amount <= 0) {
+          message =
+              'Free Seller membership request submitted successfully.';
+        } else if (newBalance != null) {
+          message =
+              'Seller membership payment successful.\n'
+              'Paid: ${_formatMoney(amount)}\n'
+              'Wallet balance: ${_formatMoney(newBalance)}';
+        } else {
+          message =
+              'Seller membership payment successful.';
+        }
+
+        _showSuccessDialog(message);
+      } else {
+        _showMessage(
+          'Membership payment could not be completed.',
+          isError: true,
+        );
+      }
+    } on FirebaseFunctionsException catch (e) {
+      if (!mounted) return;
+
+      String message =
+          e.message ??
+          'Membership payment failed.';
+
+      switch (e.code) {
+        case 'failed-precondition':
+          message =
+              e.message ??
+              'Your Seller membership request cannot be processed right now.';
+          break;
+
+        case 'permission-denied':
+          message =
+              e.message ??
+              'You do not have permission to complete this payment.';
+          break;
+
+        case 'unauthenticated':
+          message =
+              'Please login again and try.';
+          break;
+
+        case 'resource-exhausted':
+          message =
+              e.message ??
+              'Your wallet balance is not enough.';
+          break;
+
+        case 'invalid-argument':
+          message =
+              e.message ??
+              'Invalid membership request.';
+          break;
+      }
+
+      _showMessage(
+        message,
+        isError: true,
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      _showMessage(
+        'Something went wrong.\n$e',
+        isError: true,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _processing = false;
+        });
+      }
+    }
+  }
+
+  // =========================================================
+  // CONFIRMATION DIALOG
+  // =========================================================
+
+  Future<bool> _showPaymentConfirmation(
+    double displayedFee,
+    bool freeCampaign,
+  ) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text(
+            'Seller Membership',
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
+            children: [
+              if (freeCampaign) ...[
+                Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green
+                        .withValues(alpha: 0.08),
+                    borderRadius:
+                        BorderRadius.circular(12),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(
+                        Icons.local_offer,
+                        color: Colors.green,
+                      ),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Free membership campaign is active.',
+                          style: TextStyle(
+                            fontWeight:
+                                FontWeight.w600,
+                            color: Colors.green,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
+              const Text(
+                'Seller Membership Fee',
+                style: TextStyle(
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                freeCampaign
+                    ? 'FREE'
+                    : _formatMoney(
+                        displayedFee,
+                      ),
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight:
+                      FontWeight.bold,
+                  color: freeCampaign
+                      ? Colors.green
+                      : Colors.redAccent,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                freeCampaign
+                    ? 'Your Seller registration request will be submitted without a membership fee.'
+                    : 'The membership fee will be deducted from your BuyNova Wallet.',
+                style: TextStyle(
+                  color:
+                      Colors.grey.shade700,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(
+                  dialogContext,
+                  false,
+                );
+              },
+              child: const Text(
+                'Cancel',
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor:
+                    Colors.redAccent,
+                foregroundColor:
+                    Colors.white,
+              ),
+              onPressed: () {
+                Navigator.pop(
+                  dialogContext,
+                  true,
+                );
+              },
+              child: Text(
+                freeCampaign
+                    ? 'Continue'
+                    : 'Pay & Apply',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    return result == true;
+  }
+
+  // =========================================================
+  // SUCCESS DIALOG
+  // =========================================================
+
+  void _showSuccessDialog(String message) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          icon: const Icon(
+            Icons.check_circle,
+            color: Colors.green,
+            size: 52,
+          ),
+          title: const Text(
+            'Request Submitted',
+          ),
+          content: Text(
+            message,
+            textAlign: TextAlign.center,
+          ),
+          actions: [
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style:
+                    ElevatedButton.styleFrom(
+                  backgroundColor:
+                      Colors.redAccent,
+                  foregroundColor:
+                      Colors.white,
+                ),
+                onPressed: () {
+                  Navigator.pop(
+                    dialogContext,
+                  );
+                },
+                child: const Text(
+                  'Done',
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // =========================================================
+  // MESSAGE
+  // =========================================================
+
+  void _showMessage(
+    String message, {
+    bool isError = false,
+  }) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          backgroundColor:
+              isError
+                  ? Colors.red.shade700
+                  : Colors.green.shade700,
+          content: Text(message),
+          behavior:
+              SnackBarBehavior.floating,
+        ),
+      );
+  }
+
+  // =========================================================
+  // BUILD
+  // =========================================================
+
+  @override
+  Widget build(BuildContext context) {
+    final freeCampaign =
+        _isFreeCampaignActive();
+
+    final displayedFee =
+        freeCampaign ? 0 : _sellerFee;
+
+    return Container(
+      margin: const EdgeInsets.only(
+        bottom: 10,
+      ),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius:
+            BorderRadius.circular(18),
+        border: Border.all(
+          color: Colors.redAccent
+              .withValues(alpha: 0.18),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black
+                .withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: Colors.redAccent
+                      .withValues(alpha: 0.10),
+                  borderRadius:
+                      BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.storefront_outlined,
+                  color: Colors.redAccent,
+                  size: 27,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Become a Seller',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight:
+                            FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Register your BuyNova Seller membership.',
+                      style: TextStyle(
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 18),
+
+          // =====================================================
+          // FEE
+          // =====================================================
+
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: freeCampaign
+                  ? Colors.green
+                      .withValues(alpha: 0.08)
+                  : Colors.redAccent
+                      .withValues(alpha: 0.06),
+              borderRadius:
+                  BorderRadius.circular(14),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.payments_outlined,
+                  color: Colors.redAccent,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Membership Fee',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        freeCampaign
+                            ? 'FREE'
+                            : _formatMoney(
+                                displayedFee,
+                              ),
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight:
+                              FontWeight.bold,
+                          color: freeCampaign
+                              ? Colors.green
+                              : Colors.redAccent,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (freeCampaign)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.green,
+                      borderRadius:
+                          BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      'FREE',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight:
+                            FontWeight.bold,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          // =====================================================
+          // CAMPAIGN INFO
+          // =====================================================
+
+          if (_freeCampaignEnabled)
+            Container(
+              width: double.infinity,
+              padding:
+                  const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue
+                    .withValues(alpha: 0.06),
+                borderRadius:
+                    BorderRadius.circular(12),
+              ),
+              child: Row(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.info_outline,
+                    color: Colors.blue,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      freeCampaign
+                          ? 'Free membership campaign is active now.'
+                          : 'Free membership campaign is not active right now.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color:
+                            Colors.grey.shade700,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          if (_freeCampaignEnabled)
+            const SizedBox(height: 10),
+
+          // =====================================================
+          // PAYMENT BUTTON
+          // =====================================================
+
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor:
+                    Colors.redAccent,
+                foregroundColor:
+                    Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(
+                  vertical: 14,
+                ),
+                shape:
+                    RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius.circular(12),
+                ),
+              ),
+              onPressed:
+                  _processing
+                      ? null
+                      : _payMembership,
+              icon: _processing
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child:
+                          CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Icon(
+                      freeCampaign
+                          ? Icons
+                              .how_to_reg_outlined
+                          : Icons
+                              .account_balance_wallet_outlined,
+                    ),
+              label: Text(
+                _processing
+                    ? 'Processing...'
+                    : freeCampaign
+                        ? 'Apply as Seller'
+                        : 'Pay & Apply as Seller',
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          Text(
+            freeCampaign
+                ? 'Your request will be processed through BuyNova.'
+                : 'Payment is securely processed through your BuyNova Wallet.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey.shade600,
+            ),
+          ),
+
+          if (_campaignStart != null ||
+              _campaignEnd != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Campaign: ${_formatDate(_campaignStart)}'
+              ' → '
+              '${_formatDate(_campaignEnd)}',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
