@@ -68,10 +68,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
   static const String _functionsRegion = 'asia-northeast3';
 
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _couponController = TextEditingController();
+  final TextEditingController _couponController =
+      TextEditingController();
 
-  // Must match CouponPage.
-  static const String _pendingCouponKey = 'buynova_pending_coupon';
+  static const String _pendingCouponKey =
+      'buynova_pending_coupon';
 
   String _paymentMethod = 'Cash on Delivery';
 
@@ -88,7 +89,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
   Map<String, dynamic>? _selectedAddress;
 
   FirebaseFunctions get _functions =>
-      FirebaseFunctions.instanceFor(region: _functionsRegion);
+      FirebaseFunctions.instanceFor(
+        region: _functionsRegion,
+      );
 
   // ============================================================
   // DELIVERY
@@ -111,12 +114,13 @@ class _CheckoutPageState extends State<CheckoutPage> {
     if (zone == 'inside_dhaka') return true;
     if (zone == 'outside_dhaka') return false;
 
-    // Fallback for older addresses that may not have deliveryZone.
     final text =
-        '${address['city'] ?? ''} ${address['district'] ?? ''}'
+        '${address['city'] ?? ''} '
+        '${address['district'] ?? ''}'
             .toLowerCase();
 
-    return text.contains('dhaka') || text.contains('ঢাকা');
+    return text.contains('dhaka') ||
+        text.contains('ঢাকা');
   }
 
   double get _deliveryFee {
@@ -135,9 +139,75 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   double get grandTotal {
-    final value = subtotal + _deliveryFee - _discount;
+    final value =
+        subtotal + _deliveryFee - _discount;
 
     return value < 0 ? 0 : value;
+  }
+
+  // ============================================================
+  // COUPON ALLOCATION
+  // ============================================================
+  //
+  // BuyNova does NOT pay the coupon discount.
+  //
+  // The discount is allocated across the Seller/Reseller
+  // portions of the order according to their merchandise
+  // subtotal.
+  //
+  // Example:
+  //
+  // Seller A products = ৳600
+  // Reseller products = ৳400
+  // Coupon = ৳100
+  //
+  // Seller A gets ৳60 discount allocation.
+  // Reseller gets ৳40 discount allocation.
+  //
+  // The actual Seller/Reseller earnings are then reduced
+  // by their allocated coupon discount.
+  // ============================================================
+
+  double _roundMoney(double value) {
+    return double.parse(
+      value.toStringAsFixed(2),
+    );
+  }
+
+  double _discountForGroup({
+    required double groupSubtotal,
+    required double remainingDiscount,
+    required int groupIndex,
+    required int totalGroups,
+  }) {
+    if (_discount <= 0 ||
+        subtotal <= 0 ||
+        groupSubtotal <= 0) {
+      return 0;
+    }
+
+    // Last group receives the exact remaining amount.
+    // This prevents rounding from creating a mismatch.
+    if (groupIndex == totalGroups - 1) {
+      return _roundMoney(
+        remainingDiscount.clamp(
+          0,
+          _discount,
+        ),
+      );
+    }
+
+    final proportional =
+        _discount *
+        (groupSubtotal / subtotal);
+
+    final rounded =
+        _roundMoney(proportional);
+
+    return rounded.clamp(
+      0,
+      remainingDiscount,
+    );
   }
 
   // ============================================================
@@ -165,24 +235,29 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   Future<void> _loadSavedCoupon() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs =
+          await SharedPreferences.getInstance();
 
-      final savedCode = prefs.getString(_pendingCouponKey);
+      final savedCode =
+          prefs.getString(_pendingCouponKey);
 
-      if (savedCode == null || savedCode.trim().isEmpty) {
+      if (savedCode == null ||
+          savedCode.trim().isEmpty) {
         return;
       }
 
-      // Consume the pending coupon once.
       await prefs.remove(_pendingCouponKey);
 
       if (!mounted) return;
 
       setState(() {
-        _couponController.text = savedCode.trim().toUpperCase();
+        _couponController.text =
+            savedCode.trim().toUpperCase();
       });
 
-      await _checkCoupon(showMessage: true);
+      await _checkCoupon(
+        showMessage: true,
+      );
     } catch (_) {
       // Coupon loading is optional.
     }
@@ -209,23 +284,35 @@ class _CheckoutPageState extends State<CheckoutPage> {
       }
 
       final result =
-          await _functions.httpsCallable('getWalletBalance').call();
+          await _functions
+              .httpsCallable(
+                'getWalletBalance',
+              )
+              .call();
 
       if (result.data is! Map) {
-        throw Exception('Invalid wallet response.');
+        throw Exception(
+          'Invalid wallet response.',
+        );
       }
 
-      final data = Map<String, dynamic>.from(
+      final data =
+          Map<String, dynamic>.from(
         result.data as Map,
       );
 
       final dynamic balanceValue =
-          data['balance'] ?? data['cashBalance'] ?? 0;
+          data['balance'] ??
+          data['cashBalance'] ??
+          0;
 
       final double balance =
           balanceValue is num
               ? balanceValue.toDouble()
-              : double.tryParse(balanceValue.toString()) ?? 0;
+              : double.tryParse(
+                    balanceValue.toString(),
+                  ) ??
+                  0;
 
       if (!mounted) return;
 
@@ -233,7 +320,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
         _walletBalance = balance;
       });
     } catch (e) {
-      debugPrint('Wallet balance error: $e');
+      debugPrint(
+        'Wallet balance error: $e',
+      );
 
       if (!mounted) return;
 
@@ -268,12 +357,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
           .doc(user.uid)
           .collection('addresses');
 
-      // --------------------------------------------------------
-      // 1. Try default address.
-      // --------------------------------------------------------
-
       final defaultSnapshot = await addressesRef
-          .where('isDefault', isEqualTo: true)
+          .where(
+            'isDefault',
+            isEqualTo: true,
+          )
           .limit(1)
           .get();
 
@@ -281,49 +369,49 @@ class _CheckoutPageState extends State<CheckoutPage> {
         if (!mounted) return;
 
         setState(() {
-          _selectedAddress = defaultSnapshot.docs.first.data();
+          _selectedAddress =
+              defaultSnapshot.docs.first.data();
         });
 
         return;
       }
 
-      // --------------------------------------------------------
-      // 2. If no default, use first available address.
-      // --------------------------------------------------------
-
-      final anySnapshot = await addressesRef.limit(1).get();
+      final anySnapshot =
+          await addressesRef.limit(1).get();
 
       if (anySnapshot.docs.isNotEmpty) {
         if (!mounted) return;
 
         setState(() {
-          _selectedAddress = anySnapshot.docs.first.data();
+          _selectedAddress =
+              anySnapshot.docs.first.data();
         });
 
         return;
       }
-
-      // --------------------------------------------------------
-      // 3. Legacy address stored directly in user document.
-      // --------------------------------------------------------
 
       final userDoc = await _firestore
           .collection('users')
           .doc(user.uid)
           .get();
 
-      final address = userDoc.data()?['address'];
+      final address =
+          userDoc.data()?['address'];
 
       if (address is Map) {
         if (!mounted) return;
 
         setState(() {
           _selectedAddress =
-              Map<String, dynamic>.from(address);
+              Map<String, dynamic>.from(
+            address,
+          );
         });
       }
     } catch (e) {
-      debugPrint('Load address error: $e');
+      debugPrint(
+        'Load address error: $e',
+      );
     }
   }
 
@@ -331,7 +419,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => const AddressBookPage(),
+        builder: (_) =>
+            const AddressBookPage(),
       ),
     );
 
@@ -356,7 +445,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return 0;
   }
 
-  DateTime? _couponExpiry(dynamic value) {
+  DateTime? _couponExpiry(
+    dynamic value,
+  ) {
     if (value is Timestamp) {
       return value.toDate();
     }
@@ -372,7 +463,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return null;
   }
 
-  void _resetCoupon(String? message) {
+  void _resetCoupon(
+    String? message,
+  ) {
     if (!mounted) return;
 
     setState(() {
@@ -389,11 +482,16 @@ class _CheckoutPageState extends State<CheckoutPage> {
   Future<bool> _checkCoupon({
     bool showMessage = true,
   }) async {
-    final code = _couponController.text.trim().toUpperCase();
+    final code =
+        _couponController.text
+            .trim()
+            .toUpperCase();
 
     if (code.isEmpty) {
       if (showMessage) {
-        _resetCoupon('Please enter a coupon code.');
+        _resetCoupon(
+          'Please enter a coupon code.',
+        );
       }
 
       return false;
@@ -412,49 +510,54 @@ class _CheckoutPageState extends State<CheckoutPage> {
     try {
       final snapshot = await _firestore
           .collection('coupons')
-          .where('code', isEqualTo: code)
+          .where(
+            'code',
+            isEqualTo: code,
+          )
           .limit(1)
           .get();
 
       if (snapshot.docs.isEmpty) {
-        _resetCoupon('Invalid coupon code.');
+        _resetCoupon(
+          'Invalid coupon code.',
+        );
         return false;
       }
 
-      final data = snapshot.docs.first.data();
-
-      // --------------------------------------------------------
-      // Active check.
-      // --------------------------------------------------------
+      final data =
+          snapshot.docs.first.data();
 
       if (data['isActive'] != true) {
-        _resetCoupon('This coupon is not active.');
+        _resetCoupon(
+          'This coupon is not active.',
+        );
         return false;
       }
 
-      // --------------------------------------------------------
-      // Expiry check.
-      // --------------------------------------------------------
-
-      final expiresAt = _couponExpiry(
+      final expiresAt =
+          _couponExpiry(
         data['expiresAt'],
       );
 
       if (expiresAt != null &&
-          expiresAt.isBefore(DateTime.now())) {
-        _resetCoupon('This coupon has expired.');
+          expiresAt.isBefore(
+            DateTime.now(),
+          )) {
+        _resetCoupon(
+          'This coupon has expired.',
+        );
         return false;
       }
 
-      // --------------------------------------------------------
-      // Usage limit check.
-      // --------------------------------------------------------
-
       final double usageLimit =
-          _toDouble(data['usageLimit']);
+          _toDouble(
+        data['usageLimit'],
+      );
 
       final double usedCount =
-          _toDouble(data['usedCount']);
+          _toDouble(
+        data['usedCount'],
+      );
 
       if (usageLimit > 0 &&
           usedCount >= usageLimit) {
@@ -465,28 +568,27 @@ class _CheckoutPageState extends State<CheckoutPage> {
         return false;
       }
 
-      // --------------------------------------------------------
-      // Discount configuration.
-      // --------------------------------------------------------
-
       final String discountType =
-          (data['discountType'] ?? 'fixed')
+          (data['discountType'] ??
+                  'fixed')
               .toString()
               .toLowerCase()
               .trim();
 
       final double discountValue =
-          _toDouble(data['discountValue']);
+          _toDouble(
+        data['discountValue'],
+      );
 
       final double minimumOrder =
-          _toDouble(data['minimumOrder']);
+          _toDouble(
+        data['minimumOrder'],
+      );
 
       final double maximumDiscount =
-          _toDouble(data['maximumDiscount']);
-
-      // --------------------------------------------------------
-      // Minimum order.
-      // --------------------------------------------------------
+          _toDouble(
+        data['maximumDiscount'],
+      );
 
       if (minimumOrder > 0 &&
           subtotal < minimumOrder) {
@@ -498,47 +600,60 @@ class _CheckoutPageState extends State<CheckoutPage> {
         return false;
       }
 
-      // --------------------------------------------------------
-      // Calculate discount.
-      // --------------------------------------------------------
-
       double calculatedDiscount;
 
-      if (discountType == 'percentage') {
+      if (discountType ==
+          'percentage') {
         calculatedDiscount =
-            subtotal * discountValue / 100;
+            subtotal *
+            discountValue /
+            100;
 
         if (maximumDiscount > 0 &&
-            calculatedDiscount > maximumDiscount) {
-          calculatedDiscount = maximumDiscount;
+            calculatedDiscount >
+                maximumDiscount) {
+          calculatedDiscount =
+              maximumDiscount;
         }
       } else {
-        calculatedDiscount = discountValue;
+        calculatedDiscount =
+            discountValue;
       }
 
       if (calculatedDiscount < 0) {
         calculatedDiscount = 0;
       }
 
-      if (calculatedDiscount > subtotal) {
+      if (calculatedDiscount >
+          subtotal) {
         calculatedDiscount = subtotal;
       }
 
+      calculatedDiscount =
+          _roundMoney(
+        calculatedDiscount,
+      );
+
       if (mounted) {
         setState(() {
-          _discount = calculatedDiscount;
+          _discount =
+              calculatedDiscount;
+
           _couponCode = code;
 
-          _couponMessage = calculatedDiscount > 0
-              ? 'Coupon applied. Discount: '
-                  '৳${calculatedDiscount.toStringAsFixed(2)}'
-              : 'Coupon applied, but no discount was calculated.';
+          _couponMessage =
+              calculatedDiscount > 0
+                  ? 'Coupon applied. Discount: '
+                      '৳${calculatedDiscount.toStringAsFixed(2)}'
+                  : 'Coupon applied, but no discount was calculated.';
         });
       }
 
       return true;
     } catch (e) {
-      debugPrint('Coupon validation error: $e');
+      debugPrint(
+        'Coupon validation error: $e',
+      );
 
       _resetCoupon(
         'Could not validate coupon. Please try again.',
@@ -600,15 +715,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
   Future<String> _findSellerId(
     CheckoutItem item,
   ) async {
-    // First use seller ID already attached to the item.
-    final existingSellerId = item.sellerId;
+    final existingSellerId =
+        item.sellerId;
 
     if (existingSellerId != null &&
         existingSellerId.trim().isNotEmpty) {
       return existingSellerId.trim();
     }
 
-    // Try lowercase products collection.
     for (final collection in const [
       'products',
       'Products',
@@ -652,13 +766,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
       }
     }
 
-    // Keep existing behavior so the main customer order can
-    // still be created even if seller information is missing.
     return 'unknown_seller';
   }
 
   // ============================================================
-  // CREATE SELLER ORDER DATA
+  // CREATE SELLER ORDER ITEM
   // ============================================================
 
   Map<String, dynamic> _sellerOrderItem(
@@ -675,7 +787,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   // ============================================================
-  // CREATE RESELLER ORDER DATA
+  // CREATE RESELLER ORDER ITEM
   // ============================================================
 
   Map<String, dynamic> _resellerOrderItem(
@@ -688,9 +800,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
       'quantity': item.quantity,
       'total': item.total,
       'imageUrl': item.imageUrl,
-      'supplierProductId': item.supplierProductId,
-      'supplierPrice': item.supplierPrice,
-      'resellerProfit': item.resellerProfit,
+      'supplierProductId':
+          item.supplierProductId,
+      'supplierPrice':
+          item.supplierPrice,
+      'resellerProfit':
+          item.resellerProfit,
     };
   }
 
@@ -703,54 +818,36 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
     final user = _auth.currentUser;
 
-    // ----------------------------------------------------------
-    // LOGIN
-    // ----------------------------------------------------------
-
     if (user == null) {
-      _showMessage('Please login first.');
+      _showMessage(
+        'Please login first.',
+      );
       return;
     }
-
-    // ----------------------------------------------------------
-    // EMPTY CART
-    // ----------------------------------------------------------
 
     if (widget.items.isEmpty) {
-      _showMessage('Your cart is empty.');
+      _showMessage(
+        'Your cart is empty.',
+      );
       return;
     }
-
-    // ----------------------------------------------------------
-    // FORM
-    // ----------------------------------------------------------
 
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    // ----------------------------------------------------------
-    // ADDRESS
-    // ----------------------------------------------------------
-
     if (_selectedAddress == null) {
       _showMessage(
         'Please select a delivery address.',
       );
-
       return;
     }
-
-    // ----------------------------------------------------------
-    // DELIVERY ZONE
-    // ----------------------------------------------------------
 
     if (!_hasDeliveryZone) {
       _showMessage(
         'Please edit your address and choose '
         'Inside Dhaka or Outside Dhaka.',
       );
-
       return;
     }
 
@@ -763,8 +860,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
       // REVALIDATE COUPON
       // ========================================================
 
-      if (_couponController.text.trim().isNotEmpty) {
-        final couponValid = await _checkCoupon();
+      if (_couponController.text
+          .trim()
+          .isNotEmpty) {
+        final couponValid =
+            await _checkCoupon();
 
         if (!couponValid) {
           return;
@@ -779,7 +879,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
       final bool isWallet =
           _walletEnabled &&
-          _paymentMethod == 'BuyNova Wallet';
+          _paymentMethod ==
+              'BuyNova Wallet';
 
       // ========================================================
       // WALLET BALANCE
@@ -799,44 +900,48 @@ class _CheckoutPageState extends State<CheckoutPage> {
       // ========================================================
 
       final orderRef =
-          _firestore.collection('orders').doc();
+          _firestore
+              .collection('orders')
+              .doc();
 
-      final orderId = orderRef.id;
+      final orderId =
+          orderRef.id;
 
-      final List<Map<String, dynamic>> orderItems =
-          widget.items.map((item) {
-        return {
-          'productId': item.id,
-          'name': item.name,
-          'price': item.price,
-          'quantity': item.quantity,
-          'total': item.total,
-          'imageUrl': item.imageUrl,
-          'isResellerProduct': item.isResellerProduct,
-          'entrepreneurUid': item.entrepreneurUid,
-          'sellerId': item.sellerId,
-          'supplierProductId': item.supplierProductId,
-          'supplierPrice': item.supplierPrice,
-          'resellerProfit': item.resellerProfit,
-        };
-      }).toList();
+      final List<
+          Map<String, dynamic>> orderItems =
+          widget.items.map(
+        (item) {
+          return {
+            'productId': item.id,
+            'name': item.name,
+            'price': item.price,
+            'quantity': item.quantity,
+            'total': item.total,
+            'imageUrl': item.imageUrl,
+            'isResellerProduct':
+                item.isResellerProduct,
+            'entrepreneurUid':
+                item.entrepreneurUid,
+            'sellerId':
+                item.sellerId,
+            'supplierProductId':
+                item.supplierProductId,
+            'supplierPrice':
+                item.supplierPrice,
+            'resellerProfit':
+                item.resellerProfit,
+          };
+        },
+      ).toList();
 
-      final Map<String, dynamic> orderData = {
-        // ------------------------------------------------------
-        // Required by Firestore Rules.
-        // ------------------------------------------------------
+      final Map<String, dynamic>
+          orderData = {
         'orderId': orderId,
         'userId': user.uid,
         'customerId': user.uid,
 
-        // ------------------------------------------------------
-        // Items.
-        // ------------------------------------------------------
         'items': orderItems,
 
-        // ------------------------------------------------------
-        // Amounts.
-        // ------------------------------------------------------
         'subtotal': subtotal,
         'deliveryFee': _deliveryFee,
         'deliveryZone': _deliveryZone,
@@ -844,47 +949,37 @@ class _CheckoutPageState extends State<CheckoutPage> {
         'total': grandTotal,
         'grandTotal': grandTotal,
 
-        // ------------------------------------------------------
-        // Currency.
-        // ------------------------------------------------------
         'currency': 'BDT',
         'currencySymbol': '৳',
 
-        // ------------------------------------------------------
-        // Coupon.
-        // ------------------------------------------------------
         'couponCode': _couponCode,
+        'couponDiscount': _discount,
 
-        // ------------------------------------------------------
-        // Payment.
-        // ------------------------------------------------------
-        'paymentMethod': _paymentMethod,
+        'paymentMethod':
+            _paymentMethod,
         'paymentStatus': 'pending',
 
-        // ------------------------------------------------------
-        // Order status.
-        // ------------------------------------------------------
         'orderStatus': 'placed',
 
-        // ------------------------------------------------------
-        // Address.
-        // ------------------------------------------------------
-        'address': _selectedAddress,
+        'address':
+            _selectedAddress,
 
-        // ------------------------------------------------------
-        // Timestamps.
-        // ------------------------------------------------------
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
+        'createdAt':
+            FieldValue.serverTimestamp(),
+        'updatedAt':
+            FieldValue.serverTimestamp(),
       };
 
       // ========================================================
       // GROUP NORMAL SELLER PRODUCTS
       // ========================================================
 
-      final Map<String, List<CheckoutItem>> sellerGroups = {};
+      final Map<String,
+              List<CheckoutItem>>
+          sellerGroups = {};
 
-      for (final item in widget.items) {
+      for (final item
+          in widget.items) {
         if (item.isResellerProduct) {
           continue;
         }
@@ -904,27 +999,35 @@ class _CheckoutPageState extends State<CheckoutPage> {
       // GROUP RESELLER PRODUCTS
       // ========================================================
 
-      final Map<String, List<CheckoutItem>>
+      final Map<String,
+              List<CheckoutItem>>
           resellerGroups = {};
 
-      for (final item in widget.items) {
+      for (final item
+          in widget.items) {
         if (!item.isResellerProduct) {
           continue;
         }
 
         final entrepreneurUid =
-            (item.entrepreneurUid == null ||
-                    item.entrepreneurUid!.trim().isEmpty)
+            (item.entrepreneurUid ==
+                        null ||
+                    item.entrepreneurUid!
+                        .trim()
+                        .isEmpty)
                 ? user.uid
-                : item.entrepreneurUid!.trim();
+                : item.entrepreneurUid!
+                    .trim();
 
         final sellerId =
             (item.sellerId == null ||
-                    item.sellerId!.trim().isEmpty)
+                    item.sellerId!
+                        .trim()
+                        .isEmpty)
                 ? 'unknown_seller'
-                : item.sellerId!.trim();
+                : item.sellerId!
+                    .trim();
 
-        // Internal grouping key only.
         final groupKey =
             '${entrepreneurUid}__${sellerId}';
 
@@ -935,6 +1038,23 @@ class _CheckoutPageState extends State<CheckoutPage> {
             )
             .add(item);
       }
+
+      // ========================================================
+      // DISCOUNT GROUP COUNT
+      // ========================================================
+      //
+      // Every Seller/Reseller group receives a proportional
+      // part of the coupon discount.
+      // ========================================================
+
+      final int totalGroups =
+          sellerGroups.length +
+          resellerGroups.length;
+
+      int discountGroupIndex = 0;
+
+      double remainingDiscount =
+          _discount;
 
       // ========================================================
       // BATCH
@@ -958,7 +1078,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
       for (final entry
           in sellerGroups.entries) {
-        final items = entry.value;
+        final items =
+            entry.value;
 
         if (items.isEmpty) {
           continue;
@@ -967,67 +1088,87 @@ class _CheckoutPageState extends State<CheckoutPage> {
         final double sellerSubtotal =
             items.fold<double>(
           0,
-          (sum, item) => sum + item.total,
+          (sum, item) =>
+              sum + item.total,
+        );
+
+        final double sellerCouponDiscount =
+            _discountForGroup(
+          groupSubtotal:
+              sellerSubtotal,
+          remainingDiscount:
+              remainingDiscount,
+          groupIndex:
+              discountGroupIndex,
+          totalGroups:
+              totalGroups,
+        );
+
+        remainingDiscount =
+            _roundMoney(
+          remainingDiscount -
+              sellerCouponDiscount,
+        );
+
+        discountGroupIndex++;
+
+        final double netSellerEarnings =
+            _roundMoney(
+          sellerSubtotal -
+              sellerCouponDiscount,
         );
 
         final sellerOrderRef =
             _firestore
-                .collection('seller_orders')
+                .collection(
+                  'seller_orders',
+                )
                 .doc();
 
         batch.set(
           sellerOrderRef,
           {
-            // --------------------------------------------------
-            // Order references.
-            // --------------------------------------------------
             'orderId': orderId,
             'sellerOrderId':
                 sellerOrderRef.id,
 
-            // --------------------------------------------------
-            // User references.
-            //
-            // Firestore Rules require:
-            // customerId == request.auth.uid
-            // --------------------------------------------------
             'sellerId': entry.key,
             'buyerId': user.uid,
             'customerId': user.uid,
             'userId': user.uid,
 
-            // --------------------------------------------------
-            // Items.
-            // --------------------------------------------------
             'items': items
-                .map(_sellerOrderItem)
+                .map(
+                  _sellerOrderItem,
+                )
                 .toList(),
 
-            // --------------------------------------------------
-            // Amount.
-            // --------------------------------------------------
-            'subtotal': sellerSubtotal,
+            // Gross merchandise amount.
+            'subtotal':
+                sellerSubtotal,
 
-            // --------------------------------------------------
-            // Currency.
-            // --------------------------------------------------
+            // This Seller's share of the coupon.
+            'couponCode':
+                _couponCode,
+            'couponDiscount':
+                sellerCouponDiscount,
+
+            // Actual amount attributable to Seller
+            // after coupon discount.
+            'netSellerEarnings':
+                netSellerEarnings,
+
             'currency': 'BDT',
             'currencySymbol': '৳',
 
-            // --------------------------------------------------
-            // Payment.
-            // --------------------------------------------------
-            'paymentMethod': _paymentMethod,
-            'paymentStatus': 'pending',
+            'paymentMethod':
+                _paymentMethod,
+            'paymentStatus':
+                'pending',
 
-            // --------------------------------------------------
-            // Status.
-            // --------------------------------------------------
-            'orderStatus': 'placed',
+            'orderStatus':
+                'placed',
 
-            // --------------------------------------------------
-            // Timestamps.
-            // --------------------------------------------------
             'createdAt':
                 FieldValue.serverTimestamp(),
             'updatedAt':
@@ -1042,33 +1183,40 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
       for (final entry
           in resellerGroups.entries) {
-        final items = entry.value;
+        final items =
+            entry.value;
 
         if (items.isEmpty) {
           continue;
         }
 
         final entrepreneurUid =
-            (items.first.entrepreneurUid == null ||
-                    items.first.entrepreneurUid!
+            (items.first.entrepreneurUid ==
+                        null ||
+                    items.first
+                        .entrepreneurUid!
                         .trim()
                         .isEmpty)
                 ? user.uid
-                : items.first.entrepreneurUid!
+                : items.first
+                    .entrepreneurUid!
                     .trim();
 
         final sellerId =
-            (items.first.sellerId == null ||
+            (items.first.sellerId ==
+                        null ||
                     items.first.sellerId!
                         .trim()
                         .isEmpty)
                 ? 'unknown_seller'
-                : items.first.sellerId!.trim();
+                : items.first.sellerId!
+                    .trim();
 
         final double sellingTotal =
             items.fold<double>(
           0,
-          (sum, item) => sum + item.total,
+          (sum, item) =>
+              sum + item.total,
         );
 
         final double supplierTotal =
@@ -1076,105 +1224,169 @@ class _CheckoutPageState extends State<CheckoutPage> {
           0,
           (sum, item) =>
               sum +
-              ((item.supplierPrice ?? 0) *
+              ((item.supplierPrice ??
+                      0) *
                   item.quantity),
         );
 
+        // ------------------------------------------------------
+        // Coupon share for this reseller order.
+        // ------------------------------------------------------
+
+        final double resellerCouponDiscount =
+            _discountForGroup(
+          groupSubtotal:
+              sellingTotal,
+          remainingDiscount:
+              remainingDiscount,
+          groupIndex:
+              discountGroupIndex,
+          totalGroups:
+              totalGroups,
+        );
+
+        remainingDiscount =
+            _roundMoney(
+          remainingDiscount -
+              resellerCouponDiscount,
+        );
+
+        discountGroupIndex++;
+
+        // ------------------------------------------------------
+        // Actual amount received from customer for this
+        // reseller portion after coupon.
+        // ------------------------------------------------------
+
+        final double netSellingTotal =
+            _roundMoney(
+          sellingTotal -
+              resellerCouponDiscount,
+        );
+
+        // ------------------------------------------------------
+        // FINAL RESELLER PROFIT
+        //
+        // Selling Total
+        // - Coupon Discount
+        // - Supplier Cost
+        // = Reseller Profit
+        // ------------------------------------------------------
+
         final double resellerProfit =
-            sellingTotal - supplierTotal;
+            _roundMoney(
+          sellingTotal -
+              resellerCouponDiscount -
+              supplierTotal,
+        );
 
         final resellerOrderRef =
             _firestore
-                .collection('reseller_orders')
+                .collection(
+                  'reseller_orders',
+                )
                 .doc();
 
         batch.set(
           resellerOrderRef,
           {
-            // --------------------------------------------------
-            // Order references.
-            // --------------------------------------------------
             'orderId': orderId,
             'resellerOrderId':
                 resellerOrderRef.id,
 
-            // --------------------------------------------------
-            // Required reseller fields.
-            // --------------------------------------------------
             'entrepreneurUid':
                 entrepreneurUid,
-            'sellerId': sellerId,
+            'sellerId':
+                sellerId,
 
-            // --------------------------------------------------
-            // Customer fields.
-            //
-            // Firestore Rules allow create when:
-            // customerId == request.auth.uid
-            // --------------------------------------------------
             'buyerId': user.uid,
-            'customerId': user.uid,
+            'customerId':
+                user.uid,
             'userId': user.uid,
 
-            // --------------------------------------------------
-            // Customer contact information.
-            // --------------------------------------------------
             'customerName':
-                _selectedAddress?['name']
-                        ?.toString() ??
+                _selectedAddress?[
+                        'name']
+                    ?.toString() ??
                     '',
+
             'customerPhone':
-                _selectedAddress?['phone']
-                        ?.toString() ??
+                _selectedAddress?[
+                        'phone']
+                    ?.toString() ??
                     '',
+
+            'customerEmail':
+                user.email ?? '',
+
             'address':
-                _selectedAddress?['address']
-                        ?.toString() ??
+                _selectedAddress?[
+                        'address']
+                    ?.toString() ??
                     '',
+
             'deliveryZone':
                 _deliveryZone,
 
-            // --------------------------------------------------
-            // Items.
-            // --------------------------------------------------
             'items': items
-                .map(_resellerOrderItem)
+                .map(
+                  _resellerOrderItem,
+                )
                 .toList(),
 
             // --------------------------------------------------
-            // Reseller financial values.
+            // Gross selling amount.
             // --------------------------------------------------
+
             'sellingTotal':
                 sellingTotal,
+
+            // --------------------------------------------------
+            // Coupon discount paid by the reseller.
+            // --------------------------------------------------
+
+            'couponCode':
+                _couponCode,
+
+            'couponDiscount':
+                resellerCouponDiscount,
+
+            // --------------------------------------------------
+            // Actual customer amount after coupon.
+            // --------------------------------------------------
+
+            'netSellingTotal':
+                netSellingTotal,
+
+            // --------------------------------------------------
+            // Supplier's amount remains unchanged.
+            // --------------------------------------------------
+
             'supplierTotal':
                 supplierTotal,
+
+            // --------------------------------------------------
+            // Final reseller profit after coupon.
+            // --------------------------------------------------
+
             'resellerProfit':
                 resellerProfit,
+
+            // Keep compatibility with older UI/code.
             'profit':
                 resellerProfit,
 
-            // --------------------------------------------------
-            // Currency.
-            // --------------------------------------------------
             'currency': 'BDT',
             'currencySymbol': '৳',
 
-            // --------------------------------------------------
-            // Payment.
-            // --------------------------------------------------
             'paymentMethod':
                 _paymentMethod,
             'paymentStatus':
                 'pending',
 
-            // --------------------------------------------------
-            // Status.
-            // --------------------------------------------------
             'orderStatus':
                 'placed',
 
-            // --------------------------------------------------
-            // Timestamps.
-            // --------------------------------------------------
             'createdAt':
                 FieldValue.serverTimestamp(),
             'updatedAt':
@@ -1191,15 +1403,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
       // ========================================================
       // WALLET PAYMENT
-      //
-      // Currently disabled.
-      // If enabled later, Cloud Function handles payment.
       // ========================================================
 
       if (isWallet) {
-        final result = await _functions
-            .httpsCallable('placeWalletOrder')
-            .call({
+        final result =
+            await _functions
+                .httpsCallable(
+                  'placeWalletOrder',
+                )
+                .call({
           'orderId': orderId,
         });
 
@@ -1216,7 +1428,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
         final bool success =
             resultData['success'] == true ||
-            resultData['alreadyPaid'] == true;
+            resultData['alreadyPaid'] ==
+                true;
 
         if (!success) {
           throw Exception(
@@ -1230,7 +1443,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
       // ========================================================
 
       if (widget.clearCartOnSuccess) {
-        await _clearCart(user.uid);
+        await _clearCart(
+          user.uid,
+        );
       }
 
       if (!mounted) return;
@@ -1263,9 +1478,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
             actions: [
               ElevatedButton(
                 onPressed: () {
-                  Navigator.pop(context);
+                  Navigator.pop(
+                    context,
+                  );
                 },
-                child: const Text('Continue'),
+                child:
+                    const Text('Continue'),
               ),
             ],
           );
@@ -1281,7 +1499,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => const MyOrdersPage(),
+          builder: (_) =>
+              const MyOrdersPage(),
         ),
       );
     } catch (e) {
@@ -1291,7 +1510,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
         SnackBar(
           content: Text(
             _friendlyError(e),
@@ -1313,17 +1533,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
   // FRIENDLY ERROR
   // ============================================================
 
-  String _friendlyError(Object error) {
+  String _friendlyError(
+    Object error,
+  ) {
     final text =
         error.toString().toLowerCase();
 
-    // IMPORTANT:
-    // Firestore says:
-    // "Missing or insufficient permissions"
-    //
-    // That contains "insufficient", so permission errors MUST
-    // be checked before wallet balance errors.
-    if (text.contains('permission-denied') ||
+    if (text.contains(
+          'permission-denied',
+        ) ||
         text.contains(
           'missing or insufficient permissions',
         )) {
@@ -1332,32 +1550,39 @@ class _CheckoutPageState extends State<CheckoutPage> {
           'and try again.';
     }
 
-    // Wallet-specific errors.
-    if (text.contains('insufficient wallet') ||
-        text.contains('wallet balance')) {
+    if (text.contains(
+          'insufficient wallet',
+        ) ||
+        text.contains(
+          'wallet balance',
+        )) {
       return 'Your BuyNova Wallet balance is not enough '
           'for this order.';
     }
 
-    // Authentication.
-    if (text.contains('unauthenticated')) {
+    if (text.contains(
+      'unauthenticated',
+    )) {
       return 'Please login again.';
     }
 
-    // Network / temporary Firebase error.
     if (text.contains('network') ||
-        text.contains('unavailable')) {
+        text.contains(
+          'unavailable',
+        )) {
       return 'Network problem. Please check your internet '
           'connection and try again.';
     }
 
-    // Document/function not found.
-    if (text.contains('not-found')) {
+    if (text.contains(
+      'not-found',
+    )) {
       return 'Order or Wallet service was not found.';
     }
 
-    // Firebase failed-precondition.
-    if (text.contains('failed-precondition')) {
+    if (text.contains(
+      'failed-precondition',
+    )) {
       return 'This order could not be completed right now. '
           'Please try again.';
     }
@@ -1374,11 +1599,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
     String uid,
   ) async {
     try {
-      final cartSnapshot = await _firestore
-          .collection('users')
-          .doc(uid)
-          .collection('cart')
-          .get();
+      final cartSnapshot =
+          await _firestore
+              .collection('users')
+              .doc(uid)
+              .collection('cart')
+              .get();
 
       if (cartSnapshot.docs.isEmpty) {
         return;
@@ -1389,12 +1615,13 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
       for (final doc
           in cartSnapshot.docs) {
-        batch.delete(doc.reference);
+        batch.delete(
+          doc.reference,
+        );
       }
 
       await batch.commit();
     } catch (e) {
-      // Order is already successfully placed.
       debugPrint(
         'Clear cart error: $e',
       );
@@ -1451,7 +1678,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   onPressed:
                       _openAddressBook,
                   child: Text(
-                    _selectedAddress == null
+                    _selectedAddress ==
+                            null
                         ? 'Add'
                         : 'Change',
                   ),
@@ -1479,25 +1707,30 @@ class _CheckoutPageState extends State<CheckoutPage> {
         _selectedAddress!;
 
     final name =
-        address['name']?.toString() ??
+        address['name']
+                ?.toString() ??
             '';
 
     final phone =
-        address['phone']?.toString() ??
+        address['phone']
+                ?.toString() ??
             '';
 
     final line1 =
-        address['address']?.toString() ??
+        address['address']
+                ?.toString() ??
             address['addressLine1']
                 ?.toString() ??
             '';
 
     final city =
-        address['city']?.toString() ??
+        address['city']
+                ?.toString() ??
             '';
 
     final postalCode =
-        address['postalCode']?.toString() ??
+        address['postalCode']
+                ?.toString() ??
             address['zipCode']
                 ?.toString() ??
             '';
@@ -1627,9 +1860,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
                       Icons.local_shipping,
                     ),
                   ),
-
-                  // Wallet remains hidden while
-                  // _walletEnabled == false.
                   if (_walletEnabled)
                     RadioListTile<String>(
                       value:
@@ -1987,7 +2217,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
               _summaryRow(
                 'Discount',
                 -_discount,
-                color: Colors.green,
+                color:
+                    Colors.green,
               ),
             ],
             const Divider(
@@ -2008,7 +2239,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 ),
                 Text(
                   '৳${grandTotal.toStringAsFixed(2)}',
-                  style: const TextStyle(
+                  style:
+                      const TextStyle(
                     fontSize: 20,
                     fontWeight:
                         FontWeight.bold,
@@ -2040,9 +2272,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
           '$prefix৳${value.abs().toStringAsFixed(2)}',
           style: TextStyle(
             color: color,
-            fontWeight: color != null
-                ? FontWeight.w600
-                : null,
+            fontWeight:
+                color != null
+                    ? FontWeight.w600
+                    : null,
           ),
         ),
       ],
@@ -2059,8 +2292,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
   ) {
     final bool walletSelected =
         _walletEnabled &&
-            _paymentMethod ==
-                'BuyNova Wallet';
+        _paymentMethod ==
+            'BuyNova Wallet';
 
     return Scaffold(
       appBar: AppBar(
