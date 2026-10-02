@@ -30,8 +30,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   Future<void> _checkAdminAccess() async {
     final user = FirebaseAuth.instance.currentUser;
 
-    final authorized =
-        user != null &&
+    final authorized = user != null &&
         (user.email ?? '').toLowerCase() == kAdminEmail.toLowerCase();
 
     if (!mounted) return;
@@ -43,19 +42,8 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   }
 
   // ============================================================
-  // SEQUENTIAL CODE GENERATION (FIXED)
+  // SEQUENTIAL CODE GENERATION
   // ============================================================
-  //
-  // Previously these two functions built the code from the first
-  // 6 characters of the Firebase UID (e.g. SELL-A1B2C3). That is
-  // not a counter at all â€” it never increments, so there was no
-  // way to tell how many sellers/entrepreneurs had been approved,
-  // and codes looked random instead of sequential.
-  //
-  // These now atomically increment a counter document inside a
-  // Firestore transaction, so codes come out as SELL-000001,
-  // SELL-000002, SELL-000003, ... and stay correct even if two
-  // approvals happen at the same time.
 
   Future<String> _generateSequentialSellerCode() async {
     final counterRef = _db.collection('counters').doc('sellerCounter');
@@ -63,9 +51,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
     return _db.runTransaction((transaction) async {
       final snapshot = await transaction.get(counterRef);
 
-      final current =
-          (snapshot.data()?['value'] as num?)?.toInt() ?? 0;
-
+      final current = (snapshot.data()?['value'] as num?)?.toInt() ?? 0;
       final next = current + 1;
 
       transaction.set(
@@ -74,8 +60,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         SetOptions(merge: true),
       );
 
-      final padded = next.toString().padLeft(6, '0');
-      return 'SELL-$padded';
+      return 'SELL-${next.toString().padLeft(6, '0')}';
     });
   }
 
@@ -86,9 +71,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
     return _db.runTransaction((transaction) async {
       final snapshot = await transaction.get(counterRef);
 
-      final current =
-          (snapshot.data()?['value'] as num?)?.toInt() ?? 0;
-
+      final current = (snapshot.data()?['value'] as num?)?.toInt() ?? 0;
       final next = current + 1;
 
       transaction.set(
@@ -97,13 +80,12 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         SetOptions(merge: true),
       );
 
-      final padded = next.toString().padLeft(6, '0');
-      return 'ENT-$padded';
+      return 'ENT-${next.toString().padLeft(6, '0')}';
     });
   }
 
   // ============================================================
-  // OPEN A COMPLETELY NEW ADMIN SECTION PAGE
+  // OPEN SECTION
   // ============================================================
 
   void _openSection({
@@ -294,7 +276,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                       _adminMenuBox(
                         icon: Icons.inventory_2_outlined,
                         title: 'Products',
-                        subtitle: '${products.length} products',
+                        subtitle: '${products.length} seller products',
                         onTap: () {
                           _openSection(
                             title: 'Products',
@@ -352,7 +334,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                       _adminMenuBox(
                         icon: Icons.sync_alt_outlined,
                         title: 'Relationships',
-                        subtitle: 'Seller â†” Reseller products',
+                        subtitle: 'Seller ↔ Reseller products',
                         onTap: () {
                           _openSection(
                             title: 'Relationships',
@@ -368,13 +350,13 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                       _adminMenuBox(
                         icon: Icons.shopping_bag_outlined,
                         title: 'Orders',
-                        subtitle: '${orders.length} orders',
+                        subtitle: '${orders.length} customer orders',
                         onTap: () {
                           _openSection(
                             title: 'Orders',
                             notificationStream:
                                 _db.collection('orders').snapshots(),
-                            notificationLabel: 'Orders',
+                            notificationLabel: 'Customer Orders',
                             page: _ordersTab(),
                           );
                         },
@@ -534,7 +516,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
 
   Widget _usersTab() {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _db.collection('users').orderBy('name').snapshots(),
+      stream: _db.collection('users').snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return _errorView(snapshot.error.toString());
@@ -546,7 +528,13 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           );
         }
 
-        final docs = snapshot.data?.docs ?? [];
+        final docs = [...(snapshot.data?.docs ?? [])];
+
+        docs.sort((a, b) {
+          final aName = (a.data()['name'] ?? '').toString().toLowerCase();
+          final bName = (b.data()['name'] ?? '').toString().toLowerCase();
+          return aName.compareTo(bName);
+        });
 
         if (docs.isEmpty) {
           return const Center(
@@ -605,25 +593,13 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
               runSpacing: 4,
               children: [
                 if (sellerStatus == 'approved')
-                  _statusChip(
-                    'Seller',
-                    Colors.green,
-                  ),
+                  _statusChip('Seller', Colors.green),
                 if (entrepreneurStatus == 'approved')
-                  _statusChip(
-                    'Reseller',
-                    Colors.blue,
-                  ),
+                  _statusChip('Reseller', Colors.blue),
                 if (sellerStatus == 'pending')
-                  _statusChip(
-                    'Seller Pending',
-                    Colors.orange,
-                  ),
+                  _statusChip('Seller Pending', Colors.orange),
                 if (entrepreneurStatus == 'pending')
-                  _statusChip(
-                    'Reseller Pending',
-                    Colors.orange,
-                  ),
+                  _statusChip('Reseller Pending', Colors.orange),
               ],
             ),
           ],
@@ -664,14 +640,19 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           return _errorView(snapshot.error.toString());
         }
 
-        if (snapshot.connectionState ==
-            ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
             child: CircularProgressIndicator(),
           );
         }
 
-        final docs = snapshot.data?.docs ?? [];
+        final docs = [...(snapshot.data?.docs ?? [])];
+
+        docs.sort((a, b) {
+          final aName = (a.data()['name'] ?? '').toString().toLowerCase();
+          final bName = (b.data()['name'] ?? '').toString().toLowerCase();
+          return aName.compareTo(bName);
+        });
 
         if (docs.isEmpty) {
           return const Center(
@@ -712,14 +693,19 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           return _errorView(snapshot.error.toString());
         }
 
-        if (snapshot.connectionState ==
-            ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
             child: CircularProgressIndicator(),
           );
         }
 
-        final docs = snapshot.data?.docs ?? [];
+        final docs = [...(snapshot.data?.docs ?? [])];
+
+        docs.sort((a, b) {
+          final aName = (a.data()['name'] ?? '').toString().toLowerCase();
+          final bName = (b.data()['name'] ?? '').toString().toLowerCase();
+          return aName.compareTo(bName);
+        });
 
         if (docs.isEmpty) {
           return const Center(
@@ -778,22 +764,15 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
               children: [
                 _statusChip(
                   role,
-                  role == 'Seller'
-                      ? Colors.green
-                      : Colors.blue,
+                  role == 'Seller' ? Colors.green : Colors.blue,
                 ),
                 if (code.isNotEmpty)
-                  _statusChip(
-                    code,
-                    Colors.grey,
-                  ),
+                  _statusChip(code, Colors.grey),
               ],
             ),
           ],
         ),
-        trailing: const Icon(
-          Icons.chevron_right,
-        ),
+        trailing: const Icon(Icons.chevron_right),
         onTap: () {
           Navigator.of(context).push(
             MaterialPageRoute(
@@ -888,10 +867,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           title: 'Buyer / Customer',
           icon: Icons.shopping_cart_outlined,
           children: [
-            _summaryRow(
-              'Account',
-              'Active',
-            ),
+            _summaryRow('Account', 'Active'),
           ],
         ),
 
@@ -899,10 +875,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           title: 'Seller',
           icon: Icons.storefront_outlined,
           children: [
-            _summaryRow(
-              'Status',
-              sellerStatus,
-            ),
+            _summaryRow('Status', sellerStatus),
             if ((userData['sellerCode'] ?? '')
                 .toString()
                 .isNotEmpty)
@@ -917,10 +890,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           title: 'Reseller / Entrepreneur',
           icon: Icons.business_center_outlined,
           children: [
-            _summaryRow(
-              'Status',
-              entrepreneurStatus,
-            ),
+            _summaryRow('Status', entrepreneurStatus),
             if ((userData['entrepreneurCode'] ?? '')
                 .toString()
                 .isNotEmpty)
@@ -938,7 +908,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           icon: Icons.inventory_2_outlined,
           children: [
             SizedBox(
-              height: 180,
+              height: 250,
               child: _userProducts(
                 uid,
                 userData,
@@ -963,7 +933,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           icon: Icons.shopping_bag_outlined,
           children: [
             SizedBox(
-              height: 220,
+              height: 300,
               child: _userOrders(uid),
             ),
           ],
@@ -1041,17 +1011,9 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
       builder: (context, snapshot) {
         final data = snapshot.data?.data() ?? {};
 
-        final cash = _toDouble(
-          data['cashBalance'],
-        );
-
-        final points = _toInt(
-          data['pointsBalance'],
-        );
-
-        final lifetimePoints = _toInt(
-          data['lifetimePoints'],
-        );
+        final cash = _toDouble(data['cashBalance']);
+        final points = _toInt(data['pointsBalance']);
+        final lifetimePoints = _toInt(data['lifetimePoints']);
 
         return _detailCard(
           title: 'Wallet',
@@ -1059,7 +1021,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           children: [
             _summaryRow(
               'Cash Balance',
-              'à§³${cash.toStringAsFixed(2)}',
+              '৳${cash.toStringAsFixed(2)}',
             ),
             _summaryRow(
               'Points',
@@ -1085,17 +1047,10 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                     .collection('users')
                     .doc(uid)
                     .collection('walletTransactions')
-                    .orderBy(
-                      'createdAt',
-                      descending: true,
-                    )
-                    .limit(10)
                     .snapshots(),
                 builder: (context, txSnapshot) {
                   if (txSnapshot.hasError) {
-                    return Text(
-                      txSnapshot.error.toString(),
-                    );
+                    return Text(txSnapshot.error.toString());
                   }
 
                   if (txSnapshot.connectionState ==
@@ -1105,10 +1060,21 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                     );
                   }
 
-                  final docs =
-                      txSnapshot.data?.docs ?? [];
+                  final docs = [
+                    ...(txSnapshot.data?.docs ?? [])
+                  ];
 
-                  if (docs.isEmpty) {
+                  docs.sort((a, b) {
+                    final aDate =
+                        _dateFromValue(a.data()['createdAt']);
+                    final bDate =
+                        _dateFromValue(b.data()['createdAt']);
+                    return bDate.compareTo(aDate);
+                  });
+
+                  final limitedDocs = docs.take(10).toList();
+
+                  if (limitedDocs.isEmpty) {
                     return const Center(
                       child: Text(
                         'No wallet transactions.',
@@ -1117,17 +1083,13 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                   }
 
                   return ListView.builder(
-                    itemCount: docs.length,
+                    itemCount: limitedDocs.length,
                     itemBuilder: (context, index) {
-                      final tx = docs[index].data();
+                      final tx = limitedDocs[index].data();
 
-                      final amount = _toDouble(
-                        tx['amount'],
-                      );
-
+                      final amount = _toDouble(tx['amount']);
                       final type =
                           (tx['type'] ?? '').toString();
-
                       final status =
                           (tx['status'] ?? '').toString();
 
@@ -1136,14 +1098,14 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                         leading: Icon(
                           type == 'credit'
                               ? Icons.add_circle_outline
-                              : Icons
-                                  .remove_circle_outline,
+                              : Icons.remove_circle_outline,
                         ),
                         title: Text(
-                          'à§³${amount.toStringAsFixed(2)}',
+                          '৳${amount.toStringAsFixed(2)}',
                         ),
                         subtitle: Text(
-                          '${tx['source'] ?? 'Transaction'} â€¢ $status',
+                          '${tx['source'] ?? 'Transaction'} • '
+                          '$status',
                         ),
                       );
                     },
@@ -1165,76 +1127,167 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
     String uid,
     Map<String, dynamic> userData,
   ) {
-    final email =
-        (userData['email'] ?? '').toString();
+    final email = (userData['email'] ?? '').toString();
 
-    return StreamBuilder<
-        QuerySnapshot<Map<String, dynamic>>>(
-      stream: _db.collection('reseller_products').snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return _errorView(snapshot.error.toString());
-        }
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _db.collection('products').snapshots(),
+      builder: (context, sellerSnapshot) {
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: _db.collection('reseller_products').snapshots(),
+          builder: (context, resellerSnapshot) {
+            if (sellerSnapshot.hasError) {
+              return _errorView(
+                sellerSnapshot.error.toString(),
+              );
+            }
 
-        if (snapshot.connectionState ==
-            ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
-        }
+            if (resellerSnapshot.hasError) {
+              return _errorView(
+                resellerSnapshot.error.toString(),
+              );
+            }
 
-        final docs = snapshot.data?.docs ?? [];
+            if (sellerSnapshot.connectionState ==
+                    ConnectionState.waiting ||
+                resellerSnapshot.connectionState ==
+                    ConnectionState.waiting) {
+              return const Center(
+                child: CircularProgressIndicator(),
+              );
+            }
 
-        final filtered = docs.where((doc) {
-          final data = doc.data();
+            final sellerDocs = sellerSnapshot.data?.docs ?? [];
+            final resellerDocs = resellerSnapshot.data?.docs ?? [];
 
-          final entrepreneurId =
-              (data['entrepreneurId'] ?? '').toString();
+            final sellerProducts = sellerDocs.where((doc) {
+              final data = doc.data();
 
-          final userId =
-              (data['userId'] ?? '').toString();
+              final sellerId =
+                  (data['sellerId'] ?? '').toString();
 
-          final entrepreneurUid =
-              (data['entrepreneurUid'] ?? '').toString();
+              final userId =
+                  (data['userId'] ?? '').toString();
 
-          final entrepreneurEmail =
-              (data['entrepreneurEmail'] ?? '').toString();
+              final ownerId =
+                  (data['ownerId'] ?? '').toString();
 
-          return entrepreneurId == uid ||
-              userId == uid ||
-              entrepreneurUid == uid ||
-              (email.isNotEmpty &&
-                  entrepreneurEmail == email);
-        }).toList();
+              final sellerUid =
+                  (data['sellerUid'] ?? '').toString();
 
-        if (filtered.isEmpty) {
-          return const Center(
-            child: Text(
-              'No reseller products found.',
-            ),
-          );
-        }
+              final sellerEmail =
+                  (data['sellerEmail'] ?? '').toString();
 
-        return ListView.builder(
-          itemCount: filtered.length,
-          itemBuilder: (context, index) {
-            final data = filtered[index].data();
+              return sellerId == uid ||
+                  userId == uid ||
+                  ownerId == uid ||
+                  sellerUid == uid ||
+                  (email.isNotEmpty &&
+                      sellerEmail == email);
+            }).toList();
 
-            return ListTile(
-              dense: true,
-              leading: const Icon(
-                Icons.inventory_2_outlined,
-              ),
-              title: Text(
-                (data['productName'] ??
-                        data['name'] ??
-                        'Product')
-                    .toString(),
-              ),
-              subtitle: Text(
-                'Supplier: à§³${_toDouble(data['supplierPrice']).toStringAsFixed(2)} â€¢ '
-                'Selling: à§³${_toDouble(data['sellingPrice']).toStringAsFixed(2)}',
-              ),
+            final resellerProducts = resellerDocs.where((doc) {
+              final data = doc.data();
+
+              final entrepreneurId =
+                  (data['entrepreneurId'] ?? '').toString();
+
+              final userId =
+                  (data['userId'] ?? '').toString();
+
+              final entrepreneurUid =
+                  (data['entrepreneurUid'] ?? '').toString();
+
+              final resellerId =
+                  (data['resellerId'] ?? '').toString();
+
+              final entrepreneurEmail =
+                  (data['entrepreneurEmail'] ?? '').toString();
+
+              return entrepreneurId == uid ||
+                  userId == uid ||
+                  entrepreneurUid == uid ||
+                  resellerId == uid ||
+                  (email.isNotEmpty &&
+                      entrepreneurEmail == email);
+            }).toList();
+
+            if (sellerProducts.isEmpty &&
+                resellerProducts.isEmpty) {
+              return const Center(
+                child: Text(
+                  'No products found for this user.',
+                ),
+              );
+            }
+
+            return ListView(
+              children: [
+                if (sellerProducts.isNotEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 6),
+                    child: Text(
+                      'Seller Products',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+
+                ...sellerProducts.map((doc) {
+                  final data = doc.data();
+
+                  return ListTile(
+                    dense: true,
+                    leading: const Icon(
+                      Icons.storefront_outlined,
+                    ),
+                    title: Text(
+                      (data['name'] ??
+                              data['productName'] ??
+                              'Product')
+                          .toString(),
+                    ),
+                    subtitle: Text(
+                      'Price: ৳${_toDouble(data['price']).toStringAsFixed(2)}',
+                    ),
+                  );
+                }),
+
+                if (resellerProducts.isNotEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(
+                      top: 10,
+                      bottom: 6,
+                    ),
+                    child: Text(
+                      'Reseller Products',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+
+                ...resellerProducts.map((doc) {
+                  final data = doc.data();
+
+                  return ListTile(
+                    dense: true,
+                    leading: const Icon(
+                      Icons.sync_alt_outlined,
+                    ),
+                    title: Text(
+                      (data['productName'] ??
+                              data['name'] ??
+                              'Product')
+                          .toString(),
+                    ),
+                    subtitle: Text(
+                      'Supplier: ৳${_toDouble(data['supplierPrice']).toStringAsFixed(2)} • '
+                      'Selling: ৳${_toDouble(data['sellingPrice']).toStringAsFixed(2)}',
+                    ),
+                  );
+                }),
+              ],
             );
           },
         );
@@ -1247,8 +1300,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   // ============================================================
 
   Widget _userVideos(String uid) {
-    return StreamBuilder<
-        QuerySnapshot<Map<String, dynamic>>>(
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: _db
           .collection('sellerVideos')
           .where(
@@ -1261,8 +1313,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           return _errorView(snapshot.error.toString());
         }
 
-        if (snapshot.connectionState ==
-            ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
             child: CircularProgressIndicator(),
           );
@@ -1311,58 +1362,188 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   Widget _userOrders(String uid) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: _db.collection('orders').snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return _errorView(snapshot.error.toString());
-        }
+      builder: (context, customerSnapshot) {
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: _db.collection('seller_orders').snapshots(),
+          builder: (context, sellerSnapshot) {
+            return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _db.collection('reseller_orders').snapshots(),
+              builder: (context, resellerSnapshot) {
+                if (customerSnapshot.hasError) {
+                  return _errorView(
+                    customerSnapshot.error.toString(),
+                  );
+                }
 
-        if (snapshot.connectionState ==
-            ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
-        }
+                if (sellerSnapshot.hasError) {
+                  return _errorView(
+                    sellerSnapshot.error.toString(),
+                  );
+                }
 
-        final all = snapshot.data?.docs ?? [];
+                if (resellerSnapshot.hasError) {
+                  return _errorView(
+                    resellerSnapshot.error.toString(),
+                  );
+                }
 
-        final filtered = all.where((doc) {
-          final data = doc.data();
+                if (customerSnapshot.connectionState ==
+                        ConnectionState.waiting ||
+                    sellerSnapshot.connectionState ==
+                        ConnectionState.waiting ||
+                    resellerSnapshot.connectionState ==
+                        ConnectionState.waiting) {
+                  return const Center(
+                    child: CircularProgressIndicator(),
+                  );
+                }
 
-          return data['customerId'] == uid ||
-              data['userId'] == uid ||
-              data['buyerId'] == uid ||
-              data['sellerId'] == uid ||
-              data['entrepreneurId'] == uid ||
-              data['resellerId'] == uid;
-        }).toList();
+                final List<_AdminOrderItem> orders = [];
 
-        if (filtered.isEmpty) {
-          return const Center(
-            child: Text('No orders found.'),
-          );
-        }
+                for (final doc
+                    in customerSnapshot.data?.docs ?? []) {
+                  final data = doc.data();
 
-        return ListView.builder(
-          itemCount: filtered.length,
-          itemBuilder: (context, index) {
-            final data = filtered[index].data();
+                  if (_orderBelongsToUser(data, uid)) {
+                    orders.add(
+                      _AdminOrderItem(
+                        id: doc.id,
+                        data: data,
+                        type: 'Customer Order',
+                        collection: 'orders',
+                      ),
+                    );
+                  }
+                }
 
-            return ListTile(
-              dense: true,
-              leading: const Icon(
-                Icons.shopping_bag_outlined,
-              ),
-              title: Text(
-                'Order ${filtered[index].id}',
-              ),
-              subtitle: Text(
-                'à§³${_toDouble(data['totalAmount'] ?? data['total']).toStringAsFixed(2)} â€¢ '
-                '${data['status'] ?? 'Pending'}',
-              ),
+                for (final doc
+                    in sellerSnapshot.data?.docs ?? []) {
+                  final data = doc.data();
+
+                  if (_orderBelongsToUser(data, uid)) {
+                    orders.add(
+                      _AdminOrderItem(
+                        id: doc.id,
+                        data: data,
+                        type: 'Seller Order',
+                        collection: 'seller_orders',
+                      ),
+                    );
+                  }
+                }
+
+                for (final doc
+                    in resellerSnapshot.data?.docs ?? []) {
+                  final data = doc.data();
+
+                  if (_orderBelongsToUser(data, uid)) {
+                    orders.add(
+                      _AdminOrderItem(
+                        id: doc.id,
+                        data: data,
+                        type: 'Reseller Order',
+                        collection: 'reseller_orders',
+                      ),
+                    );
+                  }
+                }
+
+                orders.sort(
+                  (a, b) => _dateFromValue(
+                    b.data['createdAt'],
+                  ).compareTo(
+                    _dateFromValue(
+                      a.data['createdAt'],
+                    ),
+                  ),
+                );
+
+                if (orders.isEmpty) {
+                  return const Center(
+                    child: Text('No orders found.'),
+                  );
+                }
+
+                return ListView.builder(
+                  itemCount: orders.length,
+                  itemBuilder: (context, index) {
+                    final order = orders[index];
+
+                    return _adminOrderListTile(order);
+                  },
+                );
+              },
             );
           },
         );
       },
+    );
+  }
+
+  bool _orderBelongsToUser(
+    Map<String, dynamic> data,
+    String uid,
+  ) {
+    const possibleFields = [
+      'customerId',
+      'userId',
+      'buyerId',
+      'sellerId',
+      'sellerUid',
+      'entrepreneurId',
+      'entrepreneurUid',
+      'resellerId',
+      'resellerUid',
+    ];
+
+    for (final field in possibleFields) {
+      if ((data[field] ?? '').toString() == uid) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  Widget _adminOrderListTile(_AdminOrderItem order) {
+    final data = order.data;
+
+    final total = _toDouble(
+      data['totalAmount'] ??
+          data['total'] ??
+          data['sellingTotal'] ??
+          data['subtotal'],
+    );
+
+    final status = (data['status'] ??
+            data['orderStatus'] ??
+            'Pending')
+        .toString();
+
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        dense: true,
+        leading: Icon(
+          order.type == 'Reseller Order'
+              ? Icons.sync_alt_outlined
+              : order.type == 'Seller Order'
+                  ? Icons.storefront_outlined
+                  : Icons.shopping_bag_outlined,
+        ),
+        title: Text(
+          order.type,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        subtitle: Text(
+          'Order ${order.id}\n'
+          '৳${total.toStringAsFixed(2)} • $status',
+        ),
+        isThreeLine: true,
+      ),
     );
   }
 
@@ -1450,8 +1631,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           return _errorView(snapshot.error.toString());
         }
 
-        if (snapshot.connectionState ==
-            ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
             child: CircularProgressIndicator(),
           );
@@ -1508,8 +1688,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           return _errorView(snapshot.error.toString());
         }
 
-        if (snapshot.connectionState ==
-            ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
             child: CircularProgressIndicator(),
           );
@@ -1594,14 +1773,8 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
               ],
             ),
             const SizedBox(height: 10),
-            _summaryRow(
-              'Role',
-              role,
-            ),
-            _summaryRow(
-              'UID',
-              uid,
-            ),
+            _summaryRow('Role', role),
+            _summaryRow('UID', uid),
             const SizedBox(height: 10),
             Row(
               children: [
@@ -1646,7 +1819,9 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('${approve ? 'Approve' : 'Reject'} Seller'),
+          title: Text(
+            '${approve ? 'Approve' : 'Reject'} Seller',
+          ),
           content: Text(
             'Are you sure you want to $action this seller request?',
           ),
@@ -1687,10 +1862,6 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
       };
 
       if (status == 'approved') {
-        // Only assign a brand-new sequential code if this user
-        // doesn't already have one (e.g. they were rejected and
-        // re-approved later) â€” this avoids burning a new counter
-        // slot every time someone is re-approved.
         final existingSnapshot =
             await _db.collection('users').doc(uid).get();
 
@@ -1793,7 +1964,6 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
       };
 
       if (status == 'approved') {
-        // Same re-approval safeguard as sellers above.
         final existingSnapshot =
             await _db.collection('users').doc(uid).get();
 
@@ -1801,9 +1971,10 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
             (existingSnapshot.data()?['entrepreneurCode'] ?? '')
                 .toString();
 
-        updates['entrepreneurCode'] = existingCode.isNotEmpty
-            ? existingCode
-            : await _generateSequentialEntrepreneurCode();
+        updates['entrepreneurCode'] =
+            existingCode.isNotEmpty
+                ? existingCode
+                : await _generateSequentialEntrepreneurCode();
 
         updates['entrepreneurApprovedAt'] =
             FieldValue.serverTimestamp();
@@ -1865,7 +2036,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         if (docs.isEmpty) {
           return const Center(
             child: Text(
-              'No Seller â†” Reseller relationships found.',
+              'No Seller ↔ Reseller relationships found.',
             ),
           );
         }
@@ -1875,6 +2046,12 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           itemCount: docs.length,
           itemBuilder: (context, index) {
             final data = docs[index].data();
+
+            final supplierPrice =
+                _toDouble(data['supplierPrice']);
+
+            final sellingPrice =
+                _toDouble(data['sellingPrice']);
 
             return Card(
               elevation: 0,
@@ -1898,8 +2075,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                     const SizedBox(height: 8),
                     _summaryRow(
                       'Seller Code',
-                      (data['sellerCode'] ?? 'N/A')
-                          .toString(),
+                      (data['sellerCode'] ?? 'N/A').toString(),
                     ),
                     _summaryRow(
                       'Reseller Code',
@@ -1910,15 +2086,15 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                     ),
                     _summaryRow(
                       'Supplier Price',
-                      'à§³${_toDouble(data['supplierPrice']).toStringAsFixed(2)}',
+                      '৳${supplierPrice.toStringAsFixed(2)}',
                     ),
                     _summaryRow(
                       'Selling Price',
-                      'à§³${_toDouble(data['sellingPrice']).toStringAsFixed(2)}',
+                      '৳${sellingPrice.toStringAsFixed(2)}',
                     ),
                     _summaryRow(
                       'Profit',
-                      'à§³${(_toDouble(data['sellingPrice']) - _toDouble(data['supplierPrice'])).toStringAsFixed(2)}',
+                      '৳${(sellingPrice - supplierPrice).toStringAsFixed(2)}',
                     ),
                   ],
                 ),
@@ -1936,13 +2112,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
 
   Widget _productsTab() {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _db
-          .collection('products')
-          .orderBy(
-            'createdAt',
-            descending: true,
-          )
-          .snapshots(),
+      stream: _db.collection('products').snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return _errorView(snapshot.error.toString());
@@ -1955,7 +2125,16 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           );
         }
 
-        final docs = snapshot.data?.docs ?? [];
+        final docs = [...(snapshot.data?.docs ?? [])];
+
+        docs.sort((a, b) {
+          final aDate =
+              _dateFromValue(a.data()['createdAt']);
+          final bDate =
+              _dateFromValue(b.data()['createdAt']);
+
+          return bDate.compareTo(aDate);
+        });
 
         if (docs.isEmpty) {
           return const Center(
@@ -1997,7 +2176,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                   ),
                 ),
                 subtitle: Text(
-                  'à§³${_toDouble(data['price']).toStringAsFixed(2)} â€¢ '
+                  '৳${_toDouble(data['price']).toStringAsFixed(2)} • '
                   '${data['category'] ?? 'No Category'}',
                 ),
                 trailing: IconButton(
@@ -2078,116 +2257,106 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   Widget _ordersTab() {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: _db.collection('orders').snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return _errorView(snapshot.error.toString());
-        }
+      builder: (context, customerSnapshot) {
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: _db.collection('seller_orders').snapshots(),
+          builder: (context, sellerSnapshot) {
+            return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _db.collection('reseller_orders').snapshots(),
+              builder: (context, resellerSnapshot) {
+                if (customerSnapshot.hasError) {
+                  return _errorView(
+                    customerSnapshot.error.toString(),
+                  );
+                }
 
-        if (snapshot.connectionState ==
-            ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
-        }
+                if (sellerSnapshot.hasError) {
+                  return _errorView(
+                    sellerSnapshot.error.toString(),
+                  );
+                }
 
-        final docs = [...(snapshot.data?.docs ?? [])];
+                if (resellerSnapshot.hasError) {
+                  return _errorView(
+                    resellerSnapshot.error.toString(),
+                  );
+                }
 
-        docs.sort((a, b) {
-          final aDate =
-              _dateFromValue(a.data()['createdAt']);
+                if (customerSnapshot.connectionState ==
+                        ConnectionState.waiting ||
+                    sellerSnapshot.connectionState ==
+                        ConnectionState.waiting ||
+                    resellerSnapshot.connectionState ==
+                        ConnectionState.waiting) {
+                  return const Center(
+                    child: CircularProgressIndicator(),
+                  );
+                }
 
-          final bDate =
-              _dateFromValue(b.data()['createdAt']);
+                final List<_AdminOrderItem> allOrders = [];
 
-          return bDate.compareTo(aDate);
-        });
-
-        if (docs.isEmpty) {
-          return const Center(
-            child: Text('No orders found.'),
-          );
-        }
-
-        return ListView.builder(
-          padding: const EdgeInsets.all(12),
-          itemCount: docs.length,
-          itemBuilder: (context, index) {
-            final doc = docs[index];
-            final data = doc.data();
-
-            final total = _toDouble(
-              data['totalAmount'] ?? data['total'],
-            );
-
-            final status =
-                (data['status'] ?? 'Order Placed')
-                    .toString();
-
-            final paymentStatus =
-                (data['paymentStatus'] ?? 'Pending')
-                    .toString();
-
-            return Card(
-              elevation: 0,
-              margin: const EdgeInsets.only(bottom: 10),
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Order ${doc.id}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                      ),
+                for (final doc
+                    in customerSnapshot.data?.docs ?? []) {
+                  allOrders.add(
+                    _AdminOrderItem(
+                      id: doc.id,
+                      data: doc.data(),
+                      type: 'Customer Order',
+                      collection: 'orders',
                     ),
-                    const SizedBox(height: 8),
-                    _summaryRow(
-                      'Total',
-                      'à§³${total.toStringAsFixed(2)}',
+                  );
+                }
+
+                for (final doc
+                    in sellerSnapshot.data?.docs ?? []) {
+                  allOrders.add(
+                    _AdminOrderItem(
+                      id: doc.id,
+                      data: doc.data(),
+                      type: 'Direct Seller Order',
+                      collection: 'seller_orders',
                     ),
-                    _summaryRow(
-                      'Order Status',
-                      status,
+                  );
+                }
+
+                for (final doc
+                    in resellerSnapshot.data?.docs ?? []) {
+                  allOrders.add(
+                    _AdminOrderItem(
+                      id: doc.id,
+                      data: doc.data(),
+                      type: 'Reseller Order',
+                      collection: 'reseller_orders',
                     ),
-                    _summaryRow(
-                      'Payment',
-                      paymentStatus,
+                  );
+                }
+
+                allOrders.sort(
+                  (a, b) => _dateFromValue(
+                    b.data['createdAt'],
+                  ).compareTo(
+                    _dateFromValue(
+                      a.data['createdAt'],
                     ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () =>
-                                _updateOrderStatus(
-                              doc.id,
-                              'Cancelled',
-                            ),
-                            child: const Text(
-                              'Cancel',
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: FilledButton(
-                            onPressed: () =>
-                                _updateOrderStatus(
-                              doc.id,
-                              'Completed',
-                            ),
-                            child: const Text(
-                              'Complete',
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
+                  ),
+                );
+
+                if (allOrders.isEmpty) {
+                  return const Center(
+                    child: Text('No orders found.'),
+                  );
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: allOrders.length,
+                  itemBuilder: (context, index) {
+                    return _adminOrderCard(
+                      allOrders[index],
+                    );
+                  },
+                );
+              },
             );
           },
         );
@@ -2195,18 +2364,149 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
     );
   }
 
-  Future<void> _updateOrderStatus(
-    String orderId,
+  Widget _adminOrderCard(_AdminOrderItem order) {
+    final data = order.data;
+
+    final total = _toDouble(
+      data['totalAmount'] ??
+          data['total'] ??
+          data['sellingTotal'] ??
+          data['subtotal'],
+    );
+
+    final status = (data['status'] ??
+            data['orderStatus'] ??
+            'Pending')
+        .toString();
+
+    final paymentStatus =
+        (data['paymentStatus'] ?? 'Pending').toString();
+
+    final customerName =
+        (data['customerName'] ?? '').toString();
+
+    final customerPhone =
+        (data['customerPhone'] ?? '').toString();
+
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  order.type == 'Reseller Order'
+                      ? Icons.sync_alt_outlined
+                      : order.type == 'Direct Seller Order'
+                          ? Icons.storefront_outlined
+                          : Icons.shopping_bag_outlined,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    order.type,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 8),
+
+            _summaryRow(
+              'Order ID',
+              order.id,
+            ),
+
+            _summaryRow(
+              'Total',
+              '৳${total.toStringAsFixed(2)}',
+            ),
+
+            _summaryRow(
+              'Order Status',
+              status,
+            ),
+
+            _summaryRow(
+              'Payment',
+              paymentStatus,
+            ),
+
+            if (customerName.isNotEmpty)
+              _summaryRow(
+                'Customer',
+                customerName,
+              ),
+
+            if (customerPhone.isNotEmpty)
+              _summaryRow(
+                'Phone',
+                customerPhone,
+              ),
+
+            if (order.type == 'Reseller Order')
+              _summaryRow(
+                'Order Source',
+                'Reseller → Seller delivery',
+              ),
+
+            const SizedBox(height: 10),
+
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => _updateAdminOrderStatus(
+                      order,
+                      'Cancelled',
+                    ),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () => _updateAdminOrderStatus(
+                      order,
+                      'Completed',
+                    ),
+                    child: const Text('Complete'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _updateAdminOrderStatus(
+    _AdminOrderItem order,
     String status,
   ) async {
     try {
-      await _db
-          .collection('orders')
-          .doc(orderId)
-          .update({
-        'status': status,
+      final collection = _db.collection(order.collection);
+
+      final updates = <String, dynamic>{
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
+
+      if (order.collection == 'orders') {
+        updates['status'] = status;
+      } else {
+        updates['orderStatus'] = status;
+      }
+
+      await collection.doc(order.id).update(updates);
 
       if (!mounted) return;
 
@@ -2223,7 +2523,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Failed: $e',
+            'Failed to update order: $e',
           ),
         ),
       );
@@ -2333,8 +2633,30 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
       return value;
     }
 
+    if (value is int) {
+      return DateTime.fromMillisecondsSinceEpoch(value);
+    }
+
     return DateTime.fromMillisecondsSinceEpoch(0);
   }
+}
+
+// ================================================================
+// ADMIN ORDER MODEL
+// ================================================================
+
+class _AdminOrderItem {
+  final String id;
+  final Map<String, dynamic> data;
+  final String type;
+  final String collection;
+
+  const _AdminOrderItem({
+    required this.id,
+    required this.data,
+    required this.type,
+    required this.collection,
+  });
 }
 
 // ================================================================
@@ -2343,9 +2665,12 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
 
 class _AdminSectionPage extends StatelessWidget {
   final String title;
+
   final Stream<QuerySnapshot<Map<String, dynamic>>>?
       notificationStream;
+
   final String notificationLabel;
+
   final Widget child;
 
   const _AdminSectionPage({
@@ -2369,7 +2694,7 @@ class _AdminSectionPage extends StatelessWidget {
       body: Column(
         children: [
           if (notificationStream != null)
-            _notificationCard(),
+            _notificationCard(context),
           Expanded(
             child: child,
           ),
@@ -2378,7 +2703,7 @@ class _AdminSectionPage extends StatelessWidget {
     );
   }
 
-  Widget _notificationCard() {
+  Widget _notificationCard(BuildContext context) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: notificationStream,
       builder: (context, snapshot) {
@@ -2462,7 +2787,7 @@ class _AdminSectionPage extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'ðŸ”” $count $notificationLabel',
+                  '🔔 $count $notificationLabel',
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
