@@ -445,13 +445,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
     }
   }
 
-  // FIX #1/#2:
-  // Keep the method private and use the same name everywhere.
   Future<void> _openAddressBook() async {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        // FIX: MaterialPageRoute.builder requires BuildContext.
         builder: (_) => const AddressBookPage(),
       ),
     );
@@ -478,10 +475,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
               );
 
     final String name =
-        address['name']?.toString() ?? '';
+        address['name']?.toString().trim().isNotEmpty == true
+            ? address['name'].toString().trim()
+            : (user.displayName ?? '');
 
     final String phone =
-        address['phone']?.toString() ?? '';
+        address['phone']?.toString().trim().isNotEmpty == true
+            ? address['phone'].toString().trim()
+            : (user.phoneNumber ?? '');
 
     final String email =
         user.email ?? '';
@@ -507,15 +508,19 @@ class _CheckoutPageState extends State<CheckoutPage> {
       'customerPhone': phone,
       'customerEmail': email,
 
+      // Compatibility string address.
       'address': addressText,
+
       'city': city,
       'district': district,
       'postalCode': postalCode,
 
       'deliveryZone': _deliveryZone,
 
+      // Full address map for Seller delivery.
       'deliveryAddress': address,
 
+      // Compatibility with older code/UI.
       'customerAddress': address,
     };
   }
@@ -974,16 +979,22 @@ class _CheckoutPageState extends State<CheckoutPage> {
             'quantity': item.quantity,
             'total': item.total,
             'imageUrl': item.imageUrl,
+
             'isResellerProduct':
                 item.isResellerProduct,
+
             'entrepreneurUid':
                 item.entrepreneurUid,
+
             'sellerId':
                 item.sellerId,
+
             'supplierProductId':
                 item.supplierProductId,
+
             'supplierPrice':
                 item.supplierPrice,
+
             'resellerProfit':
                 item.resellerProfit,
           };
@@ -1020,6 +1031,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
         ...customerDeliveryData,
 
+        // Keep existing compatibility field.
         'address': _selectedAddress,
 
         'createdAt':
@@ -1122,7 +1134,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
       );
 
       // ========================================================
-      // SELLER ORDERS
+      // DIRECT SELLER ORDERS
       // ========================================================
 
       for (final entry
@@ -1179,7 +1191,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
             'sellerOrderId':
                 sellerOrderRef.id,
 
-            'sellerId': entry.key,
+            'orderType':
+                'direct_seller',
+
+            'sellerId':
+                entry.key,
 
             'buyerId': user.uid,
             'customerId': user.uid,
@@ -1201,6 +1217,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 customerDeliveryData[
                     'customerEmail'],
 
+            // Compatibility string address.
             'address':
                 customerDeliveryData[
                     'address'],
@@ -1220,11 +1237,21 @@ class _CheckoutPageState extends State<CheckoutPage> {
             'deliveryZone':
                 _deliveryZone,
 
+            // Full address for Seller delivery.
             'deliveryAddress':
-                _selectedAddress,
+                customerDeliveryData[
+                    'deliveryAddress'],
 
+            // Compatibility with existing Seller UI.
             'customerAddress':
-                _selectedAddress,
+                customerDeliveryData[
+                    'customerAddress'],
+
+            // Delivery fee is stored for delivery
+            // information but is NOT added to
+            // seller earnings.
+            'deliveryFee':
+                _deliveryFee,
 
             'items': items
                 .map(
@@ -1376,6 +1403,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
             'resellerOrderId':
                 resellerOrderRef.id,
 
+            'orderType':
+                'reseller',
+
             'entrepreneurUid':
                 entrepreneurUid,
 
@@ -1392,7 +1422,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 user.uid,
 
             // ==================================================
-            // CUSTOMER INFORMATION
+            // CUSTOMER DELIVERY INFORMATION
             // ==================================================
 
             'customerName':
@@ -1407,6 +1437,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 customerDeliveryData[
                     'customerEmail'],
 
+            // Compatibility string address.
             'address':
                 customerDeliveryData[
                     'address'],
@@ -1426,11 +1457,20 @@ class _CheckoutPageState extends State<CheckoutPage> {
             'deliveryZone':
                 _deliveryZone,
 
+            // Full customer address.
+            // Seller uses this to deliver directly
+            // to the customer.
             'deliveryAddress':
-                _selectedAddress,
+                customerDeliveryData[
+                    'deliveryAddress'],
 
+            // Compatibility with older UI/code.
             'customerAddress':
-                _selectedAddress,
+                customerDeliveryData[
+                    'customerAddress'],
+
+            'deliveryFee':
+                _deliveryFee,
 
             'items': items
                 .map(
@@ -2042,8 +2082,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
                       border:
                           OutlineInputBorder(),
                     ),
-                    // FIX #4:
-                    // onSubmitted requires ValueChanged<String>.
                     onSubmitted:
                         (value) {
                       if (!_checkingCoupon) {
