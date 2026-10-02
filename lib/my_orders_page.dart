@@ -69,30 +69,33 @@ class MyOrdersPage extends StatelessWidget {
   // ============================================================
 
   String _formatDate(dynamic value) {
+    DateTime? date;
+
     if (value is Timestamp) {
-      final date = value.toDate();
-
-      final day = date.day.toString().padLeft(2, '0');
-      final month = date.month.toString().padLeft(2, '0');
-      final year = date.year.toString();
-
-      final hour = date.hour == 0
-          ? 12
-          : (date.hour > 12
-              ? date.hour - 12
-              : date.hour);
-
-      final minute =
-          date.minute.toString().padLeft(2, '0');
-
-      final period =
-          date.hour >= 12 ? 'PM' : 'AM';
-
-      return '$day/$month/$year '
-          '$hour:$minute $period';
+      date = value.toDate();
+    } else if (value is DateTime) {
+      date = value;
+    } else if (value is String) {
+      date = DateTime.tryParse(value);
     }
 
-    return 'Date unavailable';
+    if (date == null) {
+      return 'Date unavailable';
+    }
+
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final year = date.year.toString();
+
+    final hour = date.hour == 0
+        ? 12
+        : (date.hour > 12 ? date.hour - 12 : date.hour);
+
+    final minute = date.minute.toString().padLeft(2, '0');
+
+    final period = date.hour >= 12 ? 'PM' : 'AM';
+
+    return '$day/$month/$year $hour:$minute $period';
   }
 
   DateTime? _dateValue(dynamic value) {
@@ -190,6 +193,43 @@ class MyOrdersPage extends StatelessWidget {
   }
 
   // ============================================================
+  // CUSTOMER FINAL AMOUNT
+  // ============================================================
+
+  double _getCustomerOrderAmount(
+    Map<String, dynamic> data,
+    double subtotal,
+  ) {
+    final couponDiscount = _number(
+      data['couponDiscount'] ??
+          data['discount'],
+    );
+
+    final storedNetSellingTotal = _number(
+      data['netSellingTotal'],
+    );
+
+    final storedNetSellerEarnings = _number(
+      data['netSellerEarnings'] ??
+          data['sellerEarnings'],
+    );
+
+    if (storedNetSellingTotal > 0) {
+      return storedNetSellingTotal;
+    }
+
+    // This field is only a compatibility fallback.
+    // It is not displayed as seller earnings.
+    if (storedNetSellerEarnings > 0) {
+      return storedNetSellerEarnings;
+    }
+
+    final calculated = subtotal - couponDiscount;
+
+    return calculated < 0 ? 0 : calculated;
+  }
+
+  // ============================================================
   // STATUS CHIP
   // ============================================================
 
@@ -266,8 +306,7 @@ class MyOrdersPage extends StatelessWidget {
 
     if (imageUrl.isNotEmpty) {
       image = ClipRRect(
-        borderRadius:
-            BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(10),
         child: Image.network(
           imageUrl,
           width: 64,
@@ -283,8 +322,9 @@ class MyOrdersPage extends StatelessWidget {
     }
 
     return Padding(
-      padding:
-          const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(
+        bottom: 12,
+      ),
       child: Row(
         crossAxisAlignment:
             CrossAxisAlignment.start,
@@ -299,11 +339,9 @@ class MyOrdersPage extends StatelessWidget {
                 Text(
                   name,
                   maxLines: 2,
-                  overflow:
-                      TextOverflow.ellipsis,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontWeight:
-                        FontWeight.w600,
+                    fontWeight: FontWeight.w600,
                     fontSize: 14,
                   ),
                 ),
@@ -311,8 +349,7 @@ class MyOrdersPage extends StatelessWidget {
                 Text(
                   'Quantity: $quantity',
                   style: TextStyle(
-                    color:
-                        Colors.grey.shade600,
+                    color: Colors.grey.shade600,
                     fontSize: 13,
                   ),
                 ),
@@ -320,8 +357,7 @@ class MyOrdersPage extends StatelessWidget {
                 Text(
                   '৳${(price * quantity).toStringAsFixed(0)}',
                   style: const TextStyle(
-                    fontWeight:
-                        FontWeight.bold,
+                    fontWeight: FontWeight.bold,
                     color: Colors.redAccent,
                   ),
                 ),
@@ -358,11 +394,11 @@ class MyOrdersPage extends StatelessWidget {
     final customerName =
         (data['customerName'] ?? '').toString();
 
-    final customerPhone =
-        (data['customerPhone'] ??
-                data['phone'] ??
-                '')
-            .toString();
+    final customerPhone = (
+      data['customerPhone'] ??
+          data['phone'] ??
+          ''
+    ).toString();
 
     final address =
         (data['address'] ?? '').toString();
@@ -373,19 +409,75 @@ class MyOrdersPage extends StatelessWidget {
     final district =
         (data['district'] ?? '').toString();
 
+    final postalCode =
+        (data['postalCode'] ?? '').toString();
+
     final deliveryZone =
         (data['deliveryZone'] ?? '').toString();
 
-    final hasAddress =
+    final deliveryAddress =
+        data['deliveryAddress'];
+
+    final hasBasicAddress =
         customerName.isNotEmpty ||
         customerPhone.isNotEmpty ||
         address.isNotEmpty ||
         city.isNotEmpty ||
-        district.isNotEmpty;
+        district.isNotEmpty ||
+        postalCode.isNotEmpty;
 
-    if (!hasAddress) {
+    final hasMapDeliveryAddress =
+        deliveryAddress is Map &&
+        deliveryAddress.isNotEmpty;
+
+    if (!hasBasicAddress &&
+        !hasMapDeliveryAddress) {
       return const SizedBox.shrink();
     }
+
+    String mapAddress = '';
+    String mapCity = '';
+    String mapDistrict = '';
+    String mapPostalCode = '';
+
+    if (deliveryAddress is Map) {
+      mapAddress = (
+        deliveryAddress['address'] ??
+            deliveryAddress['fullAddress'] ??
+            deliveryAddress['street'] ??
+            ''
+      ).toString();
+
+      mapCity = (
+        deliveryAddress['city'] ?? ''
+      ).toString();
+
+      mapDistrict = (
+        deliveryAddress['district'] ?? ''
+      ).toString();
+
+      mapPostalCode = (
+        deliveryAddress['postalCode'] ??
+            deliveryAddress['zipCode'] ??
+            ''
+      ).toString();
+    }
+
+    final finalAddress =
+        address.isNotEmpty ? address : mapAddress;
+
+    final finalCity =
+        city.isNotEmpty ? city : mapCity;
+
+    final finalDistrict =
+        district.isNotEmpty
+            ? district
+            : mapDistrict;
+
+    final finalPostalCode =
+        postalCode.isNotEmpty
+            ? postalCode
+            : mapPostalCode;
 
     final zoneText =
         deliveryZone == 'inside_dhaka'
@@ -396,14 +488,11 @@ class MyOrdersPage extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      margin:
-          const EdgeInsets.only(top: 12),
-      padding:
-          const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.grey.shade50,
-        borderRadius:
-            BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: Colors.grey.shade300,
         ),
@@ -424,8 +513,7 @@ class MyOrdersPage extends StatelessWidget {
                 child: Text(
                   'Delivery Information',
                   style: TextStyle(
-                    fontWeight:
-                        FontWeight.bold,
+                    fontWeight: FontWeight.bold,
                     fontSize: 14,
                   ),
                 ),
@@ -438,42 +526,30 @@ class MyOrdersPage extends StatelessWidget {
             Text(
               customerName,
               style: const TextStyle(
-                fontWeight:
-                    FontWeight.w600,
+                fontWeight: FontWeight.w600,
               ),
             ),
 
           if (customerPhone.isNotEmpty)
             Padding(
-              padding:
-                  const EdgeInsets.only(
-                top: 3,
-              ),
-              child: Text(
-                customerPhone,
-              ),
+              padding: const EdgeInsets.only(top: 3),
+              child: Text(customerPhone),
             ),
 
-          if (address.isNotEmpty)
+          if (finalAddress.isNotEmpty)
             Padding(
-              padding:
-                  const EdgeInsets.only(
-                top: 3,
-              ),
-              child: Text(address),
+              padding: const EdgeInsets.only(top: 3),
+              child: Text(finalAddress),
             ),
 
-          if (city.isNotEmpty ||
-              district.isNotEmpty)
+          if (finalCity.isNotEmpty ||
+              finalDistrict.isNotEmpty)
             Padding(
-              padding:
-                  const EdgeInsets.only(
-                top: 3,
-              ),
+              padding: const EdgeInsets.only(top: 3),
               child: Text(
                 [
-                  city,
-                  district,
+                  finalCity,
+                  finalDistrict,
                 ]
                     .where(
                       (e) => e.isNotEmpty,
@@ -482,17 +558,25 @@ class MyOrdersPage extends StatelessWidget {
               ),
             ),
 
+          if (finalPostalCode.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Text(
+                'Postal Code: $finalPostalCode',
+                style: TextStyle(
+                  color: Colors.grey.shade700,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+
           if (zoneText.isNotEmpty)
             Padding(
-              padding:
-                  const EdgeInsets.only(
-                top: 6,
-              ),
+              padding: const EdgeInsets.only(top: 6),
               child: Text(
                 zoneText,
                 style: TextStyle(
-                  color:
-                      Colors.grey.shade700,
+                  color: Colors.grey.shade700,
                   fontSize: 12,
                 ),
               ),
@@ -502,11 +586,11 @@ class MyOrdersPage extends StatelessWidget {
             const SizedBox(height: 8),
             Container(
               width: double.infinity,
-              padding:
-                  const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.blue
-                    .withValues(alpha: 0.07),
+                color: Colors.blue.withValues(
+                  alpha: 0.07,
+                ),
                 borderRadius:
                     BorderRadius.circular(8),
               ),
@@ -528,8 +612,7 @@ class MyOrdersPage extends StatelessWidget {
                       style: TextStyle(
                         color: Colors.blue,
                         fontSize: 12,
-                        fontWeight:
-                            FontWeight.w600,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -543,7 +626,7 @@ class MyOrdersPage extends StatelessWidget {
   }
 
   // ============================================================
-  // COUPON / EARNINGS SUMMARY
+  // CUSTOMER FINANCIAL SUMMARY
   // ============================================================
 
   Widget _buildFinancialSummary(
@@ -556,100 +639,43 @@ class MyOrdersPage extends StatelessWidget {
           data['discount'],
     );
 
-    final netSellerEarnings =
-        _number(
-      data['netSellerEarnings'] ??
-          data['sellerEarnings'],
-    );
-
-    final netSellingTotal =
-        _number(
-      data['netSellingTotal'],
-    );
-
-    final supplierTotal =
-        _number(
-      data['supplierTotal'],
-    );
-
-    final resellerProfit =
-        _number(
-      data['resellerProfit'] ??
-          data['profit'],
-    );
-
-    final hasCoupon =
-        couponDiscount > 0;
-
-    final hasResellerFinancialData =
-        isResellerOrder &&
-        (netSellingTotal > 0 ||
-            supplierTotal > 0 ||
-            resellerProfit != 0);
-
-    final hasSellerEarnings =
-        !isResellerOrder &&
-        netSellerEarnings > 0;
-
-    if (!hasCoupon &&
-        !hasResellerFinancialData &&
-        !hasSellerEarnings) {
+    if (couponDiscount <= 0) {
       return const SizedBox.shrink();
     }
 
+    final finalAmount =
+        _getCustomerOrderAmount(
+      data,
+      subtotal,
+    );
+
     return Container(
       width: double.infinity,
-      margin:
-          const EdgeInsets.only(top: 12),
-      padding:
-          const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.grey.shade50,
-        borderRadius:
-            BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         children: [
-          if (hasCoupon)
-            _financialRow(
-              'Coupon Discount',
-              -couponDiscount,
-              valueColor:
-                  Colors.green,
-            ),
-
-          if (isResellerOrder &&
-              netSellingTotal > 0)
-            _financialRow(
-              'Net Selling Total',
-              netSellingTotal,
-            ),
-
-          if (isResellerOrder &&
-              supplierTotal > 0)
-            _financialRow(
-              'Supplier Cost',
-              supplierTotal,
-            ),
-
-          if (isResellerOrder &&
-              (resellerProfit != 0 ||
-                  supplierTotal > 0))
-            _financialRow(
-              'Reseller Profit',
-              resellerProfit,
-              valueColor:
-                  resellerProfit >= 0
-                      ? Colors.green
-                      : Colors.red,
-            ),
-
-          if (!isResellerOrder &&
-              hasSellerEarnings)
-            _financialRow(
-              'Seller Net Earnings',
-              netSellerEarnings,
-            ),
+          _financialRow(
+            'Subtotal',
+            subtotal,
+          ),
+          _financialRow(
+            'Coupon Discount',
+            couponDiscount,
+            valueColor: Colors.green,
+            negative: true,
+          ),
+          const Divider(height: 14),
+          _financialRow(
+            'Order Amount',
+            finalAmount,
+            valueColor: Colors.redAccent,
+            bold: true,
+          ),
         ],
       ),
     );
@@ -659,34 +685,35 @@ class MyOrdersPage extends StatelessWidget {
     String title,
     double value, {
     Color? valueColor,
+    bool negative = false,
+    bool bold = false,
   }) {
-    final isNegative = value < 0;
-
     return Padding(
-      padding:
-          const EdgeInsets.only(
+      padding: const EdgeInsets.only(
         bottom: 6,
       ),
       child: Row(
         mainAxisAlignment:
-            MainAxisAlignment
-                .spaceBetween,
+            MainAxisAlignment.spaceBetween,
         children: [
           Text(
             title,
             style: TextStyle(
-              color:
-                  Colors.grey.shade700,
+              color: Colors.grey.shade700,
               fontSize: 13,
+              fontWeight:
+                  bold ? FontWeight.bold : null,
             ),
           ),
           Text(
-            '${isNegative ? '- ' : ''}'
+            '${negative ? '- ' : ''}'
             '৳${value.abs().toStringAsFixed(2)}',
             style: TextStyle(
               color: valueColor,
               fontWeight:
-                  FontWeight.w600,
+                  bold
+                      ? FontWeight.bold
+                      : FontWeight.w600,
               fontSize: 13,
             ),
           ),
@@ -705,24 +732,18 @@ class MyOrdersPage extends StatelessWidget {
     final message =
         error.toString().toLowerCase();
 
-    if (message.contains(
-          'permission-denied',
-        ) ||
+    if (message.contains('permission-denied') ||
         message.contains(
           'missing or insufficient permissions',
         )) {
       return 'You do not have permission to cancel this order.';
     }
 
-    if (message.contains(
-      'not-found',
-    )) {
+    if (message.contains('not-found')) {
       return 'This order could not be found.';
     }
 
-    if (message.contains(
-      'you cannot cancel',
-    )) {
+    if (message.contains('you cannot cancel')) {
       return 'You cannot cancel this order.';
     }
 
@@ -743,8 +764,7 @@ class MyOrdersPage extends StatelessWidget {
     BuildContext context,
     String sellerOrderId,
     Map<String, dynamic> sellerOrderData, {
-    String collectionName =
-        'seller_orders',
+    String collectionName = 'seller_orders',
   }) async {
     final currentUser =
         FirebaseAuth.instance.currentUser;
@@ -760,10 +780,8 @@ class MyOrdersPage extends StatelessWidget {
           ''
     ).toString();
 
-    if (customerId !=
-        currentUser.uid) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
+    if (customerId != currentUser.uid) {
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
             'You cannot cancel this order.',
@@ -780,8 +798,7 @@ class MyOrdersPage extends StatelessWidget {
     ).toString();
 
     if (!_canCancel(currentStatus)) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             'This order cannot be cancelled because '
@@ -811,9 +828,7 @@ class MyOrdersPage extends StatelessWidget {
                   false,
                 );
               },
-              child: const Text(
-                'No',
-              ),
+              child: const Text('No'),
             ),
             ElevatedButton(
               onPressed: () {
@@ -822,12 +837,9 @@ class MyOrdersPage extends StatelessWidget {
                   true,
                 );
               },
-              style:
-                  ElevatedButton.styleFrom(
-                backgroundColor:
-                    Colors.red,
-                foregroundColor:
-                    Colors.white,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
               ),
               child: const Text(
                 'Yes, Cancel',
@@ -867,8 +879,7 @@ class MyOrdersPage extends StatelessWidget {
             ''
       ).toString();
 
-      if (latestCustomerId !=
-          currentUser.uid) {
+      if (latestCustomerId != currentUser.uid) {
         throw Exception(
           'You cannot cancel this order.',
         );
@@ -896,27 +907,23 @@ class MyOrdersPage extends StatelessWidget {
       });
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
               'Order cancelled successfully.',
             ),
-            backgroundColor:
-                Colors.green,
+            backgroundColor: Colors.green,
           ),
         );
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
               _friendlyCancelError(e),
             ),
-            backgroundColor:
-                Colors.red,
+            backgroundColor: Colors.red,
           ),
         );
       }
@@ -931,16 +938,13 @@ class MyOrdersPage extends StatelessWidget {
     BuildContext context,
     QueryDocumentSnapshot<
         Map<String, dynamic>> doc, {
-    String collectionName =
-        'seller_orders',
-    String fallbackLabel =
-        'Seller Order',
+    String collectionName = 'seller_orders',
+    String fallbackLabel = 'Seller Order',
   }) {
     final data = doc.data();
 
     final isResellerOrder =
-        collectionName ==
-            'reseller_orders';
+        collectionName == 'reseller_orders';
 
     final sellerCode = (
       data['sellerCode'] ??
@@ -960,14 +964,12 @@ class MyOrdersPage extends StatelessWidget {
         ? itemsRaw
             .map(_itemMap)
             .where(
-              (item) =>
-                  item.isNotEmpty,
+              (item) => item.isNotEmpty,
             )
             .toList()
         : <Map<String, dynamic>>[];
 
-    final subtotal =
-        _getSellerSubtotal(
+    final subtotal = _getSellerSubtotal(
       data,
       items,
     );
@@ -977,39 +979,41 @@ class MyOrdersPage extends StatelessWidget {
             ? 'Reseller Subtotal'
             : 'Seller Subtotal';
 
+    final couponDiscount = _number(
+      data['couponDiscount'] ??
+          data['discount'],
+    );
+
+    final customerAmount =
+        _getCustomerOrderAmount(
+      data,
+      subtotal,
+    );
+
     return Card(
-      margin:
-          const EdgeInsets.only(
+      margin: const EdgeInsets.only(
         bottom: 14,
       ),
       elevation: 2,
       child: Padding(
-        padding:
-            const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment:
               CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(
-                  isResellerOrder
-                      ? Icons
-                          .storefront_outlined
-                      : Icons
-                          .storefront_outlined,
-                  color:
-                      Colors.redAccent,
+                const Icon(
+                  Icons.storefront_outlined,
+                  color: Colors.redAccent,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     sellerCode,
-                    style:
-                        const TextStyle(
+                    style: const TextStyle(
                       fontSize: 16,
-                      fontWeight:
-                          FontWeight.bold,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
@@ -1025,21 +1029,16 @@ class MyOrdersPage extends StatelessWidget {
                 horizontal: 8,
                 vertical: 4,
               ),
-              decoration:
-                  BoxDecoration(
+              decoration: BoxDecoration(
                 color: isResellerOrder
-                    ? Colors.blue
-                        .withValues(
+                    ? Colors.blue.withValues(
                         alpha: 0.08,
                       )
-                    : Colors.redAccent
-                        .withValues(
+                    : Colors.redAccent.withValues(
                         alpha: 0.08,
                       ),
                 borderRadius:
-                    BorderRadius.circular(
-                  6,
-                ),
+                    BorderRadius.circular(6),
               ),
               child: Text(
                 _orderTypeLabel(
@@ -1050,8 +1049,7 @@ class MyOrdersPage extends StatelessWidget {
                       ? Colors.blue
                       : Colors.redAccent,
                   fontSize: 11,
-                  fontWeight:
-                      FontWeight.bold,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ),
@@ -1067,36 +1065,68 @@ class MyOrdersPage extends StatelessWidget {
 
             Row(
               mainAxisAlignment:
-                  MainAxisAlignment
-                      .spaceBetween,
+                  MainAxisAlignment.spaceBetween,
               children: [
                 Text(
                   subtotalLabel,
-                  style:
-                      const TextStyle(
-                    fontWeight:
-                        FontWeight.bold,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
                 Text(
                   '৳${subtotal.toStringAsFixed(0)}',
-                  style:
-                      const TextStyle(
-                    color:
-                        Colors.redAccent,
-                    fontWeight:
-                        FontWeight.bold,
+                  style: const TextStyle(
+                    color: Colors.redAccent,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ],
             ),
 
-            _buildFinancialSummary(
-              data,
-              isResellerOrder:
-                  isResellerOrder,
-              subtotal: subtotal,
-            ),
+            if (couponDiscount > 0) ...[
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment:
+                    MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Coupon Discount',
+                    style: TextStyle(
+                      color: Colors.green,
+                      fontSize: 13,
+                    ),
+                  ),
+                  Text(
+                    '- ৳${couponDiscount.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      color: Colors.green,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment:
+                    MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Order Amount',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    '৳${customerAmount.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      color: Colors.redAccent,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ],
 
             _buildDeliverySummary(
               data,
@@ -1108,8 +1138,7 @@ class MyOrdersPage extends StatelessWidget {
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
-                child:
-                    OutlinedButton.icon(
+                child: OutlinedButton.icon(
                   onPressed: () {
                     _cancelSellerOrder(
                       context,
@@ -1127,14 +1156,11 @@ class MyOrdersPage extends StatelessWidget {
                     'Cancel Order',
                     style: TextStyle(
                       color: Colors.red,
-                      fontWeight:
-                          FontWeight.bold,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                  style:
-                      OutlinedButton.styleFrom(
-                    side:
-                        const BorderSide(
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(
                       color: Colors.red,
                     ),
                   ),
@@ -1163,13 +1189,10 @@ class MyOrdersPage extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            OrderDetailsPage(
+        builder: (_) => OrderDetailsPage(
           orderId: orderDoc.id,
-          orderData:
-              orderDoc.data(),
-          sellerOrders:
-              sellerOrders,
+          orderData: orderDoc.data(),
+          sellerOrders: sellerOrders,
         ),
       ),
     );
@@ -1190,13 +1213,11 @@ class MyOrdersPage extends StatelessWidget {
     List<
             QueryDocumentSnapshot<
                 Map<String, dynamic>>>
-        resellerOrders =
-        const [],
+        resellerOrders = const [],
   }) {
     final data = orderDoc.data();
 
-    final orderId =
-        orderDoc.id;
+    final orderId = orderDoc.id;
 
     final mainStatus = (
       data['orderStatus'] ??
@@ -1211,22 +1232,17 @@ class MyOrdersPage extends StatelessWidget {
     );
 
     final createdAt =
-        _formatDate(
-      data['createdAt'],
-    );
+        _formatDate(data['createdAt']);
 
     final deliveryZone =
-        (data['deliveryZone'] ?? '')
-            .toString();
+        (data['deliveryZone'] ?? '').toString();
 
     return Card(
-      margin:
-          const EdgeInsets.only(
+      margin: const EdgeInsets.only(
         bottom: 22,
       ),
       elevation: 3,
-      clipBehavior:
-          Clip.antiAlias,
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
           _openOrderDetails(
@@ -1236,8 +1252,7 @@ class MyOrdersPage extends StatelessWidget {
           );
         },
         child: Padding(
-          padding:
-              const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment:
                 CrossAxisAlignment.start,
@@ -1249,38 +1264,27 @@ class MyOrdersPage extends StatelessWidget {
                   Expanded(
                     child: Column(
                       crossAxisAlignment:
-                          CrossAxisAlignment
-                              .start,
+                          CrossAxisAlignment.start,
                       children: [
                         const Text(
                           'Order',
-                          style:
-                              TextStyle(
-                            color:
-                                Colors.grey,
-                            fontSize:
-                                12,
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
                           ),
                         ),
-                        const SizedBox(
-                          height: 3,
-                        ),
+                        const SizedBox(height: 3),
                         Text(
                           '#$orderId',
-                          style:
-                              const TextStyle(
+                          style: const TextStyle(
                             fontSize: 16,
-                            fontWeight:
-                                FontWeight
-                                    .bold,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  _statusChip(
-                    mainStatus,
-                  ),
+                  _statusChip(mainStatus),
                 ],
               ),
 
@@ -1289,28 +1293,21 @@ class MyOrdersPage extends StatelessWidget {
               Text(
                 createdAt,
                 style: TextStyle(
-                  color:
-                      Colors.grey.shade600,
+                  color: Colors.grey.shade600,
                   fontSize: 12,
                 ),
               ),
 
-              if (deliveryZone
-                  .isNotEmpty) ...[
-                const SizedBox(
-                  height: 6,
-                ),
+              if (deliveryZone.isNotEmpty) ...[
+                const SizedBox(height: 6),
                 Text(
-                  deliveryZone ==
-                          'inside_dhaka'
+                  deliveryZone == 'inside_dhaka'
                       ? 'Delivery: Inside Dhaka'
-                      : deliveryZone ==
-                              'outside_dhaka'
+                      : deliveryZone == 'outside_dhaka'
                           ? 'Delivery: Outside Dhaka'
                           : 'Delivery: $deliveryZone',
                   style: TextStyle(
-                    color:
-                        Colors.grey.shade700,
+                    color: Colors.grey.shade700,
                     fontSize: 12,
                   ),
                 ),
@@ -1321,26 +1318,20 @@ class MyOrdersPage extends StatelessWidget {
               if (total > 0)
                 Row(
                   mainAxisAlignment:
-                      MainAxisAlignment
-                          .spaceBetween,
+                      MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
                       'Order Total',
-                      style:
-                          TextStyle(
-                        fontWeight:
-                            FontWeight.w600,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                     Text(
                       '৳${total.toStringAsFixed(0)}',
-                      style:
-                          const TextStyle(
-                        fontWeight:
-                            FontWeight.bold,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
                         fontSize: 17,
-                        color:
-                            Colors.redAccent,
+                        color: Colors.redAccent,
                       ),
                     ),
                   ],
@@ -1351,22 +1342,17 @@ class MyOrdersPage extends StatelessWidget {
               const Row(
                 children: [
                   Icon(
-                    Icons
-                        .touch_app_outlined,
+                    Icons.touch_app_outlined,
                     size: 16,
-                    color:
-                        Colors.redAccent,
+                    color: Colors.redAccent,
                   ),
                   SizedBox(width: 5),
                   Text(
                     'Tap this order to view details',
-                    style:
-                        TextStyle(
-                      color:
-                          Colors.redAccent,
+                    style: TextStyle(
+                      color: Colors.redAccent,
                       fontSize: 12,
-                      fontWeight:
-                          FontWeight.w600,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
@@ -1376,23 +1362,20 @@ class MyOrdersPage extends StatelessWidget {
 
               SizedBox(
                 width: double.infinity,
-                child:
-                    ElevatedButton.icon(
+                child: ElevatedButton.icon(
                   onPressed: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) =>
                             OrderTrackingPage(
-                          orderId:
-                              orderId,
+                          orderId: orderId,
                         ),
                       ),
                     );
                   },
                   icon: const Icon(
-                    Icons
-                        .local_shipping_outlined,
+                    Icons.local_shipping_outlined,
                   ),
                   label: const Text(
                     'Track Order',
@@ -1400,25 +1383,18 @@ class MyOrdersPage extends StatelessWidget {
                 ),
               ),
 
-              if (sellerOrders
-                  .isNotEmpty) ...[
-                const SizedBox(
-                  height: 18,
-                ),
+              if (sellerOrders.isNotEmpty) ...[
+                const SizedBox(height: 18),
 
                 const Text(
                   'Seller Orders',
-                  style:
-                      TextStyle(
+                  style: TextStyle(
                     fontSize: 17,
-                    fontWeight:
-                        FontWeight.bold,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
 
-                const SizedBox(
-                  height: 12,
-                ),
+                const SizedBox(height: 12),
 
                 ...sellerOrders.map(
                   (sellerOrder) =>
@@ -1433,25 +1409,18 @@ class MyOrdersPage extends StatelessWidget {
                 ),
               ],
 
-              if (resellerOrders
-                  .isNotEmpty) ...[
-                const SizedBox(
-                  height: 18,
-                ),
+              if (resellerOrders.isNotEmpty) ...[
+                const SizedBox(height: 18),
 
                 const Text(
                   'Reseller Store Orders',
-                  style:
-                      TextStyle(
+                  style: TextStyle(
                     fontSize: 17,
-                    fontWeight:
-                        FontWeight.bold,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
 
-                const SizedBox(
-                  height: 12,
-                ),
+                const SizedBox(height: 12),
 
                 ...resellerOrders.map(
                   (resellerOrder) =>
@@ -1483,8 +1452,7 @@ class MyOrdersPage extends StatelessWidget {
             MainAxisAlignment.center,
         children: [
           Icon(
-            Icons
-                .shopping_bag_outlined,
+            Icons.shopping_bag_outlined,
             size: 70,
             color: Colors.grey,
           ),
@@ -1493,8 +1461,7 @@ class MyOrdersPage extends StatelessWidget {
             'No Orders Yet',
             style: TextStyle(
               fontSize: 20,
-              fontWeight:
-                  FontWeight.bold,
+              fontWeight: FontWeight.bold,
             ),
           ),
           SizedBox(height: 6),
@@ -1523,8 +1490,7 @@ class MyOrdersPage extends StatelessWidget {
     if (user == null) {
       return Scaffold(
         appBar: AppBar(
-          title:
-              const Text('My Orders'),
+          title: const Text('My Orders'),
           centerTitle: true,
         ),
         body: const Center(
@@ -1537,13 +1503,11 @@ class MyOrdersPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title:
-            const Text('My Orders'),
+        title: const Text('My Orders'),
         centerTitle: true,
       ),
       body: StreamBuilder<
-          QuerySnapshot<
-              Map<String, dynamic>>>(
+          QuerySnapshot<Map<String, dynamic>>>(
         stream:
             FirebaseFirestore.instance
                 .collection('orders')
@@ -1556,35 +1520,28 @@ class MyOrdersPage extends StatelessWidget {
           context,
           orderSnapshot,
         ) {
-          if (orderSnapshot
-                  .connectionState ==
+          if (orderSnapshot.connectionState ==
               ConnectionState.waiting) {
             return const Center(
-              child:
-                  CircularProgressIndicator(),
+              child: CircularProgressIndicator(),
             );
           }
 
           if (orderSnapshot.hasError) {
             return Center(
               child: Padding(
-                padding:
-                    const EdgeInsets.all(
-                  20,
-                ),
+                padding: const EdgeInsets.all(20),
                 child: Text(
                   'Unable to load orders.\n\n'
                   '${orderSnapshot.error}',
-                  textAlign:
-                      TextAlign.center,
+                  textAlign: TextAlign.center,
                 ),
               ),
             );
           }
 
           final orderDocs =
-              orderSnapshot.data?.docs ??
-                  [];
+              orderSnapshot.data?.docs ?? [];
 
           final sortedOrders =
               [...orderDocs];
@@ -1614,37 +1571,28 @@ class MyOrdersPage extends StatelessWidget {
                 return -1;
               }
 
-              return bDate.compareTo(
-                aDate,
-              );
+              return bDate.compareTo(aDate);
             },
           );
 
           return StreamBuilder<
-              QuerySnapshot<
-                  Map<String,
-                      dynamic>>>(
+              QuerySnapshot<Map<String, dynamic>>>(
             stream:
                 FirebaseFirestore.instance
-                    .collection(
-                      'seller_orders',
-                    )
+                    .collection('seller_orders')
                     .where(
                       'customerId',
-                      isEqualTo:
-                          user.uid,
+                      isEqualTo: user.uid,
                     )
                     .snapshots(),
             builder: (
               context,
               sellerSnapshot,
             ) {
-              if (sellerSnapshot
-                      .connectionState ==
+              if (sellerSnapshot.connectionState ==
                   ConnectionState.waiting) {
                 return const Center(
-                  child:
-                      CircularProgressIndicator(),
+                  child: CircularProgressIndicator(),
                 );
               }
 
@@ -1652,9 +1600,7 @@ class MyOrdersPage extends StatelessWidget {
                 return Center(
                   child: Padding(
                     padding:
-                        const EdgeInsets.all(
-                      20,
-                    ),
+                        const EdgeInsets.all(20),
                     child: Text(
                       'Unable to load seller orders.\n\n'
                       '${sellerSnapshot.error}',
@@ -1666,9 +1612,7 @@ class MyOrdersPage extends StatelessWidget {
               }
 
               final sellerDocs =
-                  sellerSnapshot.data
-                          ?.docs ??
-                      [];
+                  sellerSnapshot.data?.docs ?? [];
 
               final sellerOrdersByOrderId =
                   <
@@ -1678,15 +1622,12 @@ class MyOrdersPage extends StatelessWidget {
                               Map<String,
                                   dynamic>>>>{};
 
-              for (final sellerDoc
-                  in sellerDocs) {
-                final data =
-                    sellerDoc.data();
+              for (final sellerDoc in sellerDocs) {
+                final data = sellerDoc.data();
 
-                final orderId = (
-                  data['orderId'] ??
-                      ''
-                ).toString();
+                final orderId =
+                    (data['orderId'] ?? '')
+                        .toString();
 
                 if (orderId.isEmpty) {
                   continue;
@@ -1701,19 +1642,13 @@ class MyOrdersPage extends StatelessWidget {
               }
 
               return StreamBuilder<
-                  QuerySnapshot<
-                      Map<String,
-                          dynamic>>>(
+                  QuerySnapshot<Map<String, dynamic>>>(
                 stream:
-                    FirebaseFirestore
-                        .instance
-                        .collection(
-                          'reseller_orders',
-                        )
+                    FirebaseFirestore.instance
+                        .collection('reseller_orders')
                         .where(
                           'customerId',
-                          isEqualTo:
-                              user.uid,
+                          isEqualTo: user.uid,
                         )
                         .snapshots(),
                 builder: (
@@ -1729,14 +1664,11 @@ class MyOrdersPage extends StatelessWidget {
                     );
                   }
 
-                  if (resellerSnapshot
-                      .hasError) {
+                  if (resellerSnapshot.hasError) {
                     return Center(
                       child: Padding(
                         padding:
-                            const EdgeInsets.all(
-                          20,
-                        ),
+                            const EdgeInsets.all(20),
                         child: Text(
                           'Unable to load reseller orders.\n\n'
                           '${resellerSnapshot.error}',
@@ -1748,9 +1680,7 @@ class MyOrdersPage extends StatelessWidget {
                   }
 
                   final resellerDocs =
-                      resellerSnapshot.data
-                              ?.docs ??
-                          [];
+                      resellerSnapshot.data?.docs ?? [];
 
                   final resellerOrdersByOrderId =
                       <
@@ -1765,10 +1695,9 @@ class MyOrdersPage extends StatelessWidget {
                     final data =
                         resellerDoc.data();
 
-                    final orderId = (
-                      data['orderId'] ??
-                          ''
-                    ).toString();
+                    final orderId =
+                        (data['orderId'] ?? '')
+                            .toString();
 
                     if (orderId.isEmpty) {
                       continue;
@@ -1779,9 +1708,7 @@ class MyOrdersPage extends StatelessWidget {
                       orderId,
                       () => [],
                     )
-                        .add(
-                          resellerDoc,
-                        );
+                        .add(resellerDoc);
                   }
 
                   // ==================================================
@@ -1798,9 +1725,7 @@ class MyOrdersPage extends StatelessWidget {
 
                   return ListView.builder(
                     padding:
-                        const EdgeInsets.all(
-                      16,
-                    ),
+                        const EdgeInsets.all(16),
                     itemCount:
                         sortedOrders.length,
                     itemBuilder:
@@ -1836,3 +1761,5 @@ class MyOrdersPage extends StatelessWidget {
     );
   }
 }
+
+
