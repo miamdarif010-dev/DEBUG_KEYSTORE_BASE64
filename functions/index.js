@@ -728,7 +728,8 @@ async function refundCancelledSubOrder(orderId, collectionName, subOrderId) {
 
     const newRefundedTotal = roundMoney(alreadyRefundedTotal + refundAmount);
 
-    const fullyRefunded = newRefundedTotal >= roundMoney(grandTotal) - 0.005;
+    const fullyRefunded =
+      newRefundedTotal >= roundMoney(grandTotal) - 0.005;
 
     const walletTransactionRef = userRef.collection("walletTransactions").doc();
 
@@ -759,8 +760,11 @@ async function refundCancelledSubOrder(orderId, collectionName, subOrderId) {
     transaction.update(orderRef, {
       walletRefundedTotal: newRefundedTotal,
       refundedSubOrderIds: [...refundedIds, key],
-      deliveryFeeRefunded: deliveryAlreadyRefunded || refundsDeliveryFee,
-      paymentStatus: fullyRefunded ? "refunded" : "partially_refunded",
+      deliveryFeeRefunded:
+        deliveryAlreadyRefunded || refundsDeliveryFee,
+      paymentStatus: fullyRefunded
+        ? "refunded"
+        : "partially_refunded",
       updatedAt: serverTimestamp(),
     });
 
@@ -835,17 +839,27 @@ async function syncMainOrderStatus(orderId) {
 }
 
 async function handleSubOrderStatusChange(event, collectionName) {
-  const before = event.data && event.data.before && event.data.before.data();
+  const before =
+    event.data &&
+    event.data.before &&
+    event.data.before.data();
 
-  const after = event.data && event.data.after && event.data.after.data();
+  const after =
+    event.data &&
+    event.data.after &&
+    event.data.after.data();
 
   if (!before || !after) {
     return null;
   }
 
-  const beforeStatus = String(before.orderStatus || "placed").toLowerCase();
+  const beforeStatus = String(
+    before.orderStatus || "placed"
+  ).toLowerCase();
 
-  const afterStatus = String(after.orderStatus || "placed").toLowerCase();
+  const afterStatus = String(
+    after.orderStatus || "placed"
+  ).toLowerCase();
 
   if (beforeStatus === afterStatus) {
     return null;
@@ -861,7 +875,11 @@ async function handleSubOrderStatusChange(event, collectionName) {
 
   if (afterStatus === "cancelled") {
     try {
-      await refundCancelledSubOrder(orderId, collectionName, subOrderId);
+      await refundCancelledSubOrder(
+        orderId,
+        collectionName,
+        subOrderId
+      );
     } catch (error) {
       console.error(
         "Refund failed for",
@@ -877,7 +895,11 @@ async function handleSubOrderStatusChange(event, collectionName) {
   try {
     await syncMainOrderStatus(orderId);
   } catch (error) {
-    console.error("Main order status sync failed for", orderId, error);
+    console.error(
+      "Main order status sync failed for",
+      orderId,
+      error
+    );
   }
 
   return null;
@@ -885,12 +907,573 @@ async function handleSubOrderStatusChange(event, collectionName) {
 
 exports.onSellerOrderStatusChanged = onDocumentUpdated(
   "seller_orders/{subOrderId}",
-  (event) => handleSubOrderStatusChange(event, "seller_orders")
+  (event) =>
+    handleSubOrderStatusChange(
+      event,
+      "seller_orders"
+    )
 );
 
 exports.onResellerOrderStatusChanged = onDocumentUpdated(
   "reseller_orders/{subOrderId}",
-  (event) => handleSubOrderStatusChange(event, "reseller_orders")
+  (event) =>
+    handleSubOrderStatusChange(
+      event,
+      "reseller_orders"
+    )
+);
+
+// ============================================================
+// SELLER / RESELLER MEMBERSHIP REGISTRATION FEE
+// ============================================================
+//
+// Server-side membership payment.
+//
+// IMPORTANT:
+// - Client never decides the membership fee.
+// - Admin controls the fee from:
+//     platformSettings/monetization
+// - Seller and Reseller use the same BuyNova Wallet.
+// - Free campaign can make the registration fee ৳0.
+// - Successful membership payment is recorded in:
+//     users/{uid}/membershipPayments
+// - BuyNova revenue is recorded privately in:
+//     buyNovaProfitLedger
+//
+// Supported roles:
+//     seller
+//     reseller
+// ============================================================
+
+const MEMBERSHIP_CONFIG_PATH =
+  "platformSettings/monetization";
+
+function membershipRoleName(role) {
+  if (role === "seller") {
+    return "Seller";
+  }
+
+  if (role === "reseller") {
+    return "Reseller";
+  }
+
+  return null;
+}
+
+function timestampToDate(value) {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return value;
+  }
+
+  if (typeof value.toDate === "function") {
+    return value.toDate();
+  }
+
+  return null;
+}
+
+function isMembershipFreeCampaignActive(config) {
+  if (config.freeCampaignEnabled !== true) {
+    return false;
+  }
+
+  const start = timestampToDate(
+    config.freeCampaignStart
+  );
+
+  const end = timestampToDate(
+    config.freeCampaignEnd
+  );
+
+  if (!start || !end) {
+    return false;
+  }
+
+  const now = new Date();
+
+  return now >= start && now <= end;
+}
+
+function getMembershipFee(config, role) {
+  if (role === "seller") {
+    return Math.max(
+      0,
+      Number(config.sellerMembershipFee ?? 1000) || 0
+    );
+  }
+
+  if (role === "reseller") {
+    return Math.max(
+      0,
+      Number(config.resellerMembershipFee ?? 1000) || 0
+    );
+  }
+
+  return 0;
+}
+
+exports.payMembershipRegistrationFee = onCall(
+  async (request) => {
+    const uid = requireAuth(request);
+
+    const data = request.data || {};
+
+    const role =
+      typeof data.role === "string"
+        ? data.role.trim().toLowerCase()
+        : "";
+
+    const roleName = membershipRoleName(role);
+
+    if (!roleName) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Invalid membership role. Use seller or reseller."
+      );
+    }
+
+    const configRef = db
+      .collection("platformSettings")
+      .doc("monetization");
+
+    const userRef = db
+      .collection("users")
+      .doc(uid);
+
+    const result = await db.runTransaction(
+      async (transaction) => {
+        // ------------------------------------------------------
+        // READ CONFIG
+        // ------------------------------------------------------
+
+        const configSnapshot =
+          await transaction.get(configRef);
+
+        if (!configSnapshot.exists) {
+          throw new HttpsError(
+            "not-found",
+            "BuyNova membership pricing configuration was not found."
+          );
+        }
+
+        const config =
+          configSnapshot.data() || {};
+
+        // ------------------------------------------------------
+        // READ USER
+        // ------------------------------------------------------
+
+        const userSnapshot =
+          await transaction.get(userRef);
+
+        if (!userSnapshot.exists) {
+          throw new HttpsError(
+            "not-found",
+            "User account not found."
+          );
+        }
+
+        const userData =
+          userSnapshot.data() || {};
+
+        // ------------------------------------------------------
+        // CHECK CURRENT MEMBERSHIP STATUS
+        // ------------------------------------------------------
+
+        const currentStatus =
+          role === "seller"
+            ? String(
+                userData.sellerStatus || "none"
+              ).toLowerCase()
+            : String(
+                userData.entrepreneurStatus || "none"
+              ).toLowerCase();
+
+        if (currentStatus === "approved") {
+          throw new HttpsError(
+            "already-exists",
+            `${roleName} membership is already approved.`
+          );
+        }
+
+        // ------------------------------------------------------
+        // PREVENT DOUBLE PAYMENT
+        // ------------------------------------------------------
+
+        const alreadyPaid =
+          role === "seller"
+            ? userData.sellerRegistrationFeePaid === true
+            : userData.entrepreneurRegistrationFeePaid ===
+              true;
+
+        if (alreadyPaid) {
+          throw new HttpsError(
+            "already-exists",
+            `${roleName} membership registration fee has already been paid.`
+          );
+        }
+
+        // ------------------------------------------------------
+        // CALCULATE FEE SERVER-SIDE
+        // ------------------------------------------------------
+
+        const freeCampaignActive =
+          isMembershipFreeCampaignActive(config);
+
+        const configuredFee =
+          getMembershipFee(config, role);
+
+        const membershipFee =
+          freeCampaignActive
+            ? 0
+            : configuredFee;
+
+        const pricingPlan =
+          freeCampaignActive
+            ? "free_campaign"
+            : "standard";
+
+        // ------------------------------------------------------
+        // CURRENT WALLET BALANCE
+        // ------------------------------------------------------
+
+        const currentBalance = Number(
+          userData.cashBalance ??
+            userData.walletBalance ??
+            0
+        );
+
+        if (
+          !Number.isFinite(currentBalance) ||
+          currentBalance < 0
+        ) {
+          throw new HttpsError(
+            "failed-precondition",
+            "Invalid BuyNova Wallet balance."
+          );
+        }
+
+        if (membershipFee > currentBalance) {
+          throw new HttpsError(
+            "failed-precondition",
+            `Insufficient BuyNova Wallet balance. ${roleName} membership fee is ৳${membershipFee.toFixed(
+              2
+            )}.`
+          );
+        }
+
+        const balanceBefore =
+          currentBalance;
+
+        const balanceAfter =
+          balanceBefore - membershipFee;
+
+        // ------------------------------------------------------
+        // PAYMENT ID
+        // ------------------------------------------------------
+
+        const paymentRef = userRef
+          .collection("membershipPayments")
+          .doc();
+
+        const paymentId =
+          paymentRef.id;
+
+        // ------------------------------------------------------
+        // WALLET TRANSACTION
+        // ------------------------------------------------------
+
+        let walletTransactionId =
+          null;
+
+        if (membershipFee > 0) {
+          const walletTransactionRef =
+            userRef
+              .collection("walletTransactions")
+              .doc();
+
+          walletTransactionId =
+            walletTransactionRef.id;
+
+          transaction.set(
+            walletTransactionRef,
+            {
+              type: "debit",
+              source:
+                "membership_registration",
+              status: "approved",
+              amount: membershipFee,
+              currency: "BDT",
+              currencySymbol: "৳",
+              membershipRole: role,
+              membershipRoleName: roleName,
+              paymentId: paymentId,
+              balanceBefore:
+                balanceBefore,
+              balanceAfter:
+                balanceAfter,
+              description:
+                `BuyNova ${roleName} membership registration fee`,
+              createdAt:
+                serverTimestamp(),
+              updatedAt:
+                serverTimestamp(),
+            }
+          );
+        }
+
+        // ------------------------------------------------------
+        // MEMBERSHIP PAYMENT RECORD
+        // ------------------------------------------------------
+
+        transaction.set(
+          paymentRef,
+          {
+            paymentId: paymentId,
+            uid: uid,
+            role: role,
+            roleName: roleName,
+            amount: membershipFee,
+            currency: "BDT",
+            currencySymbol: "৳",
+            status: "approved",
+            paymentMethod:
+              membershipFee > 0
+                ? "BuyNova Wallet"
+                : "Free Campaign",
+            pricingPlan:
+              pricingPlan,
+            freeCampaign:
+              freeCampaignActive,
+            walletTransactionId:
+              walletTransactionId,
+            balanceBefore:
+              balanceBefore,
+            balanceAfter:
+              balanceAfter,
+            createdAt:
+              serverTimestamp(),
+            paidAt:
+              serverTimestamp(),
+            updatedAt:
+              serverTimestamp(),
+          }
+        );
+
+        // ------------------------------------------------------
+        // USER MEMBERSHIP STATUS
+        // ------------------------------------------------------
+
+        const membershipUpdate = {
+          updatedAt:
+            serverTimestamp(),
+
+          membershipUpdatedAt:
+            serverTimestamp(),
+
+          membershipPricingPlan:
+            pricingPlan,
+
+          membershipRegistrationFeePaid:
+            true,
+
+          membershipRegistrationFeeAmount:
+            membershipFee,
+
+          membershipPaymentId:
+            paymentId,
+
+          membershipPaidAt:
+            serverTimestamp(),
+        };
+
+        if (role === "seller") {
+          membershipUpdate.sellerStatus =
+            "pending";
+
+          membershipUpdate.sellerRequestedAt =
+            serverTimestamp();
+
+          membershipUpdate.sellerRegistrationFeePaid =
+            true;
+
+          membershipUpdate.sellerRegistrationFeeAmount =
+            membershipFee;
+
+          membershipUpdate.sellerMembershipPaymentId =
+            paymentId;
+
+          membershipUpdate.sellerMembershipPaidAt =
+            serverTimestamp();
+        } else {
+          membershipUpdate.entrepreneurStatus =
+            "pending";
+
+          membershipUpdate.entrepreneurRequestedAt =
+            serverTimestamp();
+
+          membershipUpdate.entrepreneurRegistrationFeePaid =
+            true;
+
+          membershipUpdate.entrepreneurRegistrationFeeAmount =
+            membershipFee;
+
+          membershipUpdate.entrepreneurMembershipPaymentId =
+            paymentId;
+
+          membershipUpdate.entrepreneurMembershipPaidAt =
+            serverTimestamp();
+        }
+
+        if (membershipFee > 0) {
+          membershipUpdate.cashBalance =
+            balanceAfter;
+
+          membershipUpdate.walletBalance =
+            balanceAfter;
+        }
+
+        transaction.update(
+          userRef,
+          membershipUpdate
+        );
+
+        // ------------------------------------------------------
+        // BUY NOVA PROFIT LEDGER
+        // ------------------------------------------------------
+        //
+        // Admin-only collection.
+        // Client cannot write to this collection.
+        //
+        // Free campaign produces ৳0 BuyNova revenue.
+        // ------------------------------------------------------
+
+        const profitLedgerRef =
+          db
+            .collection("buyNovaProfitLedger")
+            .doc(paymentId);
+
+        transaction.set(
+          profitLedgerRef,
+          {
+            paymentId: paymentId,
+            uid: uid,
+            role: role,
+            roleName: roleName,
+            source:
+              "membership_registration",
+            category:
+              "registration_fee",
+            amount: membershipFee,
+            profitAmount:
+              membershipFee,
+            currency: "BDT",
+            currencySymbol: "৳",
+            pricingPlan:
+              pricingPlan,
+            freeCampaign:
+              freeCampaignActive,
+            walletTransactionId:
+              walletTransactionId,
+            createdAt:
+              serverTimestamp(),
+          }
+        );
+
+        return {
+          paymentId:
+            paymentId,
+
+          role:
+            role,
+
+          roleName:
+            roleName,
+
+          amount:
+            membershipFee,
+
+          currency:
+            "BDT",
+
+          balanceBefore:
+            balanceBefore,
+
+          balanceAfter:
+            balanceAfter,
+
+          pricingPlan:
+            pricingPlan,
+
+          freeCampaign:
+            freeCampaignActive,
+
+          walletTransactionId:
+            walletTransactionId,
+        };
+      }
+    );
+
+    // ----------------------------------------------------------
+    // USER NOTIFICATION
+    // ----------------------------------------------------------
+
+    try {
+      await userRef
+        .collection("notifications")
+        .add({
+          title:
+            `${result.roleName} Application Submitted`,
+
+          message:
+            result.amount > 0
+              ? `৳${result.amount.toFixed(
+                  2
+                )} membership registration fee paid successfully. Your ${result.roleName} application is now pending Admin approval.`
+              : `Your ${result.roleName} membership registration was submitted under the free campaign. Your application is now pending Admin approval.`,
+
+          type:
+            "membership",
+
+          membershipRole:
+            result.role,
+
+          paymentId:
+            result.paymentId,
+
+          amount:
+            result.amount,
+
+          currency:
+            "BDT",
+
+          read:
+            false,
+
+          createdAt:
+            serverTimestamp(),
+        });
+    } catch (notificationError) {
+      console.error(
+        "Membership notification failed:",
+        notificationError
+      );
+    }
+
+    return {
+      success:
+        true,
+
+      message:
+        `${result.roleName} membership application submitted successfully.`,
+
+      ...result,
+    };
+  }
 );
 
 // ============================================================
@@ -933,7 +1516,11 @@ async function deleteQueryDocuments(query) {
 
       deleted++;
     } catch (error) {
-      console.error("Failed to delete document:", document.ref.path, error);
+      console.error(
+        "Failed to delete document:",
+        document.ref.path,
+        error
+      );
 
       throw error;
     }
@@ -943,7 +1530,8 @@ async function deleteQueryDocuments(query) {
 }
 
 async function deleteUserSubcollections(userRef) {
-  const subcollections = await userRef.listCollections();
+  const subcollections =
+    await userRef.listCollections();
 
   let deleted = 0;
 
@@ -966,255 +1554,398 @@ async function deleteUserSubcollections(userRef) {
   return deleted;
 }
 
-exports.adminDeleteUser = onCall(async (request) => {
-  // ==========================================================
-  // ADMIN ONLY
-  // ==========================================================
+exports.adminDeleteUser = onCall(
+  async (request) => {
+    // ========================================================
+    // ADMIN ONLY
+    // ========================================================
 
-  requireAdmin(request);
+    requireAdmin(request);
 
-  const data = request.data || {};
+    const data = request.data || {};
 
-  const uid = typeof data.uid === "string" ? data.uid.trim() : "";
+    const uid =
+      typeof data.uid === "string"
+        ? data.uid.trim()
+        : "";
 
-  if (!uid) {
-    throw new HttpsError("invalid-argument", "User UID is required.");
-  }
-
-  // Prevent accidental deletion of the Admin account
-  // through this function.
-  if (uid === request.auth.uid) {
-    throw new HttpsError(
-      "failed-precondition",
-      "The Admin account cannot be deleted from the Admin Panel."
-    );
-  }
-
-  console.log("Admin delete requested for user:", uid);
-
-  // ==========================================================
-  // CHECK AUTH USER
-  // ==========================================================
-
-  let authUser = null;
-
-  try {
-    authUser = await admin.auth().getUser(uid);
-  } catch (error) {
-    if (error.code !== "auth/user-not-found") {
-      console.error("Failed to get Firebase Auth user:", error);
-
+    if (!uid) {
       throw new HttpsError(
-        "internal",
-        "Unable to find the Firebase Authentication account."
+        "invalid-argument",
+        "User UID is required."
       );
     }
-  }
 
-  // ==========================================================
-  // USER DOCUMENT
-  // ==========================================================
+    // Prevent accidental deletion of the Admin account
+    // through this function.
+    if (uid === request.auth.uid) {
+      throw new HttpsError(
+        "failed-precondition",
+        "The Admin account cannot be deleted from the Admin Panel."
+      );
+    }
 
-  const userRef = db.collection("users").doc(uid);
-
-  const userSnapshot = await userRef.get();
-
-  const userData = userSnapshot.exists ? userSnapshot.data() || {} : {};
-
-  const userEmail = (userData.email || authUser?.email || "")
-    .toString()
-    .trim()
-    .toLowerCase();
-
-  const sellerCode = (userData.sellerCode || "").toString().trim();
-
-  const entrepreneurCode = (userData.entrepreneurCode || "").toString().trim();
-
-  // ==========================================================
-  // DELETE TOP-LEVEL PRODUCTS
-  // ==========================================================
-
-  let deletedProducts = 0;
-
-  deletedProducts += await deleteQueryDocuments(
-    db.collection("products").where("sellerId", "==", uid)
-  );
-
-  // Some older product records may use sellerUid.
-  deletedProducts += await deleteQueryDocuments(
-    db.collection("products").where("sellerUid", "==", uid)
-  );
-
-  // ==========================================================
-  // DELETE SELLER VIDEOS
-  // ==========================================================
-
-  let deletedSellerVideos = 0;
-
-  deletedSellerVideos += await deleteQueryDocuments(
-    db.collection("sellerVideos").where("sellerId", "==", uid)
-  );
-
-  deletedSellerVideos += await deleteQueryDocuments(
-    db.collection("sellerVideos").where("sellerUid", "==", uid)
-  );
-
-  // ==========================================================
-  // DELETE RESELLER PRODUCTS
-  // ==========================================================
-
-  let deletedResellerProducts = 0;
-
-  deletedResellerProducts += await deleteQueryDocuments(
-    db.collection("reseller_products").where("entrepreneurId", "==", uid)
-  );
-
-  deletedResellerProducts += await deleteQueryDocuments(
-    db.collection("reseller_products").where("entrepreneurUid", "==", uid)
-  );
-
-  deletedResellerProducts += await deleteQueryDocuments(
-    db.collection("reseller_products").where("userId", "==", uid)
-  );
-
-  // Delete by entrepreneur email only when the email
-  // belongs to this exact user.
-  if (userEmail) {
-    deletedResellerProducts += await deleteQueryDocuments(
-      db
-        .collection("reseller_products")
-        .where("entrepreneurEmail", "==", userEmail)
+    console.log(
+      "Admin delete requested for user:",
+      uid
     );
-  }
 
-  // ==========================================================
-  // DELETE SELLER ORDERS
-  // ==========================================================
+    // ========================================================
+    // CHECK AUTH USER
+    // ========================================================
 
-  let deletedSellerOrders = 0;
+    let authUser = null;
 
-  deletedSellerOrders += await deleteQueryDocuments(
-    db.collection("seller_orders").where("sellerId", "==", uid)
-  );
-
-  deletedSellerOrders += await deleteQueryDocuments(
-    db.collection("seller_orders").where("sellerUid", "==", uid)
-  );
-
-  // ==========================================================
-  // DELETE RESELLER ORDERS
-  // ==========================================================
-
-  let deletedResellerOrders = 0;
-
-  deletedResellerOrders += await deleteQueryDocuments(
-    db.collection("reseller_orders").where("entrepreneurId", "==", uid)
-  );
-
-  deletedResellerOrders += await deleteQueryDocuments(
-    db.collection("reseller_orders").where("entrepreneurUid", "==", uid)
-  );
-
-  deletedResellerOrders += await deleteQueryDocuments(
-    db.collection("reseller_orders").where("resellerId", "==", uid)
-  );
-
-  deletedResellerOrders += await deleteQueryDocuments(
-    db.collection("reseller_orders").where("userId", "==", uid)
-  );
-
-  // ==========================================================
-  // DELETE MAIN CUSTOMER ORDERS
-  // ==========================================================
-  //
-  // IMPORTANT:
-  // Main orders are deleted only when the user is recorded
-  // as the actual customer/buyer.
-  //
-  // We do NOT delete orders merely because a seller or
-  // reseller is involved with them.
-  // ==========================================================
-
-  let deletedCustomerOrders = 0;
-
-  deletedCustomerOrders += await deleteQueryDocuments(
-    db.collection("orders").where("userId", "==", uid)
-  );
-
-  deletedCustomerOrders += await deleteQueryDocuments(
-    db.collection("orders").where("customerId", "==", uid)
-  );
-
-  deletedCustomerOrders += await deleteQueryDocuments(
-    db.collection("orders").where("buyerId", "==", uid)
-  );
-
-  // ==========================================================
-  // DELETE USER SUBCOLLECTIONS
-  // ==========================================================
-
-  let deletedUserSubcollections = 0;
-
-  if (userSnapshot.exists) {
-    deletedUserSubcollections = await deleteUserSubcollections(userRef);
-
-    // Finally delete users/{uid}.
-    await userRef.delete();
-  }
-
-  // ==========================================================
-  // DELETE FIREBASE AUTH ACCOUNT
-  // ==========================================================
-
-  let authDeleted = false;
-
-  if (authUser) {
     try {
-      await admin.auth().deleteUser(uid);
-
-      authDeleted = true;
+      authUser =
+        await admin.auth().getUser(uid);
     } catch (error) {
-      console.error("Firebase Auth deletion failed:", error);
+      if (error.code !== "auth/user-not-found") {
+        console.error(
+          "Failed to get Firebase Auth user:",
+          error
+        );
 
-      // Firestore data was already removed.
-      // Tell the Admin clearly that Auth deletion failed.
-      throw new HttpsError(
-        "internal",
-        "User data was deleted, but Firebase Authentication account deletion failed. Check Cloud Functions logs."
-      );
+        throw new HttpsError(
+          "internal",
+          "Unable to find the Firebase Authentication account."
+        );
+      }
     }
+
+    // ========================================================
+    // USER DOCUMENT
+    // ========================================================
+
+    const userRef =
+      db.collection("users").doc(uid);
+
+    const userSnapshot =
+      await userRef.get();
+
+    const userData =
+      userSnapshot.exists
+        ? userSnapshot.data() || {}
+        : {};
+
+    const userEmail = (
+      userData.email ||
+      authUser?.email ||
+      ""
+    )
+      .toString()
+      .trim()
+      .toLowerCase();
+
+    const sellerCode = (
+      userData.sellerCode || ""
+    )
+      .toString()
+      .trim();
+
+    const entrepreneurCode = (
+      userData.entrepreneurCode || ""
+    )
+      .toString()
+      .trim();
+
+    // ========================================================
+    // DELETE TOP-LEVEL PRODUCTS
+    // ========================================================
+
+    let deletedProducts = 0;
+
+    deletedProducts +=
+      await deleteQueryDocuments(
+        db
+          .collection("products")
+          .where("sellerId", "==", uid)
+      );
+
+    // Some older product records may use sellerUid.
+    deletedProducts +=
+      await deleteQueryDocuments(
+        db
+          .collection("products")
+          .where("sellerUid", "==", uid)
+      );
+
+    // ========================================================
+    // DELETE SELLER VIDEOS
+    // ========================================================
+
+    let deletedSellerVideos = 0;
+
+    deletedSellerVideos +=
+      await deleteQueryDocuments(
+        db
+          .collection("sellerVideos")
+          .where("sellerId", "==", uid)
+      );
+
+    deletedSellerVideos +=
+      await deleteQueryDocuments(
+        db
+          .collection("sellerVideos")
+          .where("sellerUid", "==", uid)
+      );
+
+    // ========================================================
+    // DELETE RESELLER PRODUCTS
+    // ========================================================
+
+    let deletedResellerProducts = 0;
+
+    deletedResellerProducts +=
+      await deleteQueryDocuments(
+        db
+          .collection("reseller_products")
+          .where(
+            "entrepreneurId",
+            "==",
+            uid
+          )
+      );
+
+    deletedResellerProducts +=
+      await deleteQueryDocuments(
+        db
+          .collection("reseller_products")
+          .where(
+            "entrepreneurUid",
+            "==",
+            uid
+          )
+      );
+
+    deletedResellerProducts +=
+      await deleteQueryDocuments(
+        db
+          .collection("reseller_products")
+          .where(
+            "userId",
+            "==",
+            uid
+          )
+      );
+
+    // Delete by entrepreneur email only when the email
+    // belongs to this exact user.
+    if (userEmail) {
+      deletedResellerProducts +=
+        await deleteQueryDocuments(
+          db
+            .collection("reseller_products")
+            .where(
+              "entrepreneurEmail",
+              "==",
+              userEmail
+            )
+        );
+    }
+
+    // ========================================================
+    // DELETE SELLER ORDERS
+    // ========================================================
+
+    let deletedSellerOrders = 0;
+
+    deletedSellerOrders +=
+      await deleteQueryDocuments(
+        db
+          .collection("seller_orders")
+          .where("sellerId", "==", uid)
+      );
+
+    deletedSellerOrders +=
+      await deleteQueryDocuments(
+        db
+          .collection("seller_orders")
+          .where("sellerUid", "==", uid)
+      );
+
+    // ========================================================
+    // DELETE RESELLER ORDERS
+    // ========================================================
+
+    let deletedResellerOrders = 0;
+
+    deletedResellerOrders +=
+      await deleteQueryDocuments(
+        db
+          .collection("reseller_orders")
+          .where(
+            "entrepreneurId",
+            "==",
+            uid
+          )
+      );
+
+    deletedResellerOrders +=
+      await deleteQueryDocuments(
+        db
+          .collection("reseller_orders")
+          .where(
+            "entrepreneurUid",
+            "==",
+            uid
+          )
+      );
+
+    deletedResellerOrders +=
+      await deleteQueryDocuments(
+        db
+          .collection("reseller_orders")
+          .where(
+            "resellerId",
+            "==",
+            uid
+          )
+      );
+
+    deletedResellerOrders +=
+      await deleteQueryDocuments(
+        db
+          .collection("reseller_orders")
+          .where(
+            "userId",
+            "==",
+            uid
+          )
+      );
+
+    // ========================================================
+    // DELETE MAIN CUSTOMER ORDERS
+    // ========================================================
+    //
+    // IMPORTANT:
+    // Main orders are deleted only when the user is recorded
+    // as the actual customer/buyer.
+    //
+    // We do NOT delete orders merely because a seller or
+    // reseller is involved with them.
+    // ========================================================
+
+    let deletedCustomerOrders = 0;
+
+    deletedCustomerOrders +=
+      await deleteQueryDocuments(
+        db
+          .collection("orders")
+          .where(
+            "userId",
+            "==",
+            uid
+          )
+      );
+
+    deletedCustomerOrders +=
+      await deleteQueryDocuments(
+        db
+          .collection("orders")
+          .where(
+            "customerId",
+            "==",
+            uid
+          )
+      );
+
+    deletedCustomerOrders +=
+      await deleteQueryDocuments(
+        db
+          .collection("orders")
+          .where(
+            "buyerId",
+            "==",
+            uid
+          )
+      );
+
+    // ========================================================
+    // DELETE USER SUBCOLLECTIONS
+    // ========================================================
+
+    let deletedUserSubcollections = 0;
+
+    if (userSnapshot.exists) {
+      deletedUserSubcollections =
+        await deleteUserSubcollections(
+          userRef
+        );
+
+      // Finally delete users/{uid}.
+      await userRef.delete();
+    }
+
+    // ========================================================
+    // DELETE FIREBASE AUTH ACCOUNT
+    // ========================================================
+
+    let authDeleted = false;
+
+    if (authUser) {
+      try {
+        await admin.auth().deleteUser(uid);
+
+        authDeleted = true;
+      } catch (error) {
+        console.error(
+          "Firebase Auth deletion failed:",
+          error
+        );
+
+        // Firestore data was already removed.
+        // Tell the Admin clearly that Auth deletion failed.
+        throw new HttpsError(
+          "internal",
+          "User data was deleted, but Firebase Authentication account deletion failed. Check Cloud Functions logs."
+        );
+      }
+    }
+
+    // ========================================================
+    // RESULT
+    // ========================================================
+
+    console.log(
+      "User deletion completed:",
+      {
+        uid,
+        sellerCode,
+        entrepreneurCode,
+        deletedProducts,
+        deletedSellerVideos,
+        deletedResellerProducts,
+        deletedSellerOrders,
+        deletedResellerOrders,
+        deletedCustomerOrders,
+        deletedUserSubcollections,
+        authDeleted,
+      }
+    );
+
+    return {
+      success: true,
+      message:
+        "BuyNova user account deleted successfully.",
+      uid: uid,
+      authDeleted: authDeleted,
+      firestoreUserDeleted:
+        userSnapshot.exists,
+      deletedProducts:
+        deletedProducts,
+      deletedSellerVideos:
+        deletedSellerVideos,
+      deletedResellerProducts:
+        deletedResellerProducts,
+      deletedSellerOrders:
+        deletedSellerOrders,
+      deletedResellerOrders:
+        deletedResellerOrders,
+      deletedCustomerOrders:
+        deletedCustomerOrders,
+      deletedUserSubcollections:
+        deletedUserSubcollections,
+    };
   }
-
-  // ==========================================================
-  // RESULT
-  // ==========================================================
-
-  console.log("User deletion completed:", {
-    uid,
-    sellerCode,
-    entrepreneurCode,
-    deletedProducts,
-    deletedSellerVideos,
-    deletedResellerProducts,
-    deletedSellerOrders,
-    deletedResellerOrders,
-    deletedCustomerOrders,
-    deletedUserSubcollections,
-    authDeleted,
-  });
-
-  return {
-    success: true,
-    message: "BuyNova user account deleted successfully.",
-    uid: uid,
-    authDeleted: authDeleted,
-    firestoreUserDeleted: userSnapshot.exists,
-    deletedProducts: deletedProducts,
-    deletedSellerVideos: deletedSellerVideos,
-    deletedResellerProducts: deletedResellerProducts,
-    deletedSellerOrders: deletedSellerOrders,
-    deletedResellerOrders: deletedResellerOrders,
-    deletedCustomerOrders: deletedCustomerOrders,
-    deletedUserSubcollections: deletedUserSubcollections,
-  };
-});
+);
