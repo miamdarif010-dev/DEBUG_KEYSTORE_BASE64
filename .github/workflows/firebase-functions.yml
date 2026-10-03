@@ -31,6 +31,10 @@ jobs:
         with:
           credentials_json: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
 
+      - name: Show authenticated account
+        run: |
+          gcloud auth list --filter=status:ACTIVE --format="value(account)"
+
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
