@@ -55,6 +55,19 @@ const getProductDoc = async (id) => {
   return db.collection(COL.productsAdmin).doc(id).get();
 };
 
+// Throws if the product tracks stock and there is not enough of it.
+const assertStock = (d, quantity) => {
+  const raw = d.stock ?? d.stockQuantity;
+  if (raw === undefined || raw === null || raw === '') return;
+  const stock = Number(raw);
+  if (Number.isFinite(stock) && stock < quantity) {
+    throw new HttpsError(
+      'failed-precondition',
+      'Not enough stock for a product in your cart.'
+    );
+  }
+};
+
 const productName = (d) => String(d.name ?? d.title ?? '');
 const productImage = (d) =>
   d.imageUrl ??
@@ -79,6 +92,21 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
   }
   if (!PAYMENT_METHODS.includes(paymentMethod)) {
     throw new HttpsError('invalid-argument', 'Invalid payment method.');
+  }
+
+  // ---------------- Account check ------------------------------------
+  // An approved reseller who is not also an approved seller cannot
+  // place a normal order for himself.
+  const userSnap = await db.doc(`users/${uid}`).get();
+  const userData = userSnap.data() || {};
+  if (
+    String(userData.entrepreneurStatus || 'none') === 'approved' &&
+    String(userData.sellerStatus || 'none') !== 'approved'
+  ) {
+    throw new HttpsError(
+      'permission-denied',
+      'Reseller accounts cannot place orders.'
+    );
   }
 
   // ---------------- Address (read from Firestore, not from client) ----
@@ -124,7 +152,9 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
         }
         const listing = listingSnap.data();
 
-        const supplierProductId = safeId(listing.supplierProductId);
+        const supplierProductId = safeId(
+          listing.supplierProductId ?? listing.sourceProductId
+        );
         const supplierSnap = supplierProductId
           ? await getProductDoc(supplierProductId)
           : null;
@@ -137,6 +167,7 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
         if (listing.isActive === false || supplier.isActive === false) {
           throw new HttpsError('failed-precondition', 'A product in your cart is unavailable.');
         }
+        assertStock(supplier, quantity);
 
         const price = num(listing.sellingPrice ?? listing.price);
         const supplierPrice = num(supplier.price);
@@ -171,6 +202,7 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
       if (product.isActive === false) {
         throw new HttpsError('failed-precondition', 'A product in your cart is unavailable.');
       }
+      assertStock(product, quantity);
 
       const price = num(product.price);
       if (!(price > 0)) {
@@ -239,7 +271,7 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
       if (minimumOrder > 0 && subtotal < minimumOrder) {
         throw new HttpsError(
           'failed-precondition',
-          `Minimum order amount is ā§ģ${minimumOrder.toFixed(2)}.`
+          `Minimum order amount is ৳${minimumOrder.toFixed(2)}.`
         );
       }
 
