@@ -53,7 +53,10 @@ function requireAdmin(request) {
 
   const email = request.auth.token.email || "";
 
-  if (email.toLowerCase() !== "miamdarif010@gmail.com") {
+  if (
+    email.toLowerCase() !== "miamdarif010@gmail.com" ||
+    request.auth.token.email_verified !== true
+  ) {
     throw new HttpsError("permission-denied", "Admin access required.");
   }
 
@@ -293,7 +296,30 @@ exports.approveWalletTransaction = onCall(async (request) => {
       );
     }
 
-    const newBalance = currentBalance + amount;
+    // Withdrawals (debit) reduce the balance, deposits (credit) add to it.
+    const isDebit = transactionData.type === "debit";
+
+    if (!isDebit && transactionData.type !== "credit") {
+      throw new HttpsError(
+        "invalid-argument",
+        "Unknown wallet transaction type."
+      );
+    }
+
+    if (!Number.isFinite(currentBalance)) {
+      throw new HttpsError("failed-precondition", "Invalid wallet balance.");
+    }
+
+    if (isDebit && currentBalance < amount) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Insufficient wallet balance for this withdrawal."
+      );
+    }
+
+    const newBalance = isDebit
+      ? currentBalance - amount
+      : currentBalance + amount;
 
     transaction.update(userRef, {
       cashBalance: newBalance,
