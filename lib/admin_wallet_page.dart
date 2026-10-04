@@ -412,6 +412,12 @@ class _AdminWalletPageState extends State<AdminWalletPage>
             data['rejectionReason']?.toString() ??
             '';
 
+    final trxId =
+        data['trxId']?.toString() ?? '';
+
+    final senderNumber =
+        data['senderNumber']?.toString() ?? '';
+
     final createdAt =
         data['createdAt'] as Timestamp?;
 
@@ -457,6 +463,18 @@ class _AdminWalletPageState extends State<AdminWalletPage>
                   _detailRow(
                     'Account',
                     _maskedAccount(account),
+                  ),
+
+                if (trxId.isNotEmpty)
+                  _detailRow(
+                    'TrxID',
+                    trxId,
+                  ),
+
+                if (senderNumber.isNotEmpty)
+                  _detailRow(
+                    'Sender',
+                    senderNumber,
                   ),
 
                 if (reason.isNotEmpty)
@@ -526,8 +544,9 @@ class _AdminWalletPageState extends State<AdminWalletPage>
   // =========================================================
 
   Widget _transactionCard(
-    DocumentSnapshot snapshot,
-  ) {
+    DocumentSnapshot snapshot, {
+    bool duplicateTrx = false,
+  }) {
     final data =
         snapshot.data()
             as Map<String, dynamic>? ??
@@ -551,6 +570,12 @@ class _AdminWalletPageState extends State<AdminWalletPage>
     final account =
         data['accountNumber']?.toString() ??
             '';
+
+    final trxId =
+        data['trxId']?.toString() ?? '';
+
+    final senderNumber =
+        data['senderNumber']?.toString() ?? '';
 
     final createdAt =
         data['createdAt'] as Timestamp?;
@@ -635,6 +660,80 @@ class _AdminWalletPageState extends State<AdminWalletPage>
             const SizedBox(
               height: 10,
             ),
+
+            if (trxId.isNotEmpty) ...[
+              Row(
+                children: [
+                  const Icon(
+                    Icons.confirmation_number_outlined,
+                    size: 18,
+                  ),
+                  const SizedBox(
+                    width: 8,
+                  ),
+                  Expanded(
+                    child: SelectableText(
+                      'TrxID: $trxId',
+                      style: const TextStyle(
+                        fontWeight:
+                            FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(
+                height: 6,
+              ),
+            ],
+
+            if (senderNumber.isNotEmpty) ...[
+              Row(
+                children: [
+                  const Icon(
+                    Icons.smartphone,
+                    size: 18,
+                  ),
+                  const SizedBox(
+                    width: 8,
+                  ),
+                  Expanded(
+                    child: SelectableText(
+                      'Sender: $senderNumber',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(
+                height: 6,
+              ),
+            ],
+
+            if (duplicateTrx) ...[
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red
+                      .withValues(alpha: 0.10),
+                  borderRadius:
+                      BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Warning: another pending request has the same TrxID.',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontSize: 12,
+                    fontWeight:
+                        FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(
+                height: 6,
+              ),
+            ],
 
             if (account.isNotEmpty)
               Row(
@@ -847,6 +946,22 @@ class _AdminWalletPageState extends State<AdminWalletPage>
           );
         }
 
+        final trxCounts = <String, int>{};
+
+        for (final doc in documents) {
+          final map =
+              doc.data() as Map<String, dynamic>? ??
+                  {};
+
+          final t =
+              map['trxId']?.toString() ?? '';
+
+          if (t.isNotEmpty) {
+            trxCounts[t] =
+                (trxCounts[t] ?? 0) + 1;
+          }
+        }
+
         return RefreshIndicator(
           onRefresh: () async {
             await Future<void>.delayed(
@@ -864,8 +979,19 @@ class _AdminWalletPageState extends State<AdminWalletPage>
               context,
               index,
             ) {
+              final map =
+                  documents[index].data()
+                          as Map<String, dynamic>? ??
+                      {};
+
+              final t =
+                  map['trxId']?.toString() ?? '';
+
               return _transactionCard(
                 documents[index],
+                duplicateTrx:
+                    t.isNotEmpty &&
+                        (trxCounts[t] ?? 0) > 1,
               );
             },
           ),
@@ -918,4 +1044,3 @@ class _AdminWalletPageState extends State<AdminWalletPage>
     );
   }
 }
-
