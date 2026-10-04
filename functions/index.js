@@ -34,7 +34,7 @@ exports.cancelUnpaidOrder = orders.cancelUnpaidOrder;
 const cloudinaryApiKey = defineSecret("CLOUDINARY_API_KEY");
 const cloudinaryApiSecret = defineSecret("CLOUDINARY_API_SECRET");
 
-const CLOUDINARY_CLOUD_NAME = "riassg6d";
+const CLOUDINARY_CLOUD_NAME = "hut6g3w7";
 
 // ============================================================
 // HELPERS
