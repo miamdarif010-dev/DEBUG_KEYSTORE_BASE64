@@ -13,6 +13,7 @@ import 'seller_stock_page.dart';
 import 'seller_views_page.dart';
 import 'seller_analytics_page.dart';
 import 'seller_code_helper.dart';
+import 'wallet_page.dart';
 
 class SellerPage extends StatelessWidget {
   const SellerPage({super.key});
@@ -507,7 +508,7 @@ class SellerPage extends StatelessWidget {
 
           final sellerStatus =
               userData['sellerStatus']?.toString() ??
-                  'pending';
+                  'none';
 
           final sellerCode =
               userData['sellerCode']?.toString() ??
@@ -756,7 +757,9 @@ class SellerPage extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  sellerStatus.toUpperCase(),
+                                  sellerStatus.toLowerCase() == 'none'
+                                      ? 'NOT REGISTERED'
+                                      : sellerStatus.toUpperCase(),
                                   style: TextStyle(
                                     color: statusColor,
                                     fontWeight:
@@ -983,6 +986,9 @@ class _SellerMembershipPaymentCardState
 
   bool _processing = false;
 
+  bool get _rejected =>
+      widget.sellerStatus.toLowerCase() == 'rejected';
+
   double _sellerFee = 1000;
   bool _freeCampaignEnabled = false;
   DateTime? _campaignStart;
@@ -1063,15 +1069,18 @@ class _SellerMembershipPaymentCardState
       return false;
     }
 
-    final now = DateTime.now();
-
-    if (_campaignStart != null &&
-        now.isBefore(_campaignStart!)) {
+    if (_campaignStart == null ||
+        _campaignEnd == null) {
       return false;
     }
 
-    if (_campaignEnd != null &&
-        now.isAfter(_campaignEnd!)) {
+    final now = DateTime.now();
+
+    if (now.isBefore(_campaignStart!)) {
+      return false;
+    }
+
+    if (now.isAfter(_campaignEnd!)) {
       return false;
     }
 
@@ -1136,13 +1145,14 @@ class _SellerMembershipPaymentCardState
     // Use 0.0 so Dart keeps this value as double
     // instead of inferring num.
     final double displayedFee =
-        freeCampaign ? 0.0 : _sellerFee;
+        (freeCampaign || _rejected) ? 0.0 : _sellerFee;
 
-    final confirmed =
-        await _showPaymentConfirmation(
-      displayedFee,
-      freeCampaign,
-    );
+    final confirmed = _rejected
+        ? true
+        : await _showPaymentConfirmation(
+            displayedFee,
+            freeCampaign,
+          );
 
     if (!confirmed || !mounted) {
       return;
@@ -1190,12 +1200,16 @@ class _SellerMembershipPaymentCardState
           _toDouble(raw['amount']) ?? 0;
 
       final newBalance =
-          _toDouble(raw['newBalance']);
+          _toDouble(raw['balanceAfter'] ?? raw['newBalance']);
 
       if (success) {
         String message;
 
-        if (free || amount <= 0) {
+        if (raw['reapplied'] == true) {
+          message =
+              'Your request was submitted again.\n'
+              'No new fee was charged.';
+        } else if (free || amount <= 0) {
           message =
               'Free Seller membership request submitted successfully.';
         } else if (newBalance != null) {
@@ -1253,10 +1267,17 @@ class _SellerMembershipPaymentCardState
           break;
       }
 
-      _showMessage(
-        message,
-        isError: true,
-      );
+      final lower = message.toLowerCase();
+
+      if (lower.contains('insufficient') ||
+          lower.contains('not enough')) {
+        _showInsufficientDialog(message);
+      } else {
+        _showMessage(
+          message,
+          isError: true,
+        );
+      }
     } catch (e) {
       if (!mounted) return;
 
@@ -1401,6 +1422,59 @@ class _SellerMembershipPaymentCardState
   }
 
   // =========================================================
+  // INSUFFICIENT BALANCE DIALOG
+  // =========================================================
+
+  void _showInsufficientDialog(String message) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          icon: const Icon(
+            Icons.account_balance_wallet_outlined,
+            color: Colors.redAccent,
+            size: 46,
+          ),
+          title: const Text(
+            'Not enough wallet balance',
+          ),
+          content: Text(
+            '$message\n\n'
+            'Add money to your BuyNova Wallet, '
+            'then apply again.',
+            textAlign: TextAlign.center,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+              },
+              child: const Text('Close'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const WalletPage(),
+                  ),
+                );
+              },
+              child: const Text('Add Money'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // =========================================================
   // SUCCESS DIALOG
   // =========================================================
 
@@ -1488,6 +1562,8 @@ class _SellerMembershipPaymentCardState
     final double displayedFee =
         freeCampaign ? 0.0 : _sellerFee;
 
+    final bool noFee = freeCampaign || _rejected;
+
     return Container(
       margin: const EdgeInsets.only(
         bottom: 10,
@@ -1532,21 +1608,23 @@ class _SellerMembershipPaymentCardState
                 ),
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment:
                       CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Become a Seller',
+                      _rejected
+                          ? 'Request Again'
+                          : 'Become a Seller',
                       style: TextStyle(
                         fontSize: 17,
                         fontWeight:
                             FontWeight.bold,
                       ),
                     ),
-                    SizedBox(height: 4),
-                    Text(
+                    const SizedBox(height: 4),
+                    const Text(
                       'Register your BuyNova Seller membership.',
                       style: TextStyle(
                         fontSize: 13,
@@ -1568,7 +1646,7 @@ class _SellerMembershipPaymentCardState
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: freeCampaign
+              color: noFee
                   ? Colors.green
                       .withValues(alpha: 0.08)
                   : Colors.redAccent
@@ -1597,7 +1675,7 @@ class _SellerMembershipPaymentCardState
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        freeCampaign
+                        noFee
                             ? 'FREE'
                             : _formatMoney(
                                 displayedFee,
@@ -1606,11 +1684,24 @@ class _SellerMembershipPaymentCardState
                           fontSize: 22,
                           fontWeight:
                               FontWeight.bold,
-                          color: freeCampaign
+                          color: noFee
                               ? Colors.green
                               : Colors.redAccent,
                         ),
                       ),
+
+                      if (_rejected)
+                        const Padding(
+                          padding:
+                              EdgeInsets.only(top: 3),
+                          child: Text(
+                            'Fee already paid. No new fee.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -1724,7 +1815,7 @@ class _SellerMembershipPaymentCardState
                       ),
                     )
                   : Icon(
-                      freeCampaign
+                      noFee
                           ? Icons
                               .how_to_reg_outlined
                           : Icons
@@ -1733,9 +1824,11 @@ class _SellerMembershipPaymentCardState
               label: Text(
                 _processing
                     ? 'Processing...'
-                    : freeCampaign
-                        ? 'Apply as Seller'
-                        : 'Pay & Apply as Seller',
+                    : _rejected
+                        ? 'Apply Again (No Fee)'
+                        : freeCampaign
+                            ? 'Apply as Seller'
+                            : 'Pay & Apply as Seller',
               ),
             ),
           ),
@@ -1743,7 +1836,9 @@ class _SellerMembershipPaymentCardState
           const SizedBox(height: 8),
 
           Text(
-            freeCampaign
+            _rejected
+                ? 'Your earlier membership fee is still valid.'
+                : freeCampaign
                 ? 'Your request will be processed through BuyNova.'
                 : 'Payment is securely processed through your BuyNova Wallet.',
             textAlign: TextAlign.center,
