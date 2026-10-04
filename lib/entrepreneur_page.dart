@@ -8,6 +8,7 @@ import 'my_store_page.dart';
 import 'reseller_orders_page.dart';
 import 'my_profit_page.dart';
 import 'news_feed_page.dart';
+import 'wallet_page.dart';
 
 class EntrepreneurPage extends StatefulWidget {
   const EntrepreneurPage({super.key});
@@ -87,10 +88,15 @@ class _EntrepreneurPageState
   // WALLET
   // =========================================================
 
-  // Set this once you know the wallet page, for example:
-  //   void Function()? get _openWallet => () { Navigator.push(context,
-  //     MaterialPageRoute(builder: (_) => const WalletPage())); };
-  VoidCallback? get _openWallet => null;
+  VoidCallback get _openWallet => () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                const WalletPage(),
+          ),
+        );
+      };
 
   // =========================================================
   // MY STORE
