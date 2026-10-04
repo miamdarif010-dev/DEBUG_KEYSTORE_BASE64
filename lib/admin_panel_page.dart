@@ -558,12 +558,8 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           data['resellerMembershipFee'],
         );
 
-        final sellerCommission = _toDouble(
-          data['sellerCommissionPercent'],
-        );
-
-        final resellerCommission = _toDouble(
-          data['resellerCommissionPercent'],
+        final commission = _toDouble(
+          data['commissionPercent'],
         );
 
         final freeCampaignEnabled =
@@ -674,44 +670,42 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
             const SizedBox(height: 10),
 
             // ======================================================
-            // COMMISSION
+            // COMMISSION (one percentage for every sale)
             // ======================================================
 
             _detailCard(
-              title: 'Sales Commission',
+              title: 'BuyNova Commission',
               icon: Icons.percent_outlined,
               children: [
-                _monetizationSettingTile(
-                  icon: Icons.storefront_outlined,
-                  title: 'Seller Commission',
-                  subtitle:
-                      'BuyNova commission charged on Seller sales.',
-                  value:
-                      '${sellerCommission.toStringAsFixed(2)}%',
-                  onTap: () => _editMonetizationNumber(
-                    field: 'sellerCommissionPercent',
-                    title: 'Seller Commission',
-                    currentValue: sellerCommission,
-                    min: 0,
-                    max: 100,
-                    isPercent: true,
+                _commissionStepper(commission),
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .primary
+                        .withValues(alpha: 0.06),
                   ),
-                ),
-                const Divider(height: 1),
-                _monetizationSettingTile(
-                  icon: Icons.business_center_outlined,
-                  title: 'Reseller Commission',
-                  subtitle:
-                      'BuyNova commission charged on Reseller profit.',
-                  value:
-                      '${resellerCommission.toStringAsFixed(2)}%',
-                  onTap: () => _editMonetizationNumber(
-                    field: 'resellerCommissionPercent',
-                    title: 'Reseller Commission',
-                    currentValue: resellerCommission,
-                    min: 0,
-                    max: 100,
-                    isPercent: true,
+                  child: const Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        size: 20,
+                      ),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'BuyNova takes this percentage from whoever sells: '
+                          'the seller\'s earning on their own products, or the '
+                          'reseller\'s profit on reseller products. It is taken '
+                          'when an order is delivered, using the rate set at that time.',
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -836,12 +830,8 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                   '৳${resellerFee.toStringAsFixed(2)}',
                 ),
                 _summaryRow(
-                  'Seller Commission',
-                  '${sellerCommission.toStringAsFixed(2)}%',
-                ),
-                _summaryRow(
-                  'Reseller Commission',
-                  '${resellerCommission.toStringAsFixed(2)}%',
+                  'BuyNova Commission',
+                  '${commission.toStringAsFixed(2)}%',
                 ),
                 _summaryRow(
                   'Free Campaign',
@@ -922,6 +912,71 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
         ],
       ),
       onTap: onTap,
+    );
+  }
+
+  Widget _commissionStepper(double value) {
+    Future<void> change(double next) async {
+      await _updateMonetizationSettings({
+        'commissionPercent': next.clamp(0.0, 100.0).toDouble(),
+      });
+    }
+
+    final primary = Theme.of(context).colorScheme.primary;
+
+    final label = value == value.roundToDouble()
+        ? value.toStringAsFixed(0)
+        : value.toStringAsFixed(2);
+
+    return Row(
+      children: [
+        IconButton.filledTonal(
+          tooltip: 'Decrease by 1%',
+          onPressed: value <= 0 ? null : () => change(value - 1),
+          icon: const Icon(Icons.remove),
+        ),
+        Expanded(
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => _editMonetizationNumber(
+              field: 'commissionPercent',
+              title: 'BuyNova Commission',
+              currentValue: value,
+              min: 0,
+              max: 100,
+              isPercent: true,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Column(
+                children: [
+                  Text(
+                    '$label%',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: primary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Tap the number to type an exact value',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        IconButton.filledTonal(
+          tooltip: 'Increase by 1%',
+          onPressed: value >= 100 ? null : () => change(value + 1),
+          icon: const Icon(Icons.add),
+        ),
+      ],
     );
   }
 
@@ -3335,42 +3390,4 @@ class _AdminSectionPage extends StatelessWidget {
               color: Theme.of(context)
                   .colorScheme
                   .primary
-                  .withValues(alpha: 0.15),
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Theme.of(context)
-                      .colorScheme
-                      .primary
-                      .withValues(alpha: 0.12),
-                ),
-                child: Icon(
-                  Icons.notifications_active_outlined,
-                  color: Theme.of(context)
-                      .colorScheme
-                      .primary,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  '🔔 $count $notificationLabel',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
+          
