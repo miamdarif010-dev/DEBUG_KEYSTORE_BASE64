@@ -84,6 +84,15 @@ class _EntrepreneurPageState
   }
 
   // =========================================================
+  // WALLET
+  // =========================================================
+
+  // Set this once you know the wallet page, for example:
+  //   void Function()? get _openWallet => () { Navigator.push(context,
+  //     MaterialPageRoute(builder: (_) => const WalletPage())); };
+  VoidCallback? get _openWallet => null;
+
+  // =========================================================
   // MY STORE
   // =========================================================
 
@@ -307,6 +316,7 @@ class _EntrepreneurPageState
   Widget _notRegisteredSection() {
     return _ResellerMembershipCard(
       onSuccess: _loadEntrepreneurData,
+      onOpenWallet: _openWallet,
     );
   }
 
@@ -387,6 +397,7 @@ class _EntrepreneurPageState
     return _ResellerMembershipCard(
       onSuccess: _loadEntrepreneurData,
       rejected: true,
+      onOpenWallet: _openWallet,
     );
   }
 
@@ -883,10 +894,12 @@ class _ResellerMembershipCard
     extends StatefulWidget {
   final VoidCallback onSuccess;
   final bool rejected;
+  final VoidCallback? onOpenWallet;
 
   const _ResellerMembershipCard({
     required this.onSuccess,
     this.rejected = false,
+    this.onOpenWallet,
   });
 
   @override
@@ -1071,15 +1084,17 @@ class _ResellerMembershipCardState
         _isFreeCampaignActive();
 
     final double displayedFee =
-        freeCampaign
+        (freeCampaign || widget.rejected)
             ? 0.0
             : _resellerFee;
 
     final confirmed =
-        await _showPaymentConfirmation(
-      displayedFee,
-      freeCampaign,
-    );
+        widget.rejected
+            ? true
+            : await _showPaymentConfirmation(
+                displayedFee,
+                freeCampaign,
+              );
 
     if (!confirmed || !mounted) {
       return;
@@ -1140,7 +1155,14 @@ class _ResellerMembershipCardState
       if (success) {
         String message;
 
-        if (free || amount <= 0.0) {
+        final reapplied =
+            raw['reapplied'] == true;
+
+        if (reapplied) {
+          message =
+              'Your request was submitted again.\n'
+              'No new fee was charged.';
+        } else if (free || amount <= 0.0) {
           message =
               'Free Entrepreneur / Reseller membership request submitted successfully.';
         } else if (newBalance != null) {
@@ -1212,10 +1234,17 @@ class _ResellerMembershipCardState
           break;
       }
 
-      _showMessage(
-        message,
-        isError: true,
-      );
+      final lower = message.toLowerCase();
+
+      if (lower.contains('insufficient') ||
+          lower.contains('not enough')) {
+        _showInsufficientDialog(message);
+      } else {
+        _showMessage(
+          message,
+          isError: true,
+        );
+      }
     } catch (e) {
       if (!mounted) return;
 
@@ -1391,6 +1420,60 @@ class _ResellerMembershipCardState
     );
 
     return result == true;
+  }
+
+  // =========================================================
+  // INSUFFICIENT BALANCE DIALOG
+  // =========================================================
+
+  void _showInsufficientDialog(
+    String message,
+  ) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          icon: const Icon(
+            Icons.account_balance_wallet_outlined,
+            color: Colors.redAccent,
+            size: 46,
+          ),
+          title: const Text(
+            'Not enough wallet balance',
+          ),
+          content: Text(
+            '$message\n\n'
+            'Add money to your BuyNova Wallet, '
+            'then apply again.',
+            textAlign: TextAlign.center,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+              },
+              child: const Text('Close'),
+            ),
+            if (widget.onOpenWallet != null)
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor:
+                      Colors.redAccent,
+                  foregroundColor:
+                      Colors.white,
+                ),
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                  widget.onOpenWallet!();
+                },
+                child: const Text(
+                  'Add Money',
+                ),
+              ),
+          ],
+        );
+      },
+    );
   }
 
   // =========================================================
@@ -1625,7 +1708,7 @@ class _ResellerMembershipCardState
             decoration:
                 BoxDecoration(
               color:
-                  freeCampaign
+                  (freeCampaign || widget.rejected)
                       ? Colors.green.withValues(
                           alpha: 0.08,
                         )
@@ -1674,7 +1757,7 @@ class _ResellerMembershipCardState
                       ),
 
                       Text(
-                        freeCampaign
+                        (freeCampaign || widget.rejected)
                             ? 'FREE'
                             : _formatMoney(
                                 displayedFee,
@@ -1686,11 +1769,24 @@ class _ResellerMembershipCardState
                           fontWeight:
                               FontWeight.bold,
                           color:
-                              freeCampaign
+                              (freeCampaign || widget.rejected)
                                   ? Colors.green
                                   : Colors.redAccent,
                         ),
                       ),
+
+                      if (widget.rejected)
+                        const Padding(
+                          padding:
+                              EdgeInsets.only(top: 3),
+                          child: Text(
+                            'Fee already paid. No new fee.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -1847,7 +1943,7 @@ class _ResellerMembershipCardState
                           ),
                         )
                       : Icon(
-                          freeCampaign
+                          (freeCampaign || widget.rejected)
                               ? Icons
                                   .how_to_reg_outlined
                               : Icons
@@ -1857,9 +1953,11 @@ class _ResellerMembershipCardState
                   Text(
                 _processing
                     ? 'Processing...'
-                    : freeCampaign
-                        ? 'Apply as Reseller'
-                        : 'Pay & Apply as Reseller',
+                    : widget.rejected
+                        ? 'Apply Again (No Fee)'
+                        : freeCampaign
+                            ? 'Apply as Reseller'
+                            : 'Pay & Apply as Reseller',
                 style:
                     const TextStyle(
                   fontWeight:
@@ -1875,7 +1973,9 @@ class _ResellerMembershipCardState
           ),
 
           Text(
-            freeCampaign
+            widget.rejected
+                ? 'Your earlier membership fee is still valid.'
+                : freeCampaign
                 ? 'Your request will be processed through BuyNova.'
                 : 'Payment is securely processed through your BuyNova Wallet.',
             textAlign:
