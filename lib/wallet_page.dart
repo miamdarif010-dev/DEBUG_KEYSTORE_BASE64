@@ -143,11 +143,47 @@ class _WalletPageState extends State<WalletPage> {
 
       final data = doc.data() ?? {};
 
+      // -------------------------------------------------------
+      // New Firestore field names:
+      //
+      // bkashNumber
+      // nagadNumber
+      // rocketNumber
+      // bankAccount
+      //
+      // Old field names are also supported for compatibility.
+      // -------------------------------------------------------
+
+      String readPaymentField(
+        String newField,
+        String oldField,
+      ) {
+        final newValue = data[newField]?.toString().trim() ?? '';
+
+        if (newValue.isNotEmpty) {
+          return newValue;
+        }
+
+        return data[oldField]?.toString().trim() ?? '';
+      }
+
       return {
-        'bkash': data['bkash']?.toString() ?? '',
-        'nagad': data['nagad']?.toString() ?? '',
-        'rocket': data['rocket']?.toString() ?? '',
-        'bank': data['bank']?.toString() ?? '',
+        'bkash': readPaymentField(
+          'bkashNumber',
+          'bkash',
+        ),
+        'nagad': readPaymentField(
+          'nagadNumber',
+          'nagad',
+        ),
+        'rocket': readPaymentField(
+          'rocketNumber',
+          'rocket',
+        ),
+        'bank': readPaymentField(
+          'bankAccount',
+          'bank',
+        ),
       };
     } catch (_) {
       return {
@@ -175,6 +211,8 @@ class _WalletPageState extends State<WalletPage> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            final destination = paymentInfo[selectedMethod] ?? '';
+
             return AlertDialog(
               title: const Row(
                 children: [
@@ -248,18 +286,26 @@ class _WalletPageState extends State<WalletPage> {
                         color: Colors.blue.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Text(
-                        (paymentInfo[selectedMethod] ?? '').isEmpty
-                            ? 'Payment number is not set yet. Please contact BuyNova support before sending money.'
-                            : 'Step 1: Send money to this '
-                                '${selectedMethod == 'bank' ? 'account' : 'number'}:\n'
-                                '${paymentInfo[selectedMethod]}\n\n'
-                                'Step 2: Enter your number and the Transaction ID below.',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      child: destination.isEmpty
+                          ? Text(
+                              selectedMethod == 'bank'
+                                  ? 'Bank account is not set yet. Please contact BuyNova support before sending money.'
+                                  : '${selectedMethod == 'bkash' ? 'bKash' : selectedMethod == 'nagad' ? 'Nagad' : 'Rocket'} payment number is not set yet. Please contact BuyNova support before sending money.',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            )
+                          : Text(
+                              'Step 1: Send money to this '
+                              '${selectedMethod == 'bank' ? 'account' : 'number'}:\n'
+                              '$destination\n\n'
+                              'Step 2: Enter your number and the Transaction ID below.',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                     ),
 
                     const SizedBox(height: 12),
@@ -644,10 +690,6 @@ class _WalletPageState extends State<WalletPage> {
     });
 
     try {
-      // -------------------------------------------------------
-      // Get latest balance from Firestore.
-      // -------------------------------------------------------
-
       final userSnapshot = await _userRef.get();
 
       if (!userSnapshot.exists) {
@@ -658,10 +700,6 @@ class _WalletPageState extends State<WalletPage> {
 
       final currentBalance =
           (data['cashBalance'] as num?)?.toDouble() ?? 0.0;
-
-      // -------------------------------------------------------
-      // Do not create a request greater than balance.
-      // -------------------------------------------------------
 
       if (amount > currentBalance) {
         if (!mounted) return;
@@ -696,13 +734,6 @@ class _WalletPageState extends State<WalletPage> {
         default:
           methodName = 'bKash';
       }
-
-      // -------------------------------------------------------
-      // IMPORTANT:
-      // We DO NOT reduce cashBalance here.
-      //
-      // Admin will reduce it only after approval.
-      // -------------------------------------------------------
 
       await _transactionsRef.add({
         'userId': _user!.uid,
@@ -940,7 +971,6 @@ class _WalletPageState extends State<WalletPage> {
         ),
         centerTitle: true,
       ),
-
       body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
         stream: _userRef.snapshots(),
         builder: (context, snapshot) {
