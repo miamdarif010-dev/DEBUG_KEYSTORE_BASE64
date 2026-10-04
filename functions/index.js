@@ -864,6 +864,269 @@ async function syncMainOrderStatus(orderId) {
   });
 }
 
+// ============================================================
+// PAYOUT ON DELIVERY (seller earning / reseller profit)
+// ============================================================
+//
+// seller_orders   : seller gets sellerEarning (subtotal - discount share)
+// reseller_orders : supplier (seller) gets supplierEarning,
+//                   reseller gets resellerProfit (already after discount)
+//
+// BuyNova commission: ONE percentage, platformSettings/monetization ->
+// commissionPercent (e.g. 2 = 2%). Admin can change it any time; the
+// rate in force at delivery time is used. Missing or 0 = no commission.
+// The commission is taken from whoever sells the product:
+//   normal seller -> from the seller's earning
+//   reseller      -> from the reseller's profit
+// The supplier of a reseller product gets the full supplier price.
+//
+// Wallet orders are paid out automatically when delivered.
+// Cash on Delivery orders are paid out only when Admin calls
+// retrySubOrderPayout (the cash must reach BuyNova first).
+// Every sub-order is paid at most once (payoutDone flag).
+
+function percentValue(value) {
+  return Math.min(100, Math.max(0, Number(value) || 0));
+}
+
+async function payoutDeliveredSubOrder(
+  collectionName,
+  subOrderId,
+  options = {}
+) {
+  const allowCod = options.allowCod === true;
+
+  const subRef = db.collection(collectionName).doc(subOrderId);
+
+  const configRef = db.collection("platformSettings").doc("monetization");
+
+  return db.runTransaction(async (transaction) => {
+    const subSnap = await transaction.get(subRef);
+
+    if (!subSnap.exists) {
+      return { paid: false, reason: "not-found" };
+    }
+
+    const sub = subSnap.data() || {};
+
+    if (sub.payoutDone === true) {
+      return { paid: false, reason: "already-paid" };
+    }
+
+    if (String(sub.orderStatus || "").toLowerCase() !== "delivered") {
+      return { paid: false, reason: "not-delivered" };
+    }
+
+    const isWallet = sub.paymentMethod === "BuyNova Wallet";
+
+    if (isWallet && sub.paymentStatus !== "paid") {
+      return { paid: false, reason: "wallet-not-paid" };
+    }
+
+    if (!isWallet && !allowCod) {
+      return { paid: false, reason: "cod-needs-admin" };
+    }
+
+    const configSnap = await transaction.get(configRef);
+
+    const config = configSnap.exists ? configSnap.data() || {} : {};
+
+    const commissionPercent = percentValue(config.commissionPercent);
+
+    const payees = [];
+
+    if (collectionName === "reseller_orders") {
+      payees.push({
+        uid: sub.sellerId,
+        role: "seller",
+        source: "supplier_payout",
+        gross: roundMoney(sub.supplierEarning ?? sub.supplierTotal),
+        percent: 0,
+      });
+
+      payees.push({
+        uid: sub.entrepreneurUid,
+        role: "reseller",
+        source: "reseller_profit",
+        gross: roundMoney(sub.resellerProfit ?? sub.profit),
+        percent: commissionPercent,
+      });
+    } else {
+      payees.push({
+        uid: sub.sellerId,
+        role: "seller",
+        source: "sale_earning",
+        gross: roundMoney(
+          sub.sellerEarning ??
+            (Number(sub.subtotal ?? sub.sellerSubtotal) || 0) -
+              (Number(sub.discountShare) || 0)
+        ),
+        percent: commissionPercent,
+      });
+    }
+
+    // Firestore transactions: every read must come before any write.
+    const wallets = new Map();
+
+    for (const payee of payees) {
+      const uid = typeof payee.uid === "string" ? payee.uid : "";
+
+      if (!uid || wallets.has(uid)) continue;
+
+      const ref = db.collection("users").doc(uid);
+
+      const snap = await transaction.get(ref);
+
+      const data = snap.exists ? snap.data() || {} : {};
+
+      wallets.set(uid, {
+        ref,
+        exists: snap.exists,
+        balance: Number(data.cashBalance ?? data.walletBalance ?? 0),
+        changed: false,
+      });
+    }
+
+    const paidTo = [];
+
+    for (const payee of payees) {
+      const wallet = wallets.get(payee.uid);
+
+      if (!wallet || !wallet.exists) {
+        console.warn(
+          "Payout skipped, user not found:",
+          collectionName,
+          subOrderId,
+          payee.role,
+          payee.uid
+        );
+        continue;
+      }
+
+      if (!(payee.gross > 0)) continue;
+
+      if (!Number.isFinite(wallet.balance)) {
+        throw new HttpsError("failed-precondition", "Invalid wallet balance.");
+      }
+
+      const commission = roundMoney((payee.gross * payee.percent) / 100);
+
+      const net = roundMoney(payee.gross - commission);
+
+      const balanceBefore = wallet.balance;
+
+      const balanceAfter = roundMoney(balanceBefore + net);
+
+      wallet.balance = balanceAfter;
+
+      wallet.changed = true;
+
+      transaction.set(wallet.ref.collection("walletTransactions").doc(), {
+        type: "credit",
+        source: payee.source,
+        status: "approved",
+        amount: net,
+        grossAmount: payee.gross,
+        commissionAmount: commission,
+        commissionPercent: payee.percent,
+        currency: "BDT",
+        currencySymbol: "৳",
+        userId: payee.uid,
+        orderId: sub.orderId || null,
+        subOrderId: subOrderId,
+        subOrderCollection: collectionName,
+        balanceBefore: balanceBefore,
+        balanceAfter: balanceAfter,
+        description: `Earning for delivered order ${sub.orderId || subOrderId}`,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      transaction.set(wallet.ref.collection("notifications").doc(), {
+        title: "Earning Received",
+        message: `৳${net.toFixed(2)} was added to your BuyNova Wallet for delivered order ${sub.orderId || subOrderId}.`,
+        type: "order_earning",
+        orderId: sub.orderId || null,
+        amount: net,
+        currency: "BDT",
+        read: false,
+        isRead: false,
+        createdAt: serverTimestamp(),
+      });
+
+      if (commission > 0) {
+        transaction.set(
+          db
+            .collection("buyNovaProfitLedger")
+            .doc(`${subOrderId}_${payee.role}`),
+          {
+            uid: payee.uid,
+            role: payee.role,
+            orderId: sub.orderId || null,
+            subOrderId: subOrderId,
+            subOrderCollection: collectionName,
+            source: "order_commission",
+            category: "commission",
+            amount: commission,
+            profitAmount: commission,
+            commissionPercent: payee.percent,
+            currency: "BDT",
+            currencySymbol: "৳",
+            createdAt: serverTimestamp(),
+          }
+        );
+      }
+
+      paidTo.push({ uid: payee.uid, role: payee.role, amount: net });
+    }
+
+    for (const wallet of wallets.values()) {
+      if (!wallet.changed) continue;
+
+      transaction.update(wallet.ref, {
+        cashBalance: wallet.balance,
+        walletBalance: wallet.balance,
+        updatedAt: serverTimestamp(),
+      });
+    }
+
+    transaction.update(subRef, {
+      payoutDone: true,
+      payoutAt: serverTimestamp(),
+      payoutMode: isWallet ? "wallet_auto" : "admin_cod",
+      updatedAt: serverTimestamp(),
+    });
+
+    return { paid: true, paidTo };
+  });
+}
+
+// Admin: pay out a delivered sub-order now. Use this for Cash on Delivery
+// orders after the cash has reached BuyNova, or to retry a failed payout.
+exports.retrySubOrderPayout = onCall(async (request) => {
+  requireAdmin(request);
+
+  const { collectionName, subOrderId } = request.data || {};
+
+  if (
+    !["seller_orders", "reseller_orders"].includes(collectionName) ||
+    typeof subOrderId !== "string" ||
+    !subOrderId ||
+    subOrderId.includes("/")
+  ) {
+    throw new HttpsError(
+      "invalid-argument",
+      "collectionName (seller_orders or reseller_orders) and subOrderId are required."
+    );
+  }
+
+  const result = await payoutDeliveredSubOrder(collectionName, subOrderId, {
+    allowCod: true,
+  });
+
+  return { success: true, ...result };
+});
+
 async function handleSubOrderStatusChange(event, collectionName) {
   const before =
     event.data &&
@@ -913,6 +1176,19 @@ async function handleSubOrderStatusChange(event, collectionName) {
         subOrderId,
         "order",
         orderId,
+        error
+      );
+    }
+  }
+
+  if (afterStatus === "delivered") {
+    try {
+      await payoutDeliveredSubOrder(collectionName, subOrderId);
+    } catch (error) {
+      console.error(
+        "Payout failed for",
+        collectionName,
+        subOrderId,
         error
       );
     }
