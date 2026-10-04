@@ -1413,6 +1413,34 @@ exports.payMembershipRegistrationFee = onCall(
               true;
 
         if (alreadyPaid) {
+          // Rejected earlier: let the user apply again, no second fee.
+          if (currentStatus === "rejected") {
+            const reapply = {
+              updatedAt: serverTimestamp(),
+              membershipUpdatedAt: serverTimestamp(),
+            };
+            if (role === "seller") {
+              reapply.sellerStatus = "pending";
+              reapply.sellerRequestedAt = serverTimestamp();
+            } else {
+              reapply.entrepreneurStatus = "pending";
+              reapply.entrepreneurRequestedAt = serverTimestamp();
+            }
+            transaction.update(userRef, reapply);
+            return {
+              reapplied: true,
+              paymentId: null,
+              role: role,
+              roleName: roleName,
+              amount: 0,
+              currency: "BDT",
+              balanceBefore: null,
+              balanceAfter: null,
+              pricingPlan: "reapply",
+              freeCampaign: false,
+              walletTransactionId: null,
+            };
+          }
           throw new HttpsError(
             "already-exists",
             `${roleName} membership registration fee has already been paid.`
@@ -1732,7 +1760,9 @@ exports.payMembershipRegistrationFee = onCall(
             `${result.roleName} Application Submitted`,
 
           message:
-            result.amount > 0
+            result.reapplied
+              ? `Your ${result.roleName} application was submitted again. No new fee was charged. It is now pending Admin approval.`
+              : result.amount > 0
               ? `৳${result.amount.toFixed(
                   2
                 )} membership registration fee paid successfully. Your ${result.roleName} application is now pending Admin approval.`
