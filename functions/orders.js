@@ -329,19 +329,54 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-    // ----- Seller orders -----
+    // ----- Group lines: per seller, and per reseller+supplier -----
     const sellerGroups = new Map();
     for (const l of lines.filter((x) => !x.isResellerProduct)) {
       if (!sellerGroups.has(l.sellerId)) sellerGroups.set(l.sellerId, []);
       sellerGroups.get(l.sellerId).push(l);
     }
 
-    for (const [sellerId, group] of sellerGroups) {
+    const resellerGroups = new Map();
+    for (const l of lines.filter((x) => x.isResellerProduct)) {
+      const key = `${l.entrepreneurUid}_${l.sellerId}`;
+      if (!resellerGroups.has(key)) resellerGroups.set(key, []);
+      resellerGroups.get(key).push(l);
+    }
+
+    // ----- Split the coupon discount -----
+    // Whoever sells the product bears the discount on it, in proportion to
+    // that sub-order's share of the subtotal:
+    //   normal seller -> comes out of the seller's earning
+    //   reseller      -> comes out of the reseller's profit
+    // The supplier of a reseller product is never reduced.
+    const parts = [
+      ...[...sellerGroups.values()].map((g) => ({ type: 'seller', group: g })),
+      ...[...resellerGroups.values()].map((g) => ({ type: 'reseller', group: g })),
+    ];
+
+    let allocated = 0;
+    parts.forEach((p, i) => {
+      p.base = round2(p.group.reduce((s, l) => s + l.total, 0));
+
+      let share;
+      if (i === parts.length - 1) {
+        share = round2(discount - allocated); // remainder, so shares add up exactly
+      } else {
+        share = subtotal > 0 ? round2((discount * p.base) / subtotal) : 0;
+      }
+
+      p.discountShare = Math.min(p.base, Math.max(0, share));
+      allocated = round2(allocated + p.discountShare);
+    });
+
+    // ----- Seller orders -----
+    for (const p of parts.filter((x) => x.type === 'seller')) {
+      const group = p.group;
       const ref = db.collection(COL.sellerOrders).doc();
       tx.set(ref, {
         orderId,
         sellerOrderId: ref.id,
-        sellerId,
+        sellerId: group[0].sellerId,
         buyerId: uid,
         customerId: uid,
         userId: uid,
@@ -353,7 +388,9 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
           total: l.total,
           imageUrl: l.imageUrl,
         })),
-        subtotal: round2(group.reduce((s, l) => s + l.total, 0)),
+        subtotal: p.base,
+        discountShare: p.discountShare,
+        sellerEarning: round2(p.base - p.discountShare),
         currency: 'BDT',
         paymentMethod,
         paymentStatus: 'pending',
@@ -364,20 +401,23 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
     }
 
     // ----- Reseller orders -----
-    const resellerGroups = new Map();
-    for (const l of lines.filter((x) => x.isResellerProduct)) {
-      const key = `${l.entrepreneurUid}_${l.sellerId}`;
-      if (!resellerGroups.has(key)) resellerGroups.set(key, []);
-      resellerGroups.get(key).push(l);
-    }
-
-    for (const group of resellerGroups.values()) {
+    for (const p of parts.filter((x) => x.type === 'reseller')) {
+      const group = p.group;
       const first = group[0];
-      const sellingTotal = round2(group.reduce((s, l) => s + l.total, 0));
+      const sellingTotal = p.base;
       const supplierTotal = round2(
         group.reduce((s, l) => s + l.supplierPrice * l.quantity, 0)
       );
-      const profit = round2(sellingTotal - supplierTotal);
+
+      // profit = selling total - this reseller's share of the coupon - supplier total
+      const profit = round2(sellingTotal - p.discountShare - supplierTotal);
+
+      if (profit < 0) {
+        throw new HttpsError(
+          'failed-precondition',
+          'This coupon cannot be used with a reseller product in your cart.'
+        );
+      }
 
       const ref = db.collection(COL.resellerOrders).doc();
       tx.set(ref, {
@@ -405,6 +445,9 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
         })),
         sellingTotal,
         supplierTotal,
+        supplierEarning: supplierTotal,
+        couponDiscount: p.discountShare,
+        discountShare: p.discountShare,
         resellerProfit: profit,
         profit,
         currency: 'BDT',
