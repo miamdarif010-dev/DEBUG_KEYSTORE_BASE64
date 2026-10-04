@@ -134,8 +134,39 @@ class _WalletPageState extends State<WalletPage> {
   // ADD MONEY
   // =========================================================
 
+  Future<Map<String, String>> _loadPaymentInfo() async {
+    try {
+      final doc = await _firestore
+          .collection('platformSettings')
+          .doc('paymentInfo')
+          .get();
+
+      final data = doc.data() ?? {};
+
+      return {
+        'bkash': data['bkash']?.toString() ?? '',
+        'nagad': data['nagad']?.toString() ?? '',
+        'rocket': data['rocket']?.toString() ?? '',
+        'bank': data['bank']?.toString() ?? '',
+      };
+    } catch (_) {
+      return {
+        'bkash': '',
+        'nagad': '',
+        'rocket': '',
+        'bank': '',
+      };
+    }
+  }
+
   Future<void> _showAddMoneyDialog() async {
+    final paymentInfo = await _loadPaymentInfo();
+
+    if (!mounted) return;
+
     final amountController = TextEditingController();
+    final senderController = TextEditingController();
+    final trxController = TextEditingController();
 
     String selectedMethod = 'bkash';
 
@@ -214,11 +245,57 @@ class _WalletPageState extends State<WalletPage> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
+                        color: Colors.blue.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        (paymentInfo[selectedMethod] ?? '').isEmpty
+                            ? 'Payment number is not set yet. Please contact BuyNova support before sending money.'
+                            : 'Step 1: Send money to this '
+                                '${selectedMethod == 'bank' ? 'account' : 'number'}:\n'
+                                '${paymentInfo[selectedMethod]}\n\n'
+                                'Step 2: Enter your number and the Transaction ID below.',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    TextField(
+                      controller: senderController,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(
+                        labelText: 'Your sender number / account',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    TextField(
+                      controller: trxController,
+                      textCapitalization:
+                          TextCapitalization.characters,
+                      decoration: const InputDecoration(
+                        labelText: 'Transaction ID (TrxID)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
                         color: Colors.orange.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: const Text(
-                        'Your Add Money request will remain pending until an admin approves it.',
+                        'Your Add Money request will remain pending until an admin verifies the payment and approves it.',
                         style: TextStyle(
                           fontSize: 12,
                         ),
@@ -250,11 +327,42 @@ class _WalletPageState extends State<WalletPage> {
                             return;
                           }
 
+                          final sender =
+                              senderController.text.trim();
+
+                          final trx = trxController.text
+                              .trim()
+                              .toUpperCase();
+
+                          if (sender.length < 6) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Please enter your sender number.',
+                                ),
+                              ),
+                            );
+                            return;
+                          }
+
+                          if (trx.length < 6) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Please enter a valid Transaction ID.',
+                                ),
+                              ),
+                            );
+                            return;
+                          }
+
                           Navigator.pop(dialogContext);
 
                           await _createDepositRequest(
                             amount,
                             selectedMethod,
+                            sender,
+                            trx,
                           );
                         },
                   child: const Text('Submit'),
@@ -267,11 +375,15 @@ class _WalletPageState extends State<WalletPage> {
     );
 
     amountController.dispose();
+    senderController.dispose();
+    trxController.dispose();
   }
 
   Future<void> _createDepositRequest(
     double amount,
     String method,
+    String senderNumber,
+    String trxId,
   ) async {
     if (_user == null) return;
 
@@ -309,6 +421,8 @@ class _WalletPageState extends State<WalletPage> {
         'currencySymbol': '৳',
         'paymentMethod': method,
         'paymentMethodName': methodName,
+        'senderNumber': senderNumber,
+        'trxId': trxId,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
@@ -661,6 +775,8 @@ class _WalletPageState extends State<WalletPage> {
             data['paymentMethodName']?.toString() ??
             '';
 
+    final trxId = data['trxId']?.toString() ?? '';
+
     final reason =
         data['reason']?.toString() ??
             data['adminReason']?.toString() ??
@@ -710,6 +826,12 @@ class _WalletPageState extends State<WalletPage> {
                   _detailRow(
                     'Method',
                     methodName,
+                  ),
+
+                if (!isWithdrawal && trxId.isNotEmpty)
+                  _detailRow(
+                    'TrxID',
+                    trxId,
                   ),
 
                 if (isWithdrawal && account.isNotEmpty)
