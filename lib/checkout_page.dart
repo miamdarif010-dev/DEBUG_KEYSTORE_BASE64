@@ -58,7 +58,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   // Wallet remains disabled until the Cloud Functions
   // payment flow is deployed and tested.
-  static const bool _walletEnabled = false;
+  static const bool _walletEnabled = true;
 
   static const String _functionsRegion = 'asia-northeast3';
 
@@ -83,6 +83,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   bool _loadingWalletBalance = false;
 
   Map<String, dynamic>? _selectedAddress;
+  String? _selectedAddressId;
 
   FirebaseFunctions get _functions =>
       FirebaseFunctions.instanceFor(
@@ -401,6 +402,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         setState(() {
           _selectedAddress =
               defaultSnapshot.docs.first.data();
+          _selectedAddressId = defaultSnapshot.docs.first.id;
         });
 
         return;
@@ -415,6 +417,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         setState(() {
           _selectedAddress =
               anySnapshot.docs.first.data();
+          _selectedAddressId = anySnapshot.docs.first.id;
         });
 
         return;
@@ -432,6 +435,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         if (!mounted) return;
 
         setState(() {
+          _selectedAddressId = null;
           _selectedAddress =
               Map<String, dynamic>.from(
             address,
@@ -950,596 +954,69 @@ class _CheckoutPageState extends State<CheckoutPage> {
       }
 
       // ========================================================
-      // CUSTOMER DELIVERY DATA
+      // CREATE ORDER (server side)
       // ========================================================
+      //
+      // Prices, coupon, delivery fee, seller / reseller split are
+      // all calculated by the Cloud Function. The app only sends
+      // the product ids, quantities, coupon code, payment method
+      // and the selected address id.
 
-      final customerDeliveryData =
-          _customerDeliveryData(user);
+      final List<Map<String, dynamic>> requestItems =
+          widget.items.map((item) {
+        return {
+          'productId': item.id,
+          'quantity': item.quantity,
+          'isResellerProduct': item.isResellerProduct,
+        };
+      }).toList();
 
-      // ========================================================
-      // MAIN ORDER
-      // ========================================================
-
-      final orderRef =
-          _firestore
-              .collection('orders')
-              .doc();
-
-      final orderId =
-          orderRef.id;
-
-      final List<
-          Map<String, dynamic>> orderItems =
-          widget.items.map(
-        (item) {
-          return {
-            'productId': item.id,
-            'name': item.name,
-            'price': item.price,
-            'quantity': item.quantity,
-            'total': item.total,
-            'imageUrl': item.imageUrl,
-
-            'isResellerProduct':
-                item.isResellerProduct,
-
-            'entrepreneurUid':
-                item.entrepreneurUid,
-
-            'sellerId':
-                item.sellerId,
-
-            'supplierProductId':
-                item.supplierProductId,
-
-            'supplierPrice':
-                item.supplierPrice,
-
-            'resellerProfit':
-                item.resellerProfit,
-          };
-        },
-      ).toList();
-
-      final Map<String, dynamic> orderData = {
-        'orderId': orderId,
-
-        'userId': user.uid,
-        'customerId': user.uid,
-
-        'items': orderItems,
-
-        'subtotal': subtotal,
-        'deliveryFee': _deliveryFee,
-        'deliveryZone': _deliveryZone,
-
-        'discount': _discount,
-        'couponDiscount': _discount,
-
-        'total': grandTotal,
-        'grandTotal': grandTotal,
-
-        'currency': 'BDT',
-        'currencySymbol': '৳',
-
+      final createResult = await _functions
+          .httpsCallable('createOrder')
+          .call({
+        'items': requestItems,
         'couponCode': _couponCode,
-
         'paymentMethod': _paymentMethod,
-        'paymentStatus': 'pending',
+        'addressId': _selectedAddressId,
+      });
 
-        'orderStatus': 'placed',
-
-        ...customerDeliveryData,
-
-        // Keep existing compatibility field.
-        'address': _selectedAddress,
-
-        'createdAt':
-            FieldValue.serverTimestamp(),
-        'updatedAt':
-            FieldValue.serverTimestamp(),
-      };
-
-      // ========================================================
-      // NORMAL SELLER GROUPS
-      // ========================================================
-
-      final Map<String, List<CheckoutItem>>
-          sellerGroups = {};
-
-      for (final item in widget.items) {
-        if (item.isResellerProduct) {
-          continue;
-        }
-
-        final sellerId =
-            await _findSellerId(item);
-
-        sellerGroups
-            .putIfAbsent(
-              sellerId,
-              () => <CheckoutItem>[],
-            )
-            .add(item);
+      if (createResult.data is! Map) {
+        throw Exception('Invalid order response.');
       }
 
-      // ========================================================
-      // RESELLER GROUPS
-      // ========================================================
+      final createData =
+          Map<String, dynamic>.from(createResult.data as Map);
 
-      final Map<String, List<CheckoutItem>>
-          resellerGroups = {};
-
-      for (final item in widget.items) {
-        if (!item.isResellerProduct) {
-          continue;
-        }
-
-        final entrepreneurUid =
-            (item.entrepreneurUid == null ||
-                    item.entrepreneurUid!
-                        .trim()
-                        .isEmpty)
-                ? user.uid
-                : item.entrepreneurUid!
-                    .trim();
-
-        final sellerId =
-            (item.sellerId == null ||
-                    item.sellerId!
-                        .trim()
-                        .isEmpty)
-                ? 'unknown_seller'
-                : item.sellerId!
-                    .trim();
-
-        final groupKey =
-            '${entrepreneurUid}__${sellerId}';
-
-        resellerGroups
-            .putIfAbsent(
-              groupKey,
-              () => <CheckoutItem>[],
-            )
-            .add(item);
+      if (createData['success'] != true) {
+        throw Exception('Order could not be created.');
       }
 
-      // ========================================================
-      // DISCOUNT ALLOCATION
-      // ========================================================
+      final String orderId =
+          (createData['orderId'] ?? '').toString();
 
-      final int totalGroups =
-          sellerGroups.length +
-          resellerGroups.length;
-
-      int discountGroupIndex = 0;
-
-      double remainingDiscount =
-          _discount;
-
-      // ========================================================
-      // BATCH
-      // ========================================================
-
-      final WriteBatch batch =
-          _firestore.batch();
-
-      // ========================================================
-      // MAIN ORDER
-      // ========================================================
-
-      batch.set(
-        orderRef,
-        orderData,
-      );
-
-      // ========================================================
-      // DIRECT SELLER ORDERS
-      // ========================================================
-
-      for (final entry
-          in sellerGroups.entries) {
-        final items =
-            entry.value;
-
-        if (items.isEmpty) {
-          continue;
-        }
-
-        final double sellerSubtotal =
-            items.fold<double>(
-          0,
-          (sum, item) =>
-              sum + item.total,
-        );
-
-        final double sellerCouponDiscount =
-            _discountForGroup(
-          groupSubtotal:
-              sellerSubtotal,
-          remainingDiscount:
-              remainingDiscount,
-          groupIndex:
-              discountGroupIndex,
-          totalGroups:
-              totalGroups,
-        );
-
-        remainingDiscount =
-            _roundMoney(
-          remainingDiscount -
-              sellerCouponDiscount,
-        );
-
-        discountGroupIndex++;
-
-        final double netSellerEarnings =
-            _roundMoney(
-          sellerSubtotal -
-              sellerCouponDiscount,
-        );
-
-        final sellerOrderRef =
-            _firestore
-                .collection('seller_orders')
-                .doc();
-
-        batch.set(
-          sellerOrderRef,
-          {
-            'orderId': orderId,
-            'sellerOrderId':
-                sellerOrderRef.id,
-
-            'orderType':
-                'direct_seller',
-
-            'sellerId':
-                entry.key,
-
-            'buyerId': user.uid,
-            'customerId': user.uid,
-            'userId': user.uid,
-
-            // ==================================================
-            // CUSTOMER DELIVERY DETAILS
-            // ==================================================
-
-            'customerName':
-                customerDeliveryData[
-                    'customerName'],
-
-            'customerPhone':
-                customerDeliveryData[
-                    'customerPhone'],
-
-            'customerEmail':
-                customerDeliveryData[
-                    'customerEmail'],
-
-            // Compatibility string address.
-            'address':
-                customerDeliveryData[
-                    'address'],
-
-            'city':
-                customerDeliveryData[
-                    'city'],
-
-            'district':
-                customerDeliveryData[
-                    'district'],
-
-            'postalCode':
-                customerDeliveryData[
-                    'postalCode'],
-
-            'deliveryZone':
-                _deliveryZone,
-
-            // Full address for Seller delivery.
-            'deliveryAddress':
-                customerDeliveryData[
-                    'deliveryAddress'],
-
-            // Compatibility with existing Seller UI.
-            'customerAddress':
-                customerDeliveryData[
-                    'customerAddress'],
-
-            // Delivery fee is stored for delivery
-            // information but is NOT added to
-            // seller earnings.
-            'deliveryFee':
-                _deliveryFee,
-
-            'items': items
-                .map(
-                  _sellerOrderItem,
-                )
-                .toList(),
-
-            'subtotal':
-                sellerSubtotal,
-
-            'couponCode':
-                _couponCode,
-
-            'couponDiscount':
-                sellerCouponDiscount,
-
-            'netSellerEarnings':
-                netSellerEarnings,
-
-            'currency': 'BDT',
-            'currencySymbol': '৳',
-
-            'paymentMethod':
-                _paymentMethod,
-
-            'paymentStatus':
-                'pending',
-
-            'orderStatus':
-                'placed',
-
-            'createdAt':
-                FieldValue.serverTimestamp(),
-
-            'updatedAt':
-                FieldValue.serverTimestamp(),
-          },
-        );
+      if (orderId.isEmpty) {
+        throw Exception('Order id missing.');
       }
-
-      // ========================================================
-      // RESELLER ORDERS
-      // ========================================================
-
-      for (final entry
-          in resellerGroups.entries) {
-        final items =
-            entry.value;
-
-        if (items.isEmpty) {
-          continue;
-        }
-
-        final entrepreneurUid =
-            (items.first.entrepreneurUid == null ||
-                    items.first.entrepreneurUid!
-                        .trim()
-                        .isEmpty)
-                ? user.uid
-                : items.first.entrepreneurUid!
-                    .trim();
-
-        final sellerId =
-            (items.first.sellerId == null ||
-                    items.first.sellerId!
-                        .trim()
-                        .isEmpty)
-                ? 'unknown_seller'
-                : items.first.sellerId!
-                    .trim();
-
-        final double sellingTotal =
-            items.fold<double>(
-          0,
-          (sum, item) =>
-              sum + item.total,
-        );
-
-        final double supplierTotal =
-            items.fold<double>(
-          0,
-          (sum, item) =>
-              sum +
-              ((item.supplierPrice ?? 0) *
-                  item.quantity),
-        );
-
-        // ======================================================
-        // RESELLER COUPON SHARE
-        // ======================================================
-
-        final double resellerCouponDiscount =
-            _discountForGroup(
-          groupSubtotal:
-              sellingTotal,
-          remainingDiscount:
-              remainingDiscount,
-          groupIndex:
-              discountGroupIndex,
-          totalGroups:
-              totalGroups,
-        );
-
-        remainingDiscount =
-            _roundMoney(
-          remainingDiscount -
-              resellerCouponDiscount,
-        );
-
-        discountGroupIndex++;
-
-        // ======================================================
-        // NET SELLING TOTAL
-        // ======================================================
-
-        final double netSellingTotal =
-            _roundMoney(
-          sellingTotal -
-              resellerCouponDiscount,
-        );
-
-        // ======================================================
-        // FINAL RESELLER PROFIT
-        // ======================================================
-        //
-        // Selling Total
-        // - Coupon Discount
-        // - Supplier Cost
-        // = Reseller Profit
-        //
-
-        final double resellerProfit =
-            _roundMoney(
-          sellingTotal -
-              resellerCouponDiscount -
-              supplierTotal,
-        );
-
-        final resellerOrderRef =
-            _firestore
-                .collection('reseller_orders')
-                .doc();
-
-        batch.set(
-          resellerOrderRef,
-          {
-            'orderId': orderId,
-
-            'resellerOrderId':
-                resellerOrderRef.id,
-
-            'orderType':
-                'reseller',
-
-            'entrepreneurUid':
-                entrepreneurUid,
-
-            'sellerId':
-                sellerId,
-
-            'buyerId':
-                user.uid,
-
-            'customerId':
-                user.uid,
-
-            'userId':
-                user.uid,
-
-            // ==================================================
-            // CUSTOMER DELIVERY INFORMATION
-            // ==================================================
-
-            'customerName':
-                customerDeliveryData[
-                    'customerName'],
-
-            'customerPhone':
-                customerDeliveryData[
-                    'customerPhone'],
-
-            'customerEmail':
-                customerDeliveryData[
-                    'customerEmail'],
-
-            // Compatibility string address.
-            'address':
-                customerDeliveryData[
-                    'address'],
-
-            'city':
-                customerDeliveryData[
-                    'city'],
-
-            'district':
-                customerDeliveryData[
-                    'district'],
-
-            'postalCode':
-                customerDeliveryData[
-                    'postalCode'],
-
-            'deliveryZone':
-                _deliveryZone,
-
-            // Full customer address.
-            // Seller uses this to deliver directly
-            // to the customer.
-            'deliveryAddress':
-                customerDeliveryData[
-                    'deliveryAddress'],
-
-            // Compatibility with older UI/code.
-            'customerAddress':
-                customerDeliveryData[
-                    'customerAddress'],
-
-            'deliveryFee':
-                _deliveryFee,
-
-            'items': items
-                .map(
-                  _resellerOrderItem,
-                )
-                .toList(),
-
-            'sellingTotal':
-                sellingTotal,
-
-            'couponCode':
-                _couponCode,
-
-            'couponDiscount':
-                resellerCouponDiscount,
-
-            'netSellingTotal':
-                netSellingTotal,
-
-            'supplierTotal':
-                supplierTotal,
-
-            'resellerProfit':
-                resellerProfit,
-
-            // Compatibility with older UI/code.
-            'profit':
-                resellerProfit,
-
-            'currency': 'BDT',
-            'currencySymbol': '৳',
-
-            'paymentMethod':
-                _paymentMethod,
-
-            'paymentStatus':
-                'pending',
-
-            'orderStatus':
-                'placed',
-
-            'createdAt':
-                FieldValue.serverTimestamp(),
-
-            'updatedAt':
-                FieldValue.serverTimestamp(),
-          },
-        );
-      }
-
-      // ========================================================
-      // COMMIT
-      // ========================================================
-
-      await batch.commit();
 
       // ========================================================
       // WALLET PAYMENT
       // ========================================================
 
       if (isWallet) {
-        final result =
+        dynamic result;
+
+        try {
+          result = await _functions
+              .httpsCallable('placeWalletOrder')
+              .call({'orderId': orderId});
+        } catch (_) {
+          try {
             await _functions
-                .httpsCallable(
-                  'placeWalletOrder',
-                )
-                .call({
-          'orderId': orderId,
-        });
+                .httpsCallable('cancelUnpaidOrder')
+                .call({'orderId': orderId});
+          } catch (_) {}
+          rethrow;
+        }
 
         if (result.data is! Map) {
           throw Exception(
@@ -1661,6 +1138,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
   String _friendlyError(
     Object error,
   ) {
+    if (error is FirebaseFunctionsException) {
+      final msg = (error.message ?? '').trim();
+
+      if (msg.isNotEmpty && error.code != 'internal') {
+        return msg;
+      }
+    }
+
     final text =
         error.toString().toLowerCase();
 
