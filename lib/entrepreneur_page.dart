@@ -88,15 +88,15 @@ class _EntrepreneurPageState
   // WALLET
   // =========================================================
 
-  VoidCallback get _openWallet => () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) =>
-                const WalletPage(),
-          ),
-        );
-      };
+  void _openWallet() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            const WalletPage(),
+      ),
+    );
+  }
 
   // =========================================================
   // MY STORE
@@ -1018,15 +1018,18 @@ class _ResellerMembershipCardState
       return false;
     }
 
-    final now = DateTime.now();
-
-    if (_campaignStart != null &&
-        now.isBefore(_campaignStart!)) {
+    if (_campaignStart == null ||
+        _campaignEnd == null) {
       return false;
     }
 
-    if (_campaignEnd != null &&
-        now.isAfter(_campaignEnd!)) {
+    final now = DateTime.now();
+
+    if (now.isBefore(_campaignStart!)) {
+      return false;
+    }
+
+    if (now.isAfter(_campaignEnd!)) {
       return false;
     }
 
@@ -1155,7 +1158,7 @@ class _ResellerMembershipCardState
 
       final newBalance =
           _toDouble(
-        raw['newBalance'],
+        raw['balanceAfter'] ?? raw['newBalance'],
       );
 
       if (success) {
@@ -1590,6 +1593,9 @@ class _ResellerMembershipCardState
             ? 0.0
             : _resellerFee;
 
+    final bool noFee =
+        freeCampaign || widget.rejected;
+
     return Container(
       width:
           double.infinity,
@@ -1714,7 +1720,7 @@ class _ResellerMembershipCardState
             decoration:
                 BoxDecoration(
               color:
-                  (freeCampaign || widget.rejected)
+                  noFee
                       ? Colors.green.withValues(
                           alpha: 0.08,
                         )
@@ -1763,7 +1769,7 @@ class _ResellerMembershipCardState
                       ),
 
                       Text(
-                        (freeCampaign || widget.rejected)
+                        noFee
                             ? 'FREE'
                             : _formatMoney(
                                 displayedFee,
@@ -1775,7 +1781,7 @@ class _ResellerMembershipCardState
                           fontWeight:
                               FontWeight.bold,
                           color:
-                              (freeCampaign || widget.rejected)
+                              noFee
                                   ? Colors.green
                                   : Colors.redAccent,
                         ),
@@ -1797,7 +1803,7 @@ class _ResellerMembershipCardState
                   ),
                 ),
 
-                if (freeCampaign)
+                if (noFee)
                   Container(
                     padding:
                         const EdgeInsets.symmetric(
@@ -1842,7 +1848,7 @@ class _ResellerMembershipCardState
           // CAMPAIGN INFO
           // =====================================================
 
-          if (_freeCampaignEnabled)
+          if (_freeCampaignEnabled && !widget.rejected)
             Container(
               width:
                   double.infinity,
@@ -1898,7 +1904,7 @@ class _ResellerMembershipCardState
               ),
             ),
 
-          if (_freeCampaignEnabled)
+          if (_freeCampaignEnabled && !widget.rejected)
             const SizedBox(
               height:
                   10,
@@ -1949,7 +1955,7 @@ class _ResellerMembershipCardState
                           ),
                         )
                       : Icon(
-                          (freeCampaign || widget.rejected)
+                          noFee
                               ? Icons
                                   .how_to_reg_outlined
                               : Icons
@@ -1995,8 +2001,9 @@ class _ResellerMembershipCardState
             ),
           ),
 
-          if (_campaignStart != null ||
-              _campaignEnd != null) ...[
+          if (!widget.rejected &&
+              (_campaignStart != null ||
+                  _campaignEnd != null)) ...[
             const SizedBox(
               height:
                   10,
