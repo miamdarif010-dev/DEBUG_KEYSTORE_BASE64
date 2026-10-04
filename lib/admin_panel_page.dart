@@ -1698,7 +1698,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                     final bDate =
                         _dateFromValue(b.data()['createdAt']);
                     return bDate.compareTo(aDate);
-                  });
+});
 
                   final limitedDocs = docs.take(10).toList();
 
@@ -3390,4 +3390,43 @@ class _AdminSectionPage extends StatelessWidget {
               color: Theme.of(context)
                   .colorScheme
                   .primary
-          
+                  .withValues(alpha: 0.15),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withValues(alpha: 0.12),
+                ),
+                child: Icon(
+                  Icons.notifications_active_outlined,
+                  color: Theme.of(context)
+                      .colorScheme
+                      .primary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '🔔 $count $notificationLabel',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+                    
