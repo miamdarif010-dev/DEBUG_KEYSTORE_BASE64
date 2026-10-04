@@ -161,42 +161,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
   // COUPON ALLOCATION
   // ============================================================
 
-  double _discountForGroup({
-    required double groupSubtotal,
-    required double remainingDiscount,
-    required int groupIndex,
-    required int totalGroups,
-  }) {
-    if (_discount <= 0 ||
-        subtotal <= 0 ||
-        groupSubtotal <= 0 ||
-        totalGroups <= 0) {
-      return 0;
-    }
-
-    if (groupIndex == totalGroups - 1) {
-      return _roundMoney(
-        remainingDiscount.clamp(
-          0,
-          _discount,
-        ),
-      );
-    }
-
-    final proportional =
-        _discount *
-        (groupSubtotal / subtotal);
-
-    final rounded =
-        _roundMoney(proportional);
-
-    return _roundMoney(
-      rounded.clamp(
-        0,
-        remainingDiscount,
-      ),
-    );
-  }
 
   // ============================================================
   // INIT
@@ -468,66 +432,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
   // CUSTOMER DELIVERY DATA
   // ============================================================
 
-  Map<String, dynamic> _customerDeliveryData(
-    User user,
-  ) {
-    final address =
-        _selectedAddress == null
-            ? <String, dynamic>{}
-            : Map<String, dynamic>.from(
-                _selectedAddress!,
-              );
-
-    final String name =
-        address['name']?.toString().trim().isNotEmpty == true
-            ? address['name'].toString().trim()
-            : (user.displayName ?? '');
-
-    final String phone =
-        address['phone']?.toString().trim().isNotEmpty == true
-            ? address['phone'].toString().trim()
-            : (user.phoneNumber ?? '');
-
-    final String email =
-        user.email ?? '';
-
-    final String addressText =
-        address['address']?.toString() ??
-        address['addressLine1']?.toString() ??
-        '';
-
-    final String city =
-        address['city']?.toString() ?? '';
-
-    final String district =
-        address['district']?.toString() ?? '';
-
-    final String postalCode =
-        address['postalCode']?.toString() ??
-        address['zipCode']?.toString() ??
-        '';
-
-    return {
-      'customerName': name,
-      'customerPhone': phone,
-      'customerEmail': email,
-
-      // Compatibility string address.
-      'address': addressText,
-
-      'city': city,
-      'district': district,
-      'postalCode': postalCode,
-
-      'deliveryZone': _deliveryZone,
-
-      // Full address map for Seller delivery.
-      'deliveryAddress': address,
-
-      // Compatibility with older code/UI.
-      'customerAddress': address,
-    };
-  }
 
   // ============================================================
   // COUPON HELPERS
@@ -772,102 +676,16 @@ class _CheckoutPageState extends State<CheckoutPage> {
   // SELLER LOOKUP
   // ============================================================
 
-  Future<String> _findSellerId(
-    CheckoutItem item,
-  ) async {
-    final existingSellerId =
-        item.sellerId;
-
-    if (existingSellerId != null &&
-        existingSellerId.trim().isNotEmpty) {
-      return existingSellerId.trim();
-    }
-
-    for (final collection in const [
-      'products',
-      'Products',
-    ]) {
-      try {
-        final doc = await _firestore
-            .collection(collection)
-            .doc(item.id)
-            .get();
-
-        if (!doc.exists) {
-          continue;
-        }
-
-        final data = doc.data();
-
-        if (data == null) {
-          continue;
-        }
-
-        final sellerId =
-            data['sellerId']?.toString();
-
-        if (sellerId != null &&
-            sellerId.trim().isNotEmpty) {
-          return sellerId.trim();
-        }
-
-        final ownerId =
-            data['ownerId']?.toString();
-
-        if (ownerId != null &&
-            ownerId.trim().isNotEmpty) {
-          return ownerId.trim();
-        }
-      } catch (e) {
-        debugPrint(
-          'Seller lookup error '
-          '($collection/${item.id}): $e',
-        );
-      }
-    }
-
-    return 'unknown_seller';
-  }
 
   // ============================================================
   // SELLER ORDER ITEM
   // ============================================================
 
-  Map<String, dynamic> _sellerOrderItem(
-    CheckoutItem item,
-  ) {
-    return {
-      'productId': item.id,
-      'name': item.name,
-      'price': item.price,
-      'quantity': item.quantity,
-      'total': item.total,
-      'imageUrl': item.imageUrl,
-    };
-  }
 
   // ============================================================
   // RESELLER ORDER ITEM
   // ============================================================
 
-  Map<String, dynamic> _resellerOrderItem(
-    CheckoutItem item,
-  ) {
-    return {
-      'productId': item.id,
-      'name': item.name,
-      'price': item.price,
-      'quantity': item.quantity,
-      'total': item.total,
-      'imageUrl': item.imageUrl,
-      'supplierProductId':
-          item.supplierProductId,
-      'supplierPrice':
-          item.supplierPrice,
-      'resellerProfit':
-          item.resellerProfit,
-    };
-  }
 
   // ============================================================
   // PLACE ORDER
