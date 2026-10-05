@@ -879,7 +879,6 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                 _statusChip(status),
               ],
             ),
-
             if (sellerEmail.isNotEmpty) ...[
               const SizedBox(height: 10),
               _infoRow(
@@ -888,12 +887,9 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                 icon: Icons.email_outlined,
               ),
             ],
-
             if (isResellerOrder)
               _resellerDeliveryNotice(),
-
             const SizedBox(height: 12),
-
             if (items.isNotEmpty)
               ...items.map(
                 (item) => _sellerProductCard(
@@ -906,9 +902,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                       isResellerOrder,
                 ),
               ),
-
             const Divider(),
-
             _infoRow(
               isResellerOrder
                   ? 'Selling Total'
@@ -916,21 +910,17 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
               '৳${subtotal.toStringAsFixed(0)}',
               bold: true,
             ),
-
             if (couponDiscount > 0)
               _infoRow(
                 'Coupon Discount',
                 '-৳${couponDiscount.toStringAsFixed(0)}',
               ),
-
             _infoRow(
               'Your Order Amount',
               '৳${customerAmount.toStringAsFixed(0)}',
               bold: true,
             ),
-
             const SizedBox(height: 8),
-
             if (_canCancel(status))
               SizedBox(
                 width: double.infinity,
@@ -962,7 +952,6 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                   ),
                 ),
               ),
-
             if (status != 'cancelled') ...[
               const SizedBox(height: 8),
               SizedBox(
@@ -1062,42 +1051,143 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
     );
   }
 
+  // ============================================================
+  // FIXED DELIVERY INFORMATION
+  // ============================================================
+
   Widget _deliveryCard() {
-    final name =
-        (widget.orderData['customerName'] ?? '')
-            .toString();
+    final rawAddress = widget.orderData['address'];
 
-    final phone =
-        (widget.orderData['customerPhone'] ??
-                widget.orderData['phone'] ??
-                '')
-            .toString();
+    Map<String, dynamic> addressMap = {};
 
-    final email =
-        (widget.orderData['customerEmail'] ??
-                widget.orderData['userEmail'] ??
-                '')
-            .toString();
+    if (rawAddress is Map) {
+      addressMap = Map<String, dynamic>.from(rawAddress);
+    }
 
-    final address =
-        (widget.orderData['address'] ?? '')
-            .toString();
+    // Sometimes the order may store the whole delivery address
+    // under another field such as shippingAddress.
+    final rawShippingAddress =
+        widget.orderData['shippingAddress'];
 
-    final city =
-        (widget.orderData['city'] ?? '')
-            .toString();
+    if (addressMap.isEmpty &&
+        rawShippingAddress is Map) {
+      addressMap =
+          Map<String, dynamic>.from(
+        rawShippingAddress,
+      );
+    }
 
-    final district =
-        (widget.orderData['district'] ?? '')
-            .toString();
+    String fromOrderOrAddress({
+      required List<String> orderKeys,
+      required List<String> addressKeys,
+    }) {
+      for (final key in orderKeys) {
+        final value = widget.orderData[key];
 
-    final postalCode =
-        (widget.orderData['postalCode'] ?? '')
-            .toString();
+        if (value != null &&
+            value.toString().trim().isNotEmpty &&
+            value is! Map) {
+          return value.toString().trim();
+        }
+      }
 
-    final deliveryZone =
-        (widget.orderData['deliveryZone'] ?? '')
-            .toString();
+      for (final key in addressKeys) {
+        final value = addressMap[key];
+
+        if (value != null &&
+            value.toString().trim().isNotEmpty &&
+            value is! Map) {
+          return value.toString().trim();
+        }
+      }
+
+      return '';
+    }
+
+    final name = fromOrderOrAddress(
+      orderKeys: [
+        'customerName',
+      ],
+      addressKeys: [
+        'name',
+        'customerName',
+      ],
+    );
+
+    final phone = fromOrderOrAddress(
+      orderKeys: [
+        'customerPhone',
+        'phone',
+      ],
+      addressKeys: [
+        'phone',
+        'customerPhone',
+      ],
+    );
+
+    final email = fromOrderOrAddress(
+      orderKeys: [
+        'customerEmail',
+        'userEmail',
+        'email',
+      ],
+      addressKeys: [
+        'email',
+        'customerEmail',
+      ],
+    );
+
+    final address = fromOrderOrAddress(
+      orderKeys: [
+        'shippingAddress',
+        'addressLine',
+      ],
+      addressKeys: [
+        'address',
+        'addressLine',
+        'shippingAddress',
+      ],
+    );
+
+    final city = fromOrderOrAddress(
+      orderKeys: [
+        'city',
+      ],
+      addressKeys: [
+        'city',
+      ],
+    );
+
+    final district = fromOrderOrAddress(
+      orderKeys: [
+        'district',
+      ],
+      addressKeys: [
+        'district',
+      ],
+    );
+
+    final postalCode = fromOrderOrAddress(
+      orderKeys: [
+        'postalCode',
+        'zipCode',
+        'postcode',
+      ],
+      addressKeys: [
+        'postalCode',
+        'zipCode',
+        'postcode',
+      ],
+    );
+
+    final deliveryZone = fromOrderOrAddress(
+      orderKeys: [
+        'deliveryZone',
+      ],
+      addressKeys: [
+        'deliveryZone',
+      ],
+    );
 
     return Card(
       elevation: 2,
@@ -1115,6 +1205,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                   : name,
               icon: Icons.person_outline,
             ),
+
             _infoRow(
               'Phone',
               phone.isEmpty
@@ -1122,35 +1213,40 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                   : phone,
               icon: Icons.phone_outlined,
             ),
+
             if (email.isNotEmpty)
               _infoRow(
                 'Email',
                 email,
                 icon: Icons.email_outlined,
               ),
+
             _infoRow(
               'Address',
               address.isEmpty
                   ? 'Not available'
                   : address,
-              icon:
-                  Icons.location_on_outlined,
+              icon: Icons.location_on_outlined,
             ),
+
             if (city.isNotEmpty)
               _infoRow(
                 'City',
                 city,
               ),
+
             if (district.isNotEmpty)
               _infoRow(
                 'District',
                 district,
               ),
+
             if (postalCode.isNotEmpty)
               _infoRow(
                 'Postal Code',
                 postalCode,
               ),
+
             if (deliveryZone.isNotEmpty)
               _infoRow(
                 'Delivery Zone',
@@ -1194,16 +1290,14 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
             _infoRow(
               'Payment Status',
               paymentStatus,
-              icon:
-                  Icons.receipt_long_outlined,
+              icon: Icons.receipt_long_outlined,
             ),
             _infoRow(
               'Currency',
               currency == 'BDT'
                   ? 'BDT (৳)'
                   : currency,
-              icon:
-                  Icons.currency_exchange,
+              icon: Icons.currency_exchange,
             ),
           ],
         ),
@@ -1258,15 +1352,13 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
             _infoRow(
               'Order ID',
               '#${widget.orderId}',
-              icon:
-                  Icons.confirmation_number_outlined,
+              icon: Icons.confirmation_number_outlined,
               bold: true,
             ),
             _infoRow(
               'Order Date',
               createdAt,
-              icon:
-                  Icons.calendar_today_outlined,
+              icon: Icons.calendar_today_outlined,
             ),
             if (userEmail.isNotEmpty)
               _infoRow(
