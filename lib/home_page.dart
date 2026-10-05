@@ -418,7 +418,6 @@ class _HomePageState extends State<HomePage>
                         ),
                         onPressed: () async {
                           Navigator.pop(context);
-
                           await _openCameraSearch();
                         },
                         icon: const Icon(
@@ -447,7 +446,6 @@ class _HomePageState extends State<HomePage>
                         ),
                         onPressed: () async {
                           Navigator.pop(context);
-
                           await _findProductsFromImage(image);
                         },
                         icon: const Icon(Icons.search),
@@ -1029,6 +1027,77 @@ class _HomePageState extends State<HomePage>
           ),
         ),
       ),
+    );
+  }
+
+  // ------------------------------------------------------------
+  // CART BADGE
+  // ------------------------------------------------------------
+
+  Widget _buildCartNavIcon(User? user) {
+    if (user == null) {
+      return const Icon(Icons.shopping_cart_outlined);
+    }
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('cart')
+          .snapshots(),
+      builder: (context, snapshot) {
+        int cartCount = 0;
+
+        if (snapshot.hasData) {
+          for (final doc in snapshot.data!.docs) {
+            final data = doc.data();
+
+            final quantity = data['quantity'];
+
+            if (quantity is num) {
+              cartCount += quantity.toInt();
+            } else {
+              cartCount += 1;
+            }
+          }
+        }
+
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            const Icon(Icons.shopping_cart_outlined),
+
+            if (cartCount > 0)
+              Positioned(
+                right: -9,
+                top: -9,
+                child: Container(
+                  constraints: const BoxConstraints(
+                    minWidth: 18,
+                    minHeight: 18,
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 2,
+                  ),
+                  decoration: const BoxDecoration(
+                    color: Colors.redAccent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(
+                    cartCount > 99 ? '99+' : '$cartCount',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -1685,16 +1754,14 @@ class _HomePageState extends State<HomePage>
                                           const SizedBox(height: 4),
                                           Row(
                                             mainAxisAlignment:
-                                                MainAxisAlignment
-                                                    .spaceBetween,
+                                                MainAxisAlignment.spaceBetween,
                                             children: [
                                               Flexible(
                                                 child: Text(
                                                   displayPrice,
                                                   style: const TextStyle(
                                                     color: Colors.redAccent,
-                                                    fontWeight:
-                                                        FontWeight.bold,
+                                                    fontWeight: FontWeight.bold,
                                                     fontSize: 16,
                                                   ),
                                                   maxLines: 1,
@@ -1836,24 +1903,27 @@ class _HomePageState extends State<HomePage>
             selectedItemColor: Colors.redAccent,
             unselectedItemColor: Colors.grey,
             type: BottomNavigationBarType.fixed,
-            items: const [
-              BottomNavigationBarItem(
+            items: [
+              const BottomNavigationBarItem(
                 icon: Icon(Icons.home),
                 label: 'Home',
               ),
-              BottomNavigationBarItem(
+              const BottomNavigationBarItem(
                 icon: Icon(Icons.category),
                 label: 'Categories',
               ),
-              BottomNavigationBarItem(
+              const BottomNavigationBarItem(
                 icon: Icon(Icons.video_library),
                 label: 'Videos',
               ),
+
+              // NEW: LIVE CART QUANTITY BADGE
               BottomNavigationBarItem(
-                icon: Icon(Icons.shopping_cart_outlined),
+                icon: _buildCartNavIcon(user),
                 label: 'Cart',
               ),
-              BottomNavigationBarItem(
+
+              const BottomNavigationBarItem(
                 icon: Icon(Icons.person),
                 label: 'Profile',
               ),
@@ -1864,4 +1934,3 @@ class _HomePageState extends State<HomePage>
     );
   }
 }
-
