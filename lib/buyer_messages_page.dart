@@ -79,7 +79,7 @@ class _BuyerMessagesPageState extends State<BuyerMessagesPage> {
     return 'User';
   }
 
-  String _otherUserId(Map<String, dynamic> data) {
+  
     if (_isBuyerSide(data)) {
       final id = data['sellerId'];
 
