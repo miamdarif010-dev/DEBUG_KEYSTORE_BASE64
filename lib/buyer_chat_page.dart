@@ -7,11 +7,16 @@ class BuyerChatPage extends StatefulWidget {
   final String sellerId;
   final String sellerName;
 
+  // true হলে recipient-কে Reseller হিসেবে দেখাবে।
+  // Default false রাখায় পুরোনো navigation-ও কাজ করবে।
+  final bool isReseller;
+
   const BuyerChatPage({
     super.key,
     required this.conversationId,
     required this.sellerId,
     required this.sellerName,
+    this.isReseller = false,
   });
 
   @override
@@ -19,13 +24,17 @@ class BuyerChatPage extends StatefulWidget {
 }
 
 class _BuyerChatPageState extends State<BuyerChatPage> {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore =
+      FirebaseFirestore.instance;
+
+  final FirebaseAuth _auth =
+      FirebaseAuth.instance;
 
   final TextEditingController _messageController =
       TextEditingController();
 
-  final ScrollController _scrollController = ScrollController();
+  final ScrollController _scrollController =
+      ScrollController();
 
   bool _sending = false;
   bool _conversationReady = false;
@@ -36,13 +45,21 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
 
   String get _buyerId => _user?.uid ?? '';
 
-  DocumentReference<Map<String, dynamic>> get _conversationRef =>
-      _firestore
-          .collection('conversations')
-          .doc(widget.conversationId);
+  DocumentReference<Map<String, dynamic>>
+      get _conversationRef {
+    return _firestore
+        .collection('conversations')
+        .doc(widget.conversationId);
+  }
 
-  CollectionReference<Map<String, dynamic>> get _messagesRef =>
-      _conversationRef.collection('messages');
+  CollectionReference<Map<String, dynamic>>
+      get _messagesRef {
+    return _conversationRef.collection('messages');
+  }
+
+  String get _recipientType {
+    return widget.isReseller ? 'Reseller' : 'Seller';
+  }
 
   @override
   void initState() {
@@ -77,11 +94,13 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
 
         final name = data?['name'];
 
-        if (name is String && name.trim().isNotEmpty) {
+        if (name is String &&
+            name.trim().isNotEmpty) {
           return name.trim();
         }
 
-        final displayName = data?['displayName'];
+        final displayName =
+            data?['displayName'];
 
         if (displayName is String &&
             displayName.trim().isNotEmpty) {
@@ -94,7 +113,8 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
 
     final authName = _user?.displayName;
 
-    if (authName != null && authName.trim().isNotEmpty) {
+    if (authName != null &&
+        authName.trim().isNotEmpty) {
       return authName.trim();
     }
 
@@ -111,7 +131,8 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
     }
 
     try {
-      final buyerName = await _getBuyerName();
+      final buyerName =
+          await _getBuyerName();
 
       if (mounted) {
         setState(() {
@@ -119,21 +140,26 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
         });
       }
 
-      final conversationSnapshot = await _conversationRef.get();
+      final conversationSnapshot =
+          await _conversationRef.get();
 
       if (!conversationSnapshot.exists) {
         await _conversationRef.set({
-          'conversationId': widget.conversationId,
+          'conversationId':
+              widget.conversationId,
           'buyerId': _buyerId,
           'buyerName': buyerName,
           'sellerId': widget.sellerId,
           'sellerName': widget.sellerName,
           'lastMessage': '',
-          'lastMessageAt': FieldValue.serverTimestamp(),
+          'lastMessageAt':
+              FieldValue.serverTimestamp(),
           'buyerUnreadCount': 0,
           'sellerUnreadCount': 0,
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
+          'createdAt':
+              FieldValue.serverTimestamp(),
+          'updatedAt':
+              FieldValue.serverTimestamp(),
         });
       } else {
         final existingData =
@@ -142,12 +168,19 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
         final existingBuyerName =
             existingData?['buyerName'];
 
-        // Update buyerName if it is missing or changed.
-        if (existingBuyerName != buyerName) {
+        final existingSellerName =
+            existingData?['sellerName'];
+
+        // Keep the existing conversation structure.
+        // Only refresh names if necessary.
+        if (existingBuyerName != buyerName ||
+            existingSellerName !=
+                widget.sellerName) {
           await _conversationRef.update({
             'buyerName': buyerName,
             'sellerName': widget.sellerName,
-            'updatedAt': FieldValue.serverTimestamp(),
+            'updatedAt':
+                FieldValue.serverTimestamp(),
           });
         }
       }
@@ -181,7 +214,9 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
   // =========================================================
 
   Future<void> _markMessagesAsRead() async {
-    if (_buyerId.isEmpty) return;
+    if (_buyerId.isEmpty) {
+      return;
+    }
 
     try {
       final snapshot = await _messagesRef
@@ -196,14 +231,16 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
           .get();
 
       if (snapshot.docs.isNotEmpty) {
-        final batch = _firestore.batch();
+        final batch =
+            _firestore.batch();
 
         for (final doc in snapshot.docs) {
           batch.update(
             doc.reference,
             {
               'isRead': true,
-              'readAt': FieldValue.serverTimestamp(),
+              'readAt':
+                  FieldValue.serverTimestamp(),
             },
           );
         }
@@ -212,7 +249,8 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
           _conversationRef,
           {
             'buyerUnreadCount': 0,
-            'updatedAt': FieldValue.serverTimestamp(),
+            'updatedAt':
+                FieldValue.serverTimestamp(),
           },
         );
 
@@ -239,7 +277,8 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
       return;
     }
 
-    final message = _messageController.text.trim();
+    final message =
+        _messageController.text.trim();
 
     if (message.isEmpty || _sending) {
       return;
@@ -253,16 +292,23 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
       }
     }
 
+    if (!mounted) return;
+
     setState(() {
       _sending = true;
     });
 
     try {
-      final messageRef = _messagesRef.doc();
+      final messageRef =
+          _messagesRef.doc();
 
-      final batch = _firestore.batch();
+      final batch =
+          _firestore.batch();
 
-      // Create message.
+      // -----------------------------------------------------
+      // CREATE MESSAGE
+      // -----------------------------------------------------
+
       batch.set(
         messageRef,
         {
@@ -270,11 +316,15 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
           'receiverId': widget.sellerId,
           'message': message,
           'isRead': false,
-          'createdAt': FieldValue.serverTimestamp(),
+          'createdAt':
+              FieldValue.serverTimestamp(),
         },
       );
 
-      // Update conversation.
+      // -----------------------------------------------------
+      // UPDATE CONVERSATION
+      // -----------------------------------------------------
+
       batch.update(
         _conversationRef,
         {
@@ -283,9 +333,12 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
           'sellerId': widget.sellerId,
           'sellerName': widget.sellerName,
           'lastMessage': message,
-          'lastMessageAt': FieldValue.serverTimestamp(),
-          'sellerUnreadCount': FieldValue.increment(1),
-          'updatedAt': FieldValue.serverTimestamp(),
+          'lastMessageAt':
+              FieldValue.serverTimestamp(),
+          'sellerUnreadCount':
+              FieldValue.increment(1),
+          'updatedAt':
+              FieldValue.serverTimestamp(),
         },
       );
 
@@ -328,7 +381,8 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
 
     _scrollController.animateTo(
       0,
-      duration: const Duration(milliseconds: 250),
+      duration:
+          const Duration(milliseconds: 250),
       curve: Curves.easeOut,
     );
   }
@@ -337,12 +391,15 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
   // FORMAT TIME
   // =========================================================
 
-  String _formatTime(Timestamp? timestamp) {
+  String _formatTime(
+    Timestamp? timestamp,
+  ) {
     if (timestamp == null) {
       return '';
     }
 
-    final date = timestamp.toDate();
+    final date =
+        timestamp.toDate();
 
     final hour = date.hour > 12
         ? date.hour - 12
@@ -351,10 +408,14 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
             : date.hour;
 
     final minute =
-        date.minute.toString().padLeft(2, '0');
+        date.minute
+            .toString()
+            .padLeft(2, '0');
 
     final period =
-        date.hour >= 12 ? 'PM' : 'AM';
+        date.hour >= 12
+            ? 'PM'
+            : 'AM';
 
     return '$hour:$minute $period';
   }
@@ -366,9 +427,11 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
   Widget _messageBubble(
     Map<String, dynamic> data,
   ) {
-    final senderId = data['senderId'] as String? ?? '';
+    final senderId =
+        data['senderId'] as String? ?? '';
 
-    final isMine = senderId == _buyerId;
+    final isMine =
+        senderId == _buyerId;
 
     final message =
         data['message'] as String? ?? '';
@@ -386,49 +449,64 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
       child: Container(
         constraints: BoxConstraints(
           maxWidth:
-              MediaQuery.of(context).size.width * 0.78,
+              MediaQuery.of(context)
+                      .size
+                      .width *
+                  0.78,
         ),
-        margin: const EdgeInsets.symmetric(
+        margin:
+            const EdgeInsets.symmetric(
           horizontal: 12,
           vertical: 5,
         ),
-        padding: const EdgeInsets.symmetric(
+        padding:
+            const EdgeInsets.symmetric(
           horizontal: 14,
           vertical: 10,
         ),
-        decoration: BoxDecoration(
+        decoration:
+            BoxDecoration(
           color: isMine
               ? Colors.redAccent
               : Colors.grey.shade200,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(18),
-            topRight: const Radius.circular(18),
+          borderRadius:
+              BorderRadius.only(
+            topLeft:
+                const Radius.circular(18),
+            topRight:
+                const Radius.circular(18),
             bottomLeft:
-                Radius.circular(isMine ? 18 : 4),
+                Radius.circular(
+              isMine ? 18 : 4,
+            ),
             bottomRight:
-                Radius.circular(isMine ? 4 : 18),
+                Radius.circular(
+              isMine ? 4 : 18,
+            ),
           ),
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
+          crossAxisAlignment:
+              CrossAxisAlignment.end,
           children: [
             Align(
-              alignment: Alignment.centerLeft,
+              alignment:
+                  Alignment.centerLeft,
               child: Text(
                 message,
                 style: TextStyle(
-                  color:
-                      isMine ? Colors.white : Colors.black87,
+                  color: isMine
+                      ? Colors.white
+                      : Colors.black87,
                   fontSize: 15,
                   height: 1.35,
                 ),
               ),
             ),
-
             const SizedBox(height: 5),
-
             Row(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisSize:
+                  MainAxisSize.min,
               children: [
                 Text(
                   _formatTime(timestamp),
@@ -439,10 +517,8 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
                     fontSize: 10,
                   ),
                 ),
-
                 if (isMine) ...[
                   const SizedBox(width: 4),
-
                   Icon(
                     isRead
                         ? Icons.done_all
@@ -468,7 +544,8 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
   Widget _emptyChat() {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(30),
+        padding:
+            const EdgeInsets.all(30),
         child: Column(
           mainAxisAlignment:
               MainAxisAlignment.center,
@@ -476,36 +553,42 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
             Container(
               width: 82,
               height: 82,
-              decoration: BoxDecoration(
-                color: Colors.redAccent.withValues(
+              decoration:
+                  BoxDecoration(
+                color: Colors.redAccent
+                    .withValues(
                   alpha: 0.10,
                 ),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
-                Icons.chat_bubble_outline,
+              child: Icon(
+                widget.isReseller
+                    ? Icons
+                        .storefront_outlined
+                    : Icons
+                        .chat_bubble_outline,
                 size: 42,
-                color: Colors.redAccent,
+                color:
+                    Colors.redAccent,
               ),
             ),
-
             const SizedBox(height: 18),
-
-            Text(
+            const Text(
               'Start a conversation',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 20,
-                fontWeight: FontWeight.bold,
+                fontWeight:
+                    FontWeight.bold,
               ),
             ),
-
             const SizedBox(height: 8),
-
             Text(
               'Send a message to ${widget.sellerName}',
-              textAlign: TextAlign.center,
+              textAlign:
+                  TextAlign.center,
               style: TextStyle(
-                color: Colors.grey.shade600,
+                color:
+                    Colors.grey.shade600,
                 fontSize: 14,
               ),
             ),
@@ -521,22 +604,26 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
 
   Widget _messageList() {
     return StreamBuilder<
-        QuerySnapshot<Map<String, dynamic>>>(
+        QuerySnapshot<
+            Map<String, dynamic>>>(
       stream: _messagesRef
           .orderBy(
             'createdAt',
             descending: true,
           )
           .snapshots(),
-      builder: (context, snapshot) {
+      builder:
+          (context, snapshot) {
         if (snapshot.hasError) {
           return Center(
             child: Padding(
-              padding: const EdgeInsets.all(24),
+              padding:
+                  const EdgeInsets.all(24),
               child: Text(
                 'Unable to load messages.\n\n'
                 '${snapshot.error}',
-                textAlign: TextAlign.center,
+                textAlign:
+                    TextAlign.center,
               ),
             ),
           );
@@ -546,35 +633,43 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
                 ConnectionState.waiting &&
             !snapshot.hasData) {
           return const Center(
-            child: CircularProgressIndicator(),
+            child:
+                CircularProgressIndicator(),
           );
         }
 
-        final docs = snapshot.data?.docs ?? [];
+        final docs =
+            snapshot.data?.docs ?? [];
 
         if (docs.isEmpty) {
           return _emptyChat();
         }
 
-        // Mark received messages as read when chat is open.
-        WidgetsBinding.instance.addPostFrameCallback(
+        WidgetsBinding.instance
+            .addPostFrameCallback(
           (_) {
             _markMessagesAsRead();
           },
         );
 
         return ListView.builder(
-          controller: _scrollController,
+          controller:
+              _scrollController,
           reverse: true,
-          padding: const EdgeInsets.only(
+          padding:
+              const EdgeInsets.only(
             top: 16,
             bottom: 16,
           ),
           itemCount: docs.length,
-          itemBuilder: (context, index) {
-            final data = docs[index].data();
+          itemBuilder:
+              (context, index) {
+            final data =
+                docs[index].data();
 
-            return _messageBubble(data);
+            return _messageBubble(
+              data,
+            );
           },
         );
       },
@@ -589,21 +684,25 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
     return SafeArea(
       top: false,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(
+        padding:
+            const EdgeInsets.fromLTRB(
           10,
           8,
           10,
           8,
         ),
-        decoration: BoxDecoration(
+        decoration:
+            BoxDecoration(
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(
+              color: Colors.black
+                  .withValues(
                 alpha: 0.06,
               ),
               blurRadius: 8,
-              offset: const Offset(0, -2),
+              offset:
+                  const Offset(0, -2),
             ),
           ],
         ),
@@ -613,24 +712,33 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
           children: [
             Expanded(
               child: TextField(
-                controller: _messageController,
+                controller:
+                    _messageController,
                 minLines: 1,
                 maxLines: 5,
                 textInputAction:
-                    TextInputAction.newline,
-                decoration: InputDecoration(
-                  hintText: 'Type a message...',
+                    TextInputAction
+                        .newline,
+                decoration:
+                    InputDecoration(
+                  hintText:
+                      'Type a message...',
                   filled: true,
-                  fillColor: Colors.grey.shade100,
+                  fillColor:
+                      Colors.grey.shade100,
                   contentPadding:
-                      const EdgeInsets.symmetric(
+                      const EdgeInsets
+                          .symmetric(
                     horizontal: 16,
                     vertical: 11,
                   ),
-                  border: OutlineInputBorder(
+                  border:
+                      OutlineInputBorder(
                     borderRadius:
-                        BorderRadius.circular(24),
-                    borderSide: BorderSide.none,
+                        BorderRadius
+                            .circular(24),
+                    borderSide:
+                        BorderSide.none,
                   ),
                 ),
                 onSubmitted: (_) {
@@ -640,12 +748,12 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
                 },
               ),
             ),
-
             const SizedBox(width: 8),
-
             Material(
-              color: Colors.redAccent,
-              shape: const CircleBorder(),
+              color:
+                  Colors.redAccent,
+              shape:
+                  const CircleBorder(),
               child: InkWell(
                 customBorder:
                     const CircleBorder(),
@@ -672,7 +780,8 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
                           )
                         : const Icon(
                             Icons.send,
-                            color: Colors.white,
+                            color:
+                                Colors.white,
                             size: 21,
                           ),
                   ),
@@ -690,55 +799,66 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
   // =========================================================
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Scaffold(
-      backgroundColor: Colors.white,
-
+      backgroundColor:
+          Colors.white,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-
+        backgroundColor:
+            Colors.white,
+        foregroundColor:
+            Colors.black87,
         titleSpacing: 0,
-
         title: Row(
           children: [
             CircleAvatar(
               radius: 19,
               backgroundColor:
-                  Colors.redAccent.withValues(
+                  Colors.redAccent
+                      .withValues(
                 alpha: 0.10,
               ),
-              child: const Icon(
-                Icons.storefront,
-                color: Colors.redAccent,
+              child: Icon(
+                widget.isReseller
+                    ? Icons
+                        .storefront
+                    : Icons
+                        .storefront,
+                color:
+                    Colors.redAccent,
                 size: 21,
               ),
             ),
-
             const SizedBox(width: 10),
-
             Expanded(
               child: Column(
                 crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                    CrossAxisAlignment
+                        .start,
                 children: [
                   Text(
                     widget.sellerName,
                     maxLines: 1,
                     overflow:
-                        TextOverflow.ellipsis,
-                    style: const TextStyle(
+                        TextOverflow
+                            .ellipsis,
+                    style:
+                        const TextStyle(
                       fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                      fontWeight:
+                          FontWeight.w600,
                     ),
                   ),
-
                   Text(
-                    'Seller',
+                    _recipientType,
                     style: TextStyle(
                       fontSize: 11,
-                      color: Colors.grey.shade600,
+                      color: Colors
+                          .grey
+                          .shade600,
                     ),
                   ),
                 ],
@@ -747,13 +867,12 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
           ],
         ),
       ),
-
       body: Column(
         children: [
           Expanded(
-            child: _messageList(),
+            child:
+                _messageList(),
           ),
-
           _messageInput(),
         ],
       ),
