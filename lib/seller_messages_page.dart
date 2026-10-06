@@ -3,38 +3,66 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'seller_chat_page.dart';
+import 'buyer_chat_page.dart';
 
 class SellerMessagesPage extends StatefulWidget {
   const SellerMessagesPage({super.key});
 
   @override
-  State<SellerMessagesPage> createState() => _SellerMessagesPageState();
+  State<SellerMessagesPage> createState() =>
+      _SellerMessagesPageState();
 }
 
-class _SellerMessagesPageState extends State<SellerMessagesPage> {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+class _SellerMessagesPageState
+    extends State<SellerMessagesPage> {
+  final FirebaseAuth _auth =
+      FirebaseAuth.instance;
 
-  String? get _sellerId => _auth.currentUser?.uid;
+  final FirebaseFirestore _firestore =
+      FirebaseFirestore.instance;
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> _conversationStream() {
-    final sellerId = _sellerId;
+  String? get _userId =>
+      _auth.currentUser?.uid;
 
-    if (sellerId == null) {
+  Stream<QuerySnapshot<Map<String, dynamic>>>
+      _conversationStream() {
+    final userId = _userId;
+
+    if (userId == null) {
       return const Stream.empty();
     }
 
-    // Only filter by sellerId.
-    // Sorting is done locally so a Firestore composite index
-    // is not required.
+    // Seller/Reseller can see every conversation
+    // where they are either participant.
     return _firestore
         .collection('conversations')
-        .where('sellerId', isEqualTo: sellerId)
+        .where(
+          Filter.or(
+            Filter(
+              'sellerId',
+              isEqualTo: userId,
+            ),
+            Filter(
+              'buyerId',
+              isEqualTo: userId,
+            ),
+          ),
+        )
         .snapshots();
   }
 
-  int _unreadCount(Map<String, dynamic> data) {
-    final value = data['sellerUnreadCount'];
+  bool _isSellerSide(
+    Map<String, dynamic> data,
+  ) {
+    return data['sellerId'] == _userId;
+  }
+
+  int _unreadCount(
+    Map<String, dynamic> data,
+  ) {
+    final value = _isSellerSide(data)
+        ? data['sellerUnreadCount']
+        : data['buyerUnreadCount'];
 
     if (value is int) {
       return value < 0 ? 0 : value;
@@ -48,27 +76,46 @@ class _SellerMessagesPageState extends State<SellerMessagesPage> {
     return 0;
   }
 
-  String _buyerName(Map<String, dynamic> data) {
-    final name = data['buyerName'];
+  String _otherUserName(
+    Map<String, dynamic> data,
+  ) {
+    if (_isSellerSide(data)) {
+      final name = data['buyerName'];
 
-    if (name is String && name.trim().isNotEmpty) {
+      if (name is String &&
+          name.trim().isNotEmpty) {
+        return name.trim();
+      }
+
+      return 'Buyer';
+    }
+
+    final name = data['sellerName'];
+
+    if (name is String &&
+        name.trim().isNotEmpty) {
       return name.trim();
     }
 
-    return 'Buyer';
+    return 'User';
   }
 
-  String _lastMessage(Map<String, dynamic> data) {
+  String _lastMessage(
+    Map<String, dynamic> data,
+  ) {
     final message = data['lastMessage'];
 
-    if (message is String && message.trim().isNotEmpty) {
+    if (message is String &&
+        message.trim().isNotEmpty) {
       return message.trim();
     }
 
     return 'Start a conversation';
   }
 
-  DateTime? _lastMessageDate(Map<String, dynamic> data) {
+  DateTime? _lastMessageDate(
+    Map<String, dynamic> data,
+  ) {
     final value = data['lastMessageAt'];
 
     if (value is Timestamp) {
@@ -102,8 +149,11 @@ class _SellerMessagesPageState extends State<SellerMessagesPage> {
               ? date.hour - 12
               : date.hour;
 
-      final minute = date.minute.toString().padLeft(2, '0');
-      final period = date.hour >= 12 ? 'PM' : 'AM';
+      final minute =
+          date.minute.toString().padLeft(2, '0');
+
+      final period =
+          date.hour >= 12 ? 'PM' : 'AM';
 
       return '$hour:$minute $period';
     }
@@ -117,7 +167,8 @@ class _SellerMessagesPageState extends State<SellerMessagesPage> {
   ) {
     final value = data['conversationId'];
 
-    if (value is String && value.trim().isNotEmpty) {
+    if (value is String &&
+        value.trim().isNotEmpty) {
       return value.trim();
     }
 
@@ -128,27 +179,66 @@ class _SellerMessagesPageState extends State<SellerMessagesPage> {
     required String conversationId,
     required Map<String, dynamic> data,
   }) {
-    final buyerId = data['buyerId'];
+    final currentUserId = _userId;
 
-    if (buyerId is! String || buyerId.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Buyer information is missing.'),
-        ),
-      );
+    if (currentUserId == null) {
       return;
     }
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => SellerChatPage(
-          conversationId: conversationId,
-          buyerId: buyerId.trim(),
-          buyerName: _buyerName(data),
+    final isSellerSide =
+        data['sellerId'] == currentUserId;
+
+    if (isSellerSide) {
+      final buyerId = data['buyerId'];
+
+      if (buyerId is! String ||
+          buyerId.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Recipient information is missing.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SellerChatPage(
+            conversationId: conversationId,
+            buyerId: buyerId.trim(),
+            buyerName: _otherUserName(data),
+          ),
         ),
-      ),
-    );
+      );
+    } else {
+      final sellerId = data['sellerId'];
+
+      if (sellerId is! String ||
+          sellerId.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Recipient information is missing.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => BuyerChatPage(
+            conversationId: conversationId,
+            sellerId: sellerId.trim(),
+            sellerName: _otherUserName(data),
+          ),
+        ),
+      );
+    }
   }
 
   Widget _emptyState() {
@@ -156,13 +246,17 @@ class _SellerMessagesPageState extends State<SellerMessagesPage> {
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment:
+              MainAxisAlignment.center,
           children: [
             Container(
               width: 90,
               height: 90,
               decoration: BoxDecoration(
-                color: Colors.redAccent.withValues(alpha: 0.10),
+                color:
+                    Colors.redAccent.withValues(
+                  alpha: 0.10,
+                ),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -181,7 +275,7 @@ class _SellerMessagesPageState extends State<SellerMessagesPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Messages from your buyers will appear here.',
+              'Your conversations will appear here.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.grey.shade600,
@@ -198,12 +292,20 @@ class _SellerMessagesPageState extends State<SellerMessagesPage> {
     String documentId,
     Map<String, dynamic> data,
   ) {
-    final unread = _unreadCount(data);
-    final buyerName = _buyerName(data);
-    final lastMessage = _lastMessage(data);
-    final time = _formatTime(data['lastMessageAt']);
+    final unread =
+        _unreadCount(data);
 
-    final conversationId = _conversationId(
+    final otherName =
+        _otherUserName(data);
+
+    final lastMessage =
+        _lastMessage(data);
+
+    final time =
+        _formatTime(data['lastMessageAt']);
+
+    final conversationId =
+        _conversationId(
       data,
       documentId,
     );
@@ -216,7 +318,8 @@ class _SellerMessagesPageState extends State<SellerMessagesPage> {
       ),
       elevation: 1,
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
+        contentPadding:
+            const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 8,
         ),
@@ -227,13 +330,16 @@ class _SellerMessagesPageState extends State<SellerMessagesPage> {
               width: 52,
               height: 52,
               decoration: BoxDecoration(
-                color: Colors.redAccent.withValues(alpha: 0.10),
+                color:
+                    Colors.redAccent.withValues(
+                  alpha: 0.10,
+                ),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
-                Icons.person_outline,
+                Icons.chat_bubble_outline,
                 color: Colors.redAccent,
-                size: 28,
+                size: 27,
               ),
             ),
             if (unread > 0)
@@ -241,11 +347,13 @@ class _SellerMessagesPageState extends State<SellerMessagesPage> {
                 right: -3,
                 top: -3,
                 child: Container(
-                  constraints: const BoxConstraints(
+                  constraints:
+                      const BoxConstraints(
                     minWidth: 20,
                     minHeight: 20,
                   ),
-                  padding: const EdgeInsets.symmetric(
+                  padding:
+                      const EdgeInsets.symmetric(
                     horizontal: 5,
                     vertical: 2,
                   ),
@@ -258,7 +366,9 @@ class _SellerMessagesPageState extends State<SellerMessagesPage> {
                     ),
                   ),
                   child: Text(
-                    unread > 99 ? '99+' : unread.toString(),
+                    unread > 99
+                        ? '99+'
+                        : unread.toString(),
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: Colors.white,
@@ -274,12 +384,14 @@ class _SellerMessagesPageState extends State<SellerMessagesPage> {
           children: [
             Expanded(
               child: Text(
-                buyerName,
+                otherName,
                 maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                overflow:
+                    TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontWeight:
-                      unread > 0 ? FontWeight.bold : FontWeight.w600,
+                  fontWeight: unread > 0
+                      ? FontWeight.bold
+                      : FontWeight.w600,
                 ),
               ),
             ),
@@ -291,24 +403,28 @@ class _SellerMessagesPageState extends State<SellerMessagesPage> {
                       ? Colors.redAccent
                       : Colors.grey.shade600,
                   fontSize: 11,
-                  fontWeight:
-                      unread > 0 ? FontWeight.bold : FontWeight.normal,
+                  fontWeight: unread > 0
+                      ? FontWeight.bold
+                      : FontWeight.normal,
                 ),
               ),
           ],
         ),
         subtitle: Padding(
-          padding: const EdgeInsets.only(top: 5),
+          padding:
+              const EdgeInsets.only(top: 5),
           child: Text(
             lastMessage,
             maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+            overflow:
+                TextOverflow.ellipsis,
             style: TextStyle(
               color: unread > 0
                   ? Colors.black87
                   : Colors.grey.shade600,
-              fontWeight:
-                  unread > 0 ? FontWeight.w600 : FontWeight.normal,
+              fontWeight: unread > 0
+                  ? FontWeight.w600
+                  : FontWeight.normal,
             ),
           ),
         ),
@@ -325,30 +441,32 @@ class _SellerMessagesPageState extends State<SellerMessagesPage> {
     );
   }
 
-  List<QueryDocumentSnapshot<Map<String, dynamic>>>
-      _sortedDocuments(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> documents,
+  List<QueryDocumentSnapshot<
+      Map<String, dynamic>>> _sortedDocuments(
+    List<QueryDocumentSnapshot<
+            Map<String, dynamic>>>
+        documents,
   ) {
-    final sorted = List<
-        QueryDocumentSnapshot<Map<String, dynamic>>>.from(
+    final sorted =
+        List<QueryDocumentSnapshot<
+            Map<String, dynamic>>>.from(
       documents,
     );
 
     sorted.sort((a, b) {
-      final dateA = _lastMessageDate(a.data());
-      final dateB = _lastMessageDate(b.data());
+      final dateA =
+          _lastMessageDate(a.data());
 
-      if (dateA == null && dateB == null) {
+      final dateB =
+          _lastMessageDate(b.data());
+
+      if (dateA == null &&
+          dateB == null) {
         return 0;
       }
 
-      if (dateA == null) {
-        return 1;
-      }
-
-      if (dateB == null) {
-        return -1;
-      }
+      if (dateA == null) return 1;
+      if (dateB == null) return -1;
 
       return dateB.compareTo(dateA);
     });
@@ -358,7 +476,7 @@ class _SellerMessagesPageState extends State<SellerMessagesPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_sellerId == null) {
+    if (_userId == null) {
       return Scaffold(
         appBar: AppBar(
           title: const Text('Messages'),
@@ -377,15 +495,18 @@ class _SellerMessagesPageState extends State<SellerMessagesPage> {
         title: const Text('Messages'),
         centerTitle: true,
       ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      body: StreamBuilder<
+          QuerySnapshot<Map<String, dynamic>>>(
         stream: _conversationStream(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Center(
               child: Padding(
-                padding: const EdgeInsets.all(24),
+                padding:
+                    const EdgeInsets.all(24),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisAlignment:
+                      MainAxisAlignment.center,
                   children: [
                     const Icon(
                       Icons.error_outline,
@@ -396,16 +517,19 @@ class _SellerMessagesPageState extends State<SellerMessagesPage> {
                     const Text(
                       'Unable to load messages.',
                       style: TextStyle(
-                        fontWeight: FontWeight.bold,
+                        fontWeight:
+                            FontWeight.bold,
                         fontSize: 17,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       'Please check your connection and try again.',
-                      textAlign: TextAlign.center,
+                      textAlign:
+                          TextAlign.center,
                       style: TextStyle(
-                        color: Colors.grey.shade600,
+                        color:
+                            Colors.grey.shade600,
                       ),
                     ),
                   ],
@@ -417,11 +541,13 @@ class _SellerMessagesPageState extends State<SellerMessagesPage> {
           if (snapshot.connectionState ==
               ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(),
+              child:
+                  CircularProgressIndicator(),
             );
           }
 
-          final documents = _sortedDocuments(
+          final documents =
+              _sortedDocuments(
             snapshot.data?.docs ?? [],
           );
 
@@ -432,18 +558,24 @@ class _SellerMessagesPageState extends State<SellerMessagesPage> {
           return RefreshIndicator(
             onRefresh: () async {
               await Future<void>.delayed(
-                const Duration(milliseconds: 400),
+                const Duration(
+                  milliseconds: 400,
+                ),
               );
             },
             child: ListView.builder(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.only(
+              physics:
+                  const AlwaysScrollableScrollPhysics(),
+              padding:
+                  const EdgeInsets.only(
                 top: 16,
                 bottom: 24,
               ),
               itemCount: documents.length,
-              itemBuilder: (context, index) {
-                final document = documents[index];
+              itemBuilder:
+                  (context, index) {
+                final document =
+                    documents[index];
 
                 return _conversationTile(
                   document.id,
