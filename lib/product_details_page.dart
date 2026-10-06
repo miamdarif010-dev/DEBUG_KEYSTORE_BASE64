@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'cart_page.dart';
 import 'login_page.dart';
 import 'checkout_page.dart';
+import 'buyer_chat_page.dart';
 
 class ProductDetailsPage extends StatefulWidget {
   final String productId;
@@ -68,7 +69,10 @@ class _ProductDetailsPageState
       return value.toDouble();
     }
 
-    return double.tryParse(value.toString()) ?? 0;
+    return double.tryParse(
+          value.toString(),
+        ) ??
+        0;
   }
 
   // =========================================================
@@ -87,9 +91,6 @@ class _ProductDetailsPageState
     return currency == 'BDT';
   }
 
-  // Legacy products created before BDT update may not have
-  // currency field. Those prices are treated as KRW and
-  // converted to BDT.
   double get price {
     if (isBdt) {
       return rawPrice;
@@ -107,15 +108,84 @@ class _ProductDetailsPageState
   }
 
   String get sellerCode {
-    return widget.product['sellerCode']?.toString() ?? '';
+    return widget.product['sellerCode']
+            ?.toString() ??
+        '';
   }
 
   String get sellerId {
-    return widget.product['sellerId']?.toString() ?? '';
+    return widget.product['sellerId']
+            ?.toString() ??
+        '';
   }
 
   String get sellerEmail {
-    return widget.product['sellerEmail']?.toString() ?? '';
+    return widget.product['sellerEmail']
+            ?.toString() ??
+        '';
+  }
+
+  // =========================================================
+  // RESELLER DATA
+  // =========================================================
+
+  String get entrepreneurUid {
+    return widget.product['entrepreneurUid']
+            ?.toString()
+            .trim() ??
+        '';
+  }
+
+  String get entrepreneurName {
+    return widget.product['entrepreneurName']
+            ?.toString()
+            .trim() ??
+        '';
+  }
+
+  bool get isResellerProduct {
+    return widget.product['isResellerProduct'] ==
+            true ||
+        entrepreneurUid.isNotEmpty;
+  }
+
+  String get sellerNameFromProduct {
+    return widget.product['sellerName']
+            ?.toString()
+            .trim() ??
+        '';
+  }
+
+  String get recipientId {
+    if (isResellerProduct &&
+        entrepreneurUid.isNotEmpty) {
+      return entrepreneurUid;
+    }
+
+    return sellerId;
+  }
+
+  String get recipientNameFromProduct {
+    if (isResellerProduct &&
+        entrepreneurName.isNotEmpty) {
+      return entrepreneurName;
+    }
+
+    if (sellerNameFromProduct.isNotEmpty) {
+      return sellerNameFromProduct;
+    }
+
+    if (sellerCode.isNotEmpty) {
+      return sellerCode;
+    }
+
+    if (sellerEmail.isNotEmpty) {
+      return sellerEmail;
+    }
+
+    return isResellerProduct
+        ? 'Reseller'
+        : 'Seller';
   }
 
   double get subtotal {
@@ -131,7 +201,9 @@ class _ProductDetailsPageState
   // =========================================================
 
   DocumentReference<Map<String, dynamic>>
-      _favoriteReference(String userId) {
+      _favoriteReference(
+    String userId,
+  ) {
     return FirebaseFirestore.instance
         .collection('users')
         .doc(userId)
@@ -158,12 +230,15 @@ class _ProductDetailsPageState
 
     try {
       final snapshot =
-          await _favoriteReference(user.uid).get();
+          await _favoriteReference(
+        user.uid,
+      ).get();
 
       if (!mounted) return;
 
       setState(() {
-        _isFavorite = snapshot.exists;
+        _isFavorite =
+            snapshot.exists;
         _loadingFavorite = false;
       });
     } catch (_) {
@@ -187,7 +262,8 @@ class _ProductDetailsPageState
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => const LoginPage(),
+          builder: (context) =>
+              const LoginPage(),
         ),
       );
 
@@ -196,7 +272,9 @@ class _ProductDetailsPageState
     }
 
     final favoriteRef =
-        _favoriteReference(user.uid);
+        _favoriteReference(
+      user.uid,
+    );
 
     try {
       if (_isFavorite) {
@@ -208,27 +286,30 @@ class _ProductDetailsPageState
           _isFavorite = false;
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context)
+            .showSnackBar(
           const SnackBar(
             content: Text(
               'Removed from Favorites',
             ),
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 1),
+            behavior:
+                SnackBarBehavior.floating,
+            duration:
+                Duration(seconds: 1),
           ),
         );
       } else {
         await favoriteRef.set({
-          'productId': widget.productId,
-          'productName': productName,
-          'productImageUrl': imageUrl,
+          'productId':
+              widget.productId,
+          'productName':
+              productName,
+          'productImageUrl':
+              imageUrl,
           'category': category,
-
-          // Store the actual BDT price in favorites.
           'price': price,
           'currency': 'BDT',
           'currencySymbol': '৳',
-
           'userId': user.uid,
           'createdAt':
               FieldValue.serverTimestamp(),
@@ -240,25 +321,30 @@ class _ProductDetailsPageState
           _isFavorite = true;
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context)
+            .showSnackBar(
           const SnackBar(
             content: Text(
               'Added to Favorites ❤️',
             ),
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 1),
+            behavior:
+                SnackBarBehavior.floating,
+            duration:
+                Duration(seconds: 1),
           ),
         );
       }
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
         SnackBar(
           content: Text(
             'Favorite update failed: $e',
           ),
-          behavior: SnackBarBehavior.floating,
+          behavior:
+              SnackBarBehavior.floating,
         ),
       );
     }
@@ -276,46 +362,52 @@ class _ProductDetailsPageState
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => const LoginPage(),
+          builder: (context) =>
+              const LoginPage(),
         ),
       );
       return;
     }
 
     try {
-      for (int i = 0; i < _quantity; i++) {
+      for (int i = 0;
+          i < _quantity;
+          i++) {
         await CartService.addItem(
           id: widget.productId,
           name: productName,
-
-          // Always send BDT price to cart.
           price: price,
-
-          imageUrl:
-              imageUrl.isEmpty ? null : imageUrl,
+          imageUrl: imageUrl.isEmpty
+              ? null
+              : imageUrl,
         );
       }
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
         SnackBar(
           content: Text(
             '$_quantity × $productName added to cart',
           ),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 1),
+          behavior:
+              SnackBarBehavior.floating,
+          duration:
+              const Duration(seconds: 1),
         ),
       );
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
         SnackBar(
           content: Text(
             'Could not add to cart: $e',
           ),
-          behavior: SnackBarBehavior.floating,
+          behavior:
+              SnackBarBehavior.floating,
         ),
       );
     }
@@ -333,7 +425,8 @@ class _ProductDetailsPageState
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => const LoginPage(),
+          builder: (context) =>
+              const LoginPage(),
         ),
       );
       return;
@@ -342,20 +435,187 @@ class _ProductDetailsPageState
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => CheckoutPage(
+        builder: (context) =>
+            CheckoutPage(
           items: [
             CheckoutItem(
               id: widget.productId,
               name: productName,
-
-              // Always send BDT price to checkout.
               price: price,
-
               imageUrl:
-                  imageUrl.isEmpty ? null : imageUrl,
+                  imageUrl.isEmpty
+                      ? null
+                      : imageUrl,
               quantity: _quantity,
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // =========================================================
+  // OPEN SELLER / RESELLER CHAT
+  // =========================================================
+
+  Future<void> _openMessageChat() async {
+    User? user =
+        FirebaseAuth.instance.currentUser;
+
+    // -------------------------------------------------------
+    // LOGIN REQUIRED
+    // -------------------------------------------------------
+
+    if (user == null) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              const LoginPage(),
+        ),
+      );
+
+      user =
+          FirebaseAuth.instance.currentUser;
+
+      if (user == null) {
+        return;
+      }
+    }
+
+    final targetId = recipientId;
+
+    if (targetId.isEmpty) {
+      if (!mounted) return;
+
+      _showInfoDialog(
+        isResellerProduct
+            ? 'Reseller Not Available'
+            : 'Seller Not Available',
+        isResellerProduct
+            ? 'This reseller does not have a valid account ID yet.'
+            : 'This product does not have a valid seller ID yet.',
+      );
+
+      return;
+    }
+
+    // Prevent messaging yourself.
+    if (targetId == user.uid) {
+      if (!mounted) return;
+
+      _showInfoDialog(
+        'Cannot Message',
+        'You cannot send a message to your own account.',
+      );
+
+      return;
+    }
+
+    String targetName =
+        recipientNameFromProduct;
+
+    // -------------------------------------------------------
+    // GET NAME FROM USERS COLLECTION IF NEEDED
+    // -------------------------------------------------------
+
+    final shouldLoadUserName =
+        targetName == 'Seller' ||
+            targetName == 'Reseller' ||
+            targetName.isEmpty;
+
+    if (shouldLoadUserName) {
+      try {
+        final userDoc =
+            await FirebaseFirestore
+                .instance
+                .collection('users')
+                .doc(targetId)
+                .get();
+
+        if (userDoc.exists) {
+          final data =
+              userDoc.data();
+
+          final name =
+              data?['name']
+                  ?.toString()
+                  .trim();
+
+          final displayName =
+              data?['displayName']
+                  ?.toString()
+                  .trim();
+
+          if (name != null &&
+              name.isNotEmpty) {
+            targetName = name;
+          } else if (displayName != null &&
+              displayName.isNotEmpty) {
+            targetName = displayName;
+          }
+        }
+      } catch (_) {
+        // Keep fallback name.
+      }
+    }
+
+    // -------------------------------------------------------
+    // FIND EXISTING CONVERSATION
+    // -------------------------------------------------------
+
+    String conversationId = '';
+
+    try {
+      final existing =
+          await FirebaseFirestore
+              .instance
+              .collection('conversations')
+              .where(
+                'buyerId',
+                isEqualTo: user.uid,
+              )
+              .where(
+                'sellerId',
+                isEqualTo: targetId,
+              )
+              .limit(1)
+              .get();
+
+      if (existing.docs.isNotEmpty) {
+        conversationId =
+            existing.docs.first.id;
+      }
+    } catch (_) {
+      // If query fails, use deterministic ID.
+    }
+
+    // -------------------------------------------------------
+    // CREATE A STABLE CHAT ID FOR NEW CHAT
+    // -------------------------------------------------------
+
+    if (conversationId.isEmpty) {
+      conversationId =
+          'chat_${user.uid}_$targetId';
+    }
+
+    if (!mounted) return;
+
+    // -------------------------------------------------------
+    // OPEN CHAT
+    // -------------------------------------------------------
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            BuyerChatPage(
+          conversationId:
+              conversationId,
+          sellerId: targetId,
+          sellerName: targetName,
+          isReseller:
+              isResellerProduct,
         ),
       ),
     );
@@ -409,11 +669,14 @@ class _ProductDetailsPageState
               )
               .get();
 
-      for (final doc in snapshot.docs) {
+      for (final doc
+          in snapshot.docs) {
         final data = doc.data();
 
         final status =
-            data['orderStatus']?.toString() ?? '';
+            data['orderStatus']
+                    ?.toString() ??
+                '';
 
         if (status != 'delivered') {
           continue;
@@ -432,9 +695,11 @@ class _ProductDetailsPageState
           }
 
           final itemProductId =
-              item['productId']?.toString() ??
-              item['id']?.toString() ??
-              '';
+              item['productId']
+                      ?.toString() ??
+                  item['id']
+                      ?.toString() ??
+                  '';
 
           if (itemProductId ==
               widget.productId) {
@@ -453,7 +718,8 @@ class _ProductDetailsPageState
   // FIND USER'S REVIEW
   // =========================================================
 
-  Future<QueryDocumentSnapshot<Map<String, dynamic>>?>
+  Future<QueryDocumentSnapshot<
+          Map<String, dynamic>>?>
       _findMyReview() async {
     final user =
         FirebaseAuth.instance.currentUser;
@@ -465,7 +731,8 @@ class _ProductDetailsPageState
           await _reviewsReference
               .where(
                 'productId',
-                isEqualTo: widget.productId,
+                isEqualTo:
+                    widget.productId,
               )
               .where(
                 'userId',
@@ -489,7 +756,8 @@ class _ProductDetailsPageState
   // =========================================================
 
   Future<void> _showReviewDialog({
-    DocumentSnapshot<Map<String, dynamic>>?
+    DocumentSnapshot<
+            Map<String, dynamic>>?
         existingReview,
   }) async {
     final user =
@@ -499,7 +767,8 @@ class _ProductDetailsPageState
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => const LoginPage(),
+          builder: (context) =>
+              const LoginPage(),
         ),
       );
       return;
@@ -532,14 +801,18 @@ class _ProductDetailsPageState
 
       if (oldRating is num) {
         selectedRating =
-            oldRating.toInt().clamp(1, 5);
+            oldRating.toInt().clamp(
+                  1,
+                  5,
+                );
       }
     }
 
     final controller =
         TextEditingController(
       text:
-          existingData?['review']?.toString() ??
+          existingData?['review']
+                  ?.toString() ??
               '',
     );
 
@@ -548,15 +821,18 @@ class _ProductDetailsPageState
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
-          builder:
-              (dialogContext, setDialogState) {
+          builder: (
+            dialogContext,
+            setDialogState,
+          ) {
             return AlertDialog(
               title: Text(
                 existingReview == null
                     ? 'Write a Review'
                     : 'Edit Your Review',
               ),
-              content: SingleChildScrollView(
+              content:
+                  SingleChildScrollView(
                 child: Column(
                   mainAxisSize:
                       MainAxisSize.min,
@@ -568,13 +844,15 @@ class _ProductDetailsPageState
                             FontWeight.w600,
                       ),
                     ),
-
-                    const SizedBox(height: 12),
-
+                    const SizedBox(
+                      height: 12,
+                    ),
                     Row(
                       mainAxisAlignment:
-                          MainAxisAlignment.center,
-                      children: List.generate(
+                          MainAxisAlignment
+                              .center,
+                      children:
+                          List.generate(
                         5,
                         (index) {
                           final star =
@@ -582,10 +860,12 @@ class _ProductDetailsPageState
 
                           return IconButton(
                             onPressed: () {
-                              setDialogState(() {
-                                selectedRating =
-                                    star;
-                              });
+                              setDialogState(
+                                () {
+                                  selectedRating =
+                                      star;
+                                },
+                              );
                             },
                             icon: Icon(
                               star <=
@@ -600,9 +880,9 @@ class _ProductDetailsPageState
                         },
                       ),
                     ),
-
-                    const SizedBox(height: 10),
-
+                    const SizedBox(
+                      height: 10,
+                    ),
                     TextField(
                       controller:
                           controller,
@@ -639,7 +919,8 @@ class _ProductDetailsPageState
                             .trim();
 
                     if (review.isEmpty) {
-                      ScaffoldMessenger.of(
+                      ScaffoldMessenger
+                              .of(
                         dialogContext,
                       ).showSnackBar(
                         const SnackBar(
@@ -668,7 +949,8 @@ class _ProductDetailsPageState
                               user.displayName ??
                                   'Buyer',
                           'userEmail':
-                              user.email ?? '',
+                              user.email ??
+                                  '',
                           'rating':
                               selectedRating,
                           'review':
@@ -709,7 +991,8 @@ class _ProductDetailsPageState
                         return;
                       }
 
-                      ScaffoldMessenger.of(
+                      ScaffoldMessenger
+                              .of(
                         dialogContext,
                       ).showSnackBar(
                         SnackBar(
@@ -721,7 +1004,8 @@ class _ProductDetailsPageState
                     }
                   },
                   style:
-                      ElevatedButton.styleFrom(
+                      ElevatedButton
+                          .styleFrom(
                     backgroundColor:
                         Colors.redAccent,
                     foregroundColor:
@@ -764,9 +1048,12 @@ class _ProductDetailsPageState
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(context);
+                Navigator.pop(
+                  context,
+                );
               },
-              child: const Text('OK'),
+              child:
+                  const Text('OK'),
             ),
           ],
         );
@@ -775,22 +1062,26 @@ class _ProductDetailsPageState
   }
 
   // =========================================================
-  // REVIEW SECTION
+  // REVIEWS SECTION
   // =========================================================
 
   Widget _buildReviewsSection() {
     return StreamBuilder<
-        QuerySnapshot<Map<String, dynamic>>>(
+        QuerySnapshot<
+            Map<String, dynamic>>>(
       stream: _reviewsReference
           .where(
             'productId',
-            isEqualTo: widget.productId,
+            isEqualTo:
+                widget.productId,
           )
           .snapshots(),
-      builder: (context, snapshot) {
+      builder:
+          (context, snapshot) {
         if (snapshot.hasError) {
           return const Padding(
-            padding: EdgeInsets.all(16),
+            padding:
+                EdgeInsets.all(16),
             child: Text(
               'Unable to load reviews.',
             ),
@@ -801,7 +1092,8 @@ class _ProductDetailsPageState
                 ConnectionState.waiting &&
             !snapshot.hasData) {
           return const Padding(
-            padding: EdgeInsets.all(16),
+            padding:
+                EdgeInsets.all(16),
             child: Center(
               child:
                   CircularProgressIndicator(),
@@ -817,12 +1109,14 @@ class _ProductDetailsPageState
         if (reviews.isNotEmpty) {
           double total = 0;
 
-          for (final review in reviews) {
+          for (final review
+              in reviews) {
             final rating =
                 review.data()['rating'];
 
             if (rating is num) {
-              total += rating.toDouble();
+              total +=
+                  rating.toDouble();
             }
           }
 
@@ -834,8 +1128,9 @@ class _ProductDetailsPageState
           crossAxisAlignment:
               CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 28),
-
+            const SizedBox(
+              height: 28,
+            ),
             const Text(
               'Ratings & Reviews',
               style: TextStyle(
@@ -844,23 +1139,26 @@ class _ProductDetailsPageState
                     FontWeight.bold,
               ),
             ),
-
-            const SizedBox(height: 12),
-
-            // =================================================
-            // RATING SUMMARY
-            // =================================================
-
+            const SizedBox(
+              height: 12,
+            ),
             Container(
               width: double.infinity,
               padding:
-                  const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
+                  const EdgeInsets.all(
+                16,
+              ),
+              decoration:
+                  BoxDecoration(
+                color:
+                    Colors.grey.shade50,
                 borderRadius:
-                    BorderRadius.circular(14),
+                    BorderRadius.circular(
+                  14,
+                ),
                 border: Border.all(
-                  color: Colors.grey.shade200,
+                  color:
+                      Colors.grey.shade200,
                 ),
               ),
               child: Row(
@@ -869,7 +1167,9 @@ class _ProductDetailsPageState
                     children: [
                       Text(
                         averageRating
-                            .toStringAsFixed(1),
+                            .toStringAsFixed(
+                          1,
+                        ),
                         style:
                             const TextStyle(
                           fontSize: 34,
@@ -877,7 +1177,6 @@ class _ProductDetailsPageState
                               FontWeight.bold,
                         ),
                       ),
-
                       Row(
                         children:
                             List.generate(
@@ -896,9 +1195,9 @@ class _ProductDetailsPageState
                           },
                         ),
                       ),
-
-                      const SizedBox(height: 4),
-
+                      const SizedBox(
+                        height: 4,
+                      ),
                       Text(
                         '${reviews.length} review${reviews.length == 1 ? '' : 's'}',
                         style:
@@ -909,13 +1208,14 @@ class _ProductDetailsPageState
                       ),
                     ],
                   ),
-
-                  const SizedBox(width: 24),
-
+                  const SizedBox(
+                    width: 24,
+                  ),
                   Expanded(
                     child: Column(
                       crossAxisAlignment:
-                          CrossAxisAlignment.start,
+                          CrossAxisAlignment
+                              .start,
                       children: [
                         const Text(
                           'Customer Reviews',
@@ -926,9 +1226,9 @@ class _ProductDetailsPageState
                             fontSize: 16,
                           ),
                         ),
-
-                        const SizedBox(height: 6),
-
+                        const SizedBox(
+                          height: 6,
+                        ),
                         const Text(
                           'See what other buyers think about this product.',
                           style:
@@ -943,24 +1243,27 @@ class _ProductDetailsPageState
                 ],
               ),
             ),
-
-            const SizedBox(height: 12),
-
-            // =================================================
-            // WRITE / EDIT REVIEW
-            // =================================================
-
+            const SizedBox(
+              height: 12,
+            ),
             FutureBuilder<
                 QueryDocumentSnapshot<
-                    Map<String, dynamic>>?>(
+                    Map<String,
+                        dynamic>>?>(
               future: _findMyReview(),
-              builder: (context, myReviewSnapshot) {
+              builder: (
+                context,
+                myReviewSnapshot,
+              ) {
                 final myReview =
-                    myReviewSnapshot.data;
+                    myReviewSnapshot
+                        .data;
 
                 return SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
+                  width:
+                      double.infinity,
+                  child:
+                      OutlinedButton.icon(
                     onPressed: () {
                       _showReviewDialog(
                         existingReview:
@@ -969,8 +1272,10 @@ class _ProductDetailsPageState
                     },
                     icon: Icon(
                       myReview == null
-                          ? Icons.rate_review_outlined
-                          : Icons.edit_outlined,
+                          ? Icons
+                              .rate_review_outlined
+                          : Icons
+                              .edit_outlined,
                     ),
                     label: Text(
                       myReview == null
@@ -978,7 +1283,8 @@ class _ProductDetailsPageState
                           : 'Edit My Review',
                     ),
                     style:
-                        OutlinedButton.styleFrom(
+                        OutlinedButton
+                            .styleFrom(
                       foregroundColor:
                           Colors.redAccent,
                       side:
@@ -996,45 +1302,59 @@ class _ProductDetailsPageState
                 );
               },
             ),
-
-            const SizedBox(height: 16),
-
-            // =================================================
-            // REVIEW LIST
-            // =================================================
-
+            const SizedBox(
+              height: 16,
+            ),
             if (reviews.isEmpty)
               Container(
-                width: double.infinity,
+                width:
+                    double.infinity,
                 padding:
-                    const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius:
-                      BorderRadius.circular(14),
+                    const EdgeInsets.all(
+                  20,
                 ),
-                child: const Column(
+                decoration:
+                    BoxDecoration(
+                  color:
+                      Colors.grey.shade50,
+                  borderRadius:
+                      BorderRadius.circular(
+                    14,
+                  ),
+                ),
+                child:
+                    const Column(
                   children: [
                     Icon(
-                      Icons.rate_review_outlined,
+                      Icons
+                          .rate_review_outlined,
                       size: 42,
-                      color: Colors.grey,
+                      color:
+                          Colors.grey,
                     ),
-                    SizedBox(height: 8),
+                    SizedBox(
+                      height: 8,
+                    ),
                     Text(
                       'No reviews yet',
-                      style: TextStyle(
+                      style:
+                          TextStyle(
                         fontWeight:
-                            FontWeight.bold,
+                            FontWeight
+                                .bold,
                       ),
                     ),
-                    SizedBox(height: 4),
+                    SizedBox(
+                      height: 4,
+                    ),
                     Text(
                       'Be the first buyer to review this product.',
                       textAlign:
                           TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.grey,
+                      style:
+                          TextStyle(
+                        color:
+                            Colors.grey,
                       ),
                     ),
                   ],
@@ -1067,14 +1387,14 @@ class _ProductDetailsPageState
 
                   return Card(
                     margin:
-                        const EdgeInsets.only(
+                        const EdgeInsets
+                            .only(
                       bottom: 12,
                     ),
                     child: Padding(
                       padding:
-                          const EdgeInsets.all(
-                        14,
-                      ),
+                          const EdgeInsets
+                              .all(14),
                       child: Column(
                         crossAxisAlignment:
                             CrossAxisAlignment
@@ -1087,21 +1407,22 @@ class _ProductDetailsPageState
                                     Colors
                                         .redAccent
                                         .withValues(
-                                  alpha: 0.10,
+                                  alpha:
+                                      0.10,
                                 ),
-                                child: const Icon(
+                                child:
+                                    const Icon(
                                   Icons.person,
                                   color:
                                       Colors.redAccent,
                                 ),
                               ),
-
                               const SizedBox(
                                 width: 10,
                               ),
-
                               Expanded(
-                                child: Column(
+                                child:
+                                    Column(
                                   crossAxisAlignment:
                                       CrossAxisAlignment
                                           .start,
@@ -1111,15 +1432,12 @@ class _ProductDetailsPageState
                                       style:
                                           const TextStyle(
                                         fontWeight:
-                                            FontWeight
-                                                .bold,
+                                            FontWeight.bold,
                                       ),
                                     ),
-
                                     const SizedBox(
                                       height: 3,
                                     ),
-
                                     Row(
                                       children:
                                           List.generate(
@@ -1128,13 +1446,12 @@ class _ProductDetailsPageState
                                           return Icon(
                                             index <
                                                     rating
-                                                ? Icons
-                                                    .star
-                                                : Icons
-                                                    .star_border,
+                                                ? Icons.star
+                                                : Icons.star_border,
                                             color:
                                                 Colors.amber,
-                                            size: 17,
+                                            size:
+                                                17,
                                           );
                                         },
                                       ),
@@ -1144,11 +1461,9 @@ class _ProductDetailsPageState
                               ),
                             ],
                           ),
-
                           const SizedBox(
                             height: 10,
                           ),
-
                           Text(
                             reviewText,
                             style:
@@ -1174,22 +1489,32 @@ class _ProductDetailsPageState
   // =========================================================
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
+    final recipientType =
+        isResellerProduct
+            ? 'Reseller'
+            : 'Seller';
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor:
             Colors.redAccent,
-        foregroundColor: Colors.white,
+        foregroundColor:
+            Colors.white,
         title: const Text(
           'Product Details',
           style: TextStyle(
-            fontWeight: FontWeight.bold,
+            fontWeight:
+                FontWeight.bold,
           ),
         ),
         actions: [
           IconButton(
             icon: const Icon(
-              Icons.shopping_cart_outlined,
+              Icons
+                  .shopping_cart_outlined,
             ),
             onPressed: () {
               Navigator.push(
@@ -1203,38 +1528,44 @@ class _ProductDetailsPageState
           ),
         ],
       ),
-
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.only(
-          bottom: 100,
+      body:
+          SingleChildScrollView(
+        padding:
+            const EdgeInsets.only(
+          bottom: 120,
         ),
         child: Column(
           crossAxisAlignment:
-              CrossAxisAlignment.start,
+              CrossAxisAlignment
+                  .start,
           children: [
             // =================================================
             // IMAGE
             // =================================================
 
             SizedBox(
-              width: double.infinity,
+              width:
+                  double.infinity,
               height: 330,
-              child: imageUrl.isNotEmpty
+              child: imageUrl
+                      .isNotEmpty
                   ? Image.network(
                       imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder:
-                          (
+                      fit:
+                          BoxFit.cover,
+                      errorBuilder: (
                         context,
                         error,
                         stackTrace,
                       ) {
                         return Container(
                           color: Colors
-                              .grey.shade200,
+                              .grey
+                              .shade200,
                           child:
                               const Center(
-                            child: Icon(
+                            child:
+                                Icon(
                               Icons.image,
                               size: 80,
                               color:
@@ -1245,13 +1576,16 @@ class _ProductDetailsPageState
                       },
                     )
                   : Container(
-                      color:
-                          Colors.grey.shade200,
-                      child: const Center(
+                      color: Colors
+                          .grey
+                          .shade200,
+                      child:
+                          const Center(
                         child: Icon(
                           Icons.image,
                           size: 80,
-                          color: Colors.grey,
+                          color:
+                              Colors.grey,
                         ),
                       ),
                     ),
@@ -1263,10 +1597,12 @@ class _ProductDetailsPageState
 
             Padding(
               padding:
-                  const EdgeInsets.all(16),
+                  const EdgeInsets
+                      .all(16),
               child: Column(
                 crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                    CrossAxisAlignment
+                        .start,
                 children: [
                   Row(
                     crossAxisAlignment:
@@ -1280,11 +1616,11 @@ class _ProductDetailsPageState
                               const TextStyle(
                             fontSize: 24,
                             fontWeight:
-                                FontWeight.bold,
+                                FontWeight
+                                    .bold,
                           ),
                         ),
                       ),
-
                       IconButton(
                         onPressed:
                             _loadingFavorite
@@ -1295,19 +1631,24 @@ class _ProductDetailsPageState
                               ? Icons.favorite
                               : Icons
                                   .favorite_border,
-                          color: _isFavorite
-                              ? Colors
-                                  .redAccent
-                              : Colors.grey,
+                          color:
+                              _isFavorite
+                                  ? Colors
+                                      .redAccent
+                                  : Colors
+                                      .grey,
                           size: 30,
                         ),
                       ),
                     ],
                   ),
 
-                  const SizedBox(height: 8),
+                  const SizedBox(
+                    height: 8,
+                  ),
 
-                  if (category.isNotEmpty)
+                  if (category
+                      .isNotEmpty)
                     Container(
                       padding:
                           const EdgeInsets
@@ -1322,19 +1663,24 @@ class _ProductDetailsPageState
                             .shade100,
                         borderRadius:
                             BorderRadius
-                                .circular(20),
+                                .circular(
+                          20,
+                        ),
                       ),
                       child: Text(
                         category,
                         style:
                             const TextStyle(
                           fontWeight:
-                              FontWeight.w600,
+                              FontWeight
+                                  .w600,
                         ),
                       ),
                     ),
 
-                  const SizedBox(height: 12),
+                  const SizedBox(
+                    height: 12,
+                  ),
 
                   Text(
                     formattedPrice,
@@ -1348,7 +1694,9 @@ class _ProductDetailsPageState
                     ),
                   ),
 
-                  const SizedBox(height: 20),
+                  const SizedBox(
+                    height: 20,
+                  ),
 
                   const Text(
                     'Description',
@@ -1360,7 +1708,9 @@ class _ProductDetailsPageState
                     ),
                   ),
 
-                  const SizedBox(height: 8),
+                  const SizedBox(
+                    height: 8,
+                  ),
 
                   Text(
                     description,
@@ -1373,7 +1723,9 @@ class _ProductDetailsPageState
                     ),
                   ),
 
-                  const SizedBox(height: 24),
+                  const SizedBox(
+                    height: 24,
+                  ),
 
                   // =================================================
                   // QUANTITY
@@ -1389,21 +1741,26 @@ class _ProductDetailsPageState
                     ),
                   ),
 
-                  const SizedBox(height: 10),
+                  const SizedBox(
+                    height: 10,
+                  ),
 
                   Row(
                     children: [
                       Container(
                         decoration:
                             BoxDecoration(
-                          border: Border.all(
+                          border:
+                              Border.all(
                             color: Colors
                                 .grey
                                 .shade300,
                           ),
                           borderRadius:
                               BorderRadius
-                                  .circular(8),
+                                  .circular(
+                            8,
+                          ),
                         ),
                         child: Row(
                           children: [
@@ -1412,81 +1769,93 @@ class _ProductDetailsPageState
                                   _decreaseQuantity,
                               icon:
                                   const Icon(
-                                Icons.remove,
+                                Icons
+                                    .remove,
                               ),
                             ),
-
                             SizedBox(
                               width: 35,
-                              child: Text(
+                              child:
+                                  Text(
                                 '$_quantity',
                                 textAlign:
                                     TextAlign
                                         .center,
                                 style:
                                     const TextStyle(
-                                  fontSize: 18,
+                                  fontSize:
+                                      18,
                                   fontWeight:
                                       FontWeight
                                           .bold,
                                 ),
                               ),
                             ),
-
                             IconButton(
                               onPressed:
                                   _increaseQuantity,
                               icon:
                                   const Icon(
-                                Icons.add,
+                                Icons
+                                    .add,
                               ),
                             ),
                           ],
                         ),
                       ),
-
                       const SizedBox(
                         width: 20,
                       ),
-
                       Text(
-                        'Total: ${formattedSubtotal}',
+                        'Total: $formattedSubtotal',
                         style:
                             const TextStyle(
                           fontSize: 18,
                           fontWeight:
-                              FontWeight.bold,
+                              FontWeight
+                                  .bold,
                           color:
-                              Colors.redAccent,
+                              Colors
+                                  .redAccent,
                         ),
                       ),
                     ],
                   ),
 
-                  const SizedBox(height: 24),
+                  const SizedBox(
+                    height: 24,
+                  ),
 
                   // =================================================
-                  // SELLER INFORMATION
+                  // SELLER / RESELLER INFORMATION
                   // =================================================
 
                   if (sellerCode.isNotEmpty ||
                       sellerId.isNotEmpty ||
-                      sellerEmail.isNotEmpty)
+                      sellerEmail.isNotEmpty ||
+                      isResellerProduct)
                     Card(
-                      child: Padding(
+                      child:
+                          Padding(
                         padding:
                             const EdgeInsets
-                                .all(14),
-                        child: Column(
+                                .all(
+                          14,
+                        ),
+                        child:
+                            Column(
                           crossAxisAlignment:
                               CrossAxisAlignment
                                   .start,
                           children: [
-                            const Text(
-                              'Seller Information',
+                            Text(
+                              isResellerProduct
+                                  ? 'Reseller Information'
+                                  : 'Seller Information',
                               style:
-                                  TextStyle(
-                                fontSize: 18,
+                                  const TextStyle(
+                                fontSize:
+                                    18,
                                 fontWeight:
                                     FontWeight
                                         .bold,
@@ -1496,6 +1865,20 @@ class _ProductDetailsPageState
                             const SizedBox(
                               height: 10,
                             ),
+
+                            if (isResellerProduct &&
+                                entrepreneurUid
+                                    .isNotEmpty)
+                              Text(
+                                'Reseller UID: $entrepreneurUid',
+                              ),
+
+                            if (isResellerProduct &&
+                                entrepreneurName
+                                    .isNotEmpty)
+                              Text(
+                                'Reseller Name: $entrepreneurName',
+                              ),
 
                             if (sellerCode
                                 .isNotEmpty)
@@ -1520,7 +1903,7 @@ class _ProductDetailsPageState
                     ),
 
                   // =================================================
-                  // RATINGS & REVIEWS
+                  // REVIEWS
                   // =================================================
 
                   _buildReviewsSection(),
@@ -1535,7 +1918,8 @@ class _ProductDetailsPageState
       // BOTTOM ACTIONS
       // =========================================================
 
-      bottomNavigationBar: SafeArea(
+      bottomNavigationBar:
+          SafeArea(
         child: Container(
           padding:
               const EdgeInsets.all(10),
@@ -1543,23 +1927,34 @@ class _ProductDetailsPageState
               const BoxDecoration(
             color: Colors.white,
           ),
-          child: Row(
+          child: Column(
+            mainAxisSize:
+                MainAxisSize.min,
             children: [
-              Expanded(
+              // -------------------------------------------------
+              // MESSAGE BUTTON
+              // -------------------------------------------------
+
+              SizedBox(
+                width:
+                    double.infinity,
                 child:
                     OutlinedButton.icon(
-                  onPressed: _addToCart,
+                  onPressed:
+                      _openMessageChat,
                   icon: const Icon(
                     Icons
-                        .shopping_cart_outlined,
+                        .chat_bubble_outline,
                   ),
-                  label: const Text(
-                    'Add to Cart',
+                  label: Text(
+                    'Message $recipientType',
                   ),
                   style:
-                      OutlinedButton.styleFrom(
+                      OutlinedButton
+                          .styleFrom(
                     foregroundColor:
-                        Colors.redAccent,
+                        Colors
+                            .redAccent,
                     side:
                         const BorderSide(
                       color:
@@ -1568,37 +1963,90 @@ class _ProductDetailsPageState
                     padding:
                         const EdgeInsets
                             .symmetric(
-                      vertical: 14,
+                      vertical: 12,
                     ),
                   ),
                 ),
               ),
 
-              const SizedBox(width: 10),
+              const SizedBox(
+                height: 8,
+              ),
 
-              Expanded(
-                child:
-                    ElevatedButton.icon(
-                  onPressed: _buyNow,
-                  icon: const Icon(
-                    Icons.flash_on,
-                  ),
-                  label: const Text(
-                    'Buy Now',
-                  ),
-                  style:
-                      ElevatedButton.styleFrom(
-                    backgroundColor:
-                        Colors.redAccent,
-                    foregroundColor:
-                        Colors.white,
-                    padding:
-                        const EdgeInsets
-                            .symmetric(
-                      vertical: 14,
+              // -------------------------------------------------
+              // CART + BUY NOW
+              // -------------------------------------------------
+
+              Row(
+                children: [
+                  Expanded(
+                    child:
+                        OutlinedButton
+                            .icon(
+                      onPressed:
+                          _addToCart,
+                      icon: const Icon(
+                        Icons
+                            .shopping_cart_outlined,
+                      ),
+                      label:
+                          const Text(
+                        'Add to Cart',
+                      ),
+                      style:
+                          OutlinedButton
+                              .styleFrom(
+                        foregroundColor:
+                            Colors
+                                .redAccent,
+                        side:
+                            const BorderSide(
+                          color: Colors
+                              .redAccent,
+                        ),
+                        padding:
+                            const EdgeInsets
+                                .symmetric(
+                          vertical: 14,
+                        ),
+                      ),
                     ),
                   ),
-                ),
+
+                  const SizedBox(
+                    width: 10,
+                  ),
+
+                  Expanded(
+                    child:
+                        ElevatedButton
+                            .icon(
+                      onPressed:
+                          _buyNow,
+                      icon: const Icon(
+                        Icons.flash_on,
+                      ),
+                      label:
+                          const Text(
+                        'Buy Now',
+                      ),
+                      style:
+                          ElevatedButton
+                              .styleFrom(
+                        backgroundColor:
+                            Colors
+                                .redAccent,
+                        foregroundColor:
+                            Colors.white,
+                        padding:
+                            const EdgeInsets
+                                .symmetric(
+                          vertical: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
