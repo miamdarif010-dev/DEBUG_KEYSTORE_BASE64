@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'buyer_chat_page.dart';
+import 'seller_chat_page.dart';
 
 class BuyerMessagesPage extends StatefulWidget {
   const BuyerMessagesPage({super.key});
@@ -24,17 +25,27 @@ class _BuyerMessagesPageState extends State<BuyerMessagesPage> {
       return const Stream.empty();
     }
 
-    // Only filter by buyerId.
-    // Sorting is done locally so a Firestore composite index
-    // is not required.
+    // Show every conversation where the current user is
+    // either participant.
     return _firestore
         .collection('conversations')
-        .where('buyerId', isEqualTo: userId)
+        .where(
+          Filter.or(
+            Filter('buyerId', isEqualTo: userId),
+            Filter('sellerId', isEqualTo: userId),
+          ),
+        )
         .snapshots();
   }
 
+  bool _isBuyerSide(Map<String, dynamic> data) {
+    return data['buyerId'] == _userId;
+  }
+
   int _unreadCount(Map<String, dynamic> data) {
-    final value = data['buyerUnreadCount'];
+    final value = _isBuyerSide(data)
+        ? data['buyerUnreadCount']
+        : data['sellerUnreadCount'];
 
     if (value is int) {
       return value < 0 ? 0 : value;
@@ -48,14 +59,44 @@ class _BuyerMessagesPageState extends State<BuyerMessagesPage> {
     return 0;
   }
 
-  String _sellerName(Map<String, dynamic> data) {
-    final name = data['sellerName'];
+  String _otherUserName(Map<String, dynamic> data) {
+    if (_isBuyerSide(data)) {
+      final name = data['sellerName'];
+
+      if (name is String && name.trim().isNotEmpty) {
+        return name.trim();
+      }
+
+      return 'Seller';
+    }
+
+    final name = data['buyerName'];
 
     if (name is String && name.trim().isNotEmpty) {
       return name.trim();
     }
 
-    return 'Seller';
+    return 'User';
+  }
+
+  String _otherUserId(Map<String, dynamic> data) {
+    if (_isBuyerSide(data)) {
+      final id = data['sellerId'];
+
+      if (id is String) {
+        return id.trim();
+      }
+
+      return '';
+    }
+
+    final id = data['buyerId'];
+
+    if (id is String) {
+      return id.trim();
+    }
+
+    return '';
   }
 
   String _lastMessage(Map<String, dynamic> data) {
@@ -81,7 +122,9 @@ class _BuyerMessagesPageState extends State<BuyerMessagesPage> {
     return fallbackId;
   }
 
-  DateTime? _lastMessageDate(Map<String, dynamic> data) {
+  DateTime? _lastMessageDate(
+    Map<String, dynamic> data,
+  ) {
     final value = data['lastMessageAt'];
 
     if (value is Timestamp) {
@@ -115,8 +158,11 @@ class _BuyerMessagesPageState extends State<BuyerMessagesPage> {
               ? date.hour - 12
               : date.hour;
 
-      final minute = date.minute.toString().padLeft(2, '0');
-      final period = date.hour >= 12 ? 'PM' : 'AM';
+      final minute =
+          date.minute.toString().padLeft(2, '0');
+
+      final period =
+          date.hour >= 12 ? 'PM' : 'AM';
 
       return '$hour:$minute $period';
     }
@@ -128,27 +174,65 @@ class _BuyerMessagesPageState extends State<BuyerMessagesPage> {
     required String conversationId,
     required Map<String, dynamic> data,
   }) {
-    final sellerId = data['sellerId'];
+    final currentUserId = _userId;
 
-    if (sellerId is! String || sellerId.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Seller information is missing.'),
-        ),
-      );
+    if (currentUserId == null) {
       return;
     }
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => BuyerChatPage(
-          conversationId: conversationId,
-          sellerId: sellerId.trim(),
-          sellerName: _sellerName(data),
+    final isBuyerSide = data['buyerId'] == currentUserId;
+
+    if (isBuyerSide) {
+      final sellerId = data['sellerId'];
+
+      if (sellerId is! String ||
+          sellerId.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Recipient information is missing.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => BuyerChatPage(
+            conversationId: conversationId,
+            sellerId: sellerId.trim(),
+            sellerName: _otherUserName(data),
+          ),
         ),
-      ),
-    );
+      );
+    } else {
+      final buyerId = data['buyerId'];
+
+      if (buyerId is! String ||
+          buyerId.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Recipient information is missing.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SellerChatPage(
+            conversationId: conversationId,
+            buyerId: buyerId.trim(),
+            buyerName: _otherUserName(data),
+          ),
+        ),
+      );
+    }
   }
 
   Widget _emptyState() {
@@ -156,13 +240,16 @@ class _BuyerMessagesPageState extends State<BuyerMessagesPage> {
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment:
+              MainAxisAlignment.center,
           children: [
             Container(
               width: 90,
               height: 90,
               decoration: BoxDecoration(
-                color: Colors.redAccent.withValues(alpha: 0.10),
+                color: Colors.redAccent.withValues(
+                  alpha: 0.10,
+                ),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -181,7 +268,7 @@ class _BuyerMessagesPageState extends State<BuyerMessagesPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Your conversations with sellers will appear here.',
+              'Your conversations will appear here.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.grey.shade600,
@@ -199,9 +286,11 @@ class _BuyerMessagesPageState extends State<BuyerMessagesPage> {
     Map<String, dynamic> data,
   ) {
     final unread = _unreadCount(data);
-    final sellerName = _sellerName(data);
+    final otherName = _otherUserName(data);
     final lastMessage = _lastMessage(data);
-    final time = _formatTime(data['lastMessageAt']);
+    final time = _formatTime(
+      data['lastMessageAt'],
+    );
 
     final conversationId = _conversationId(
       data,
@@ -216,7 +305,8 @@ class _BuyerMessagesPageState extends State<BuyerMessagesPage> {
       ),
       elevation: 1,
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
+        contentPadding:
+            const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 8,
         ),
@@ -227,13 +317,15 @@ class _BuyerMessagesPageState extends State<BuyerMessagesPage> {
               width: 52,
               height: 52,
               decoration: BoxDecoration(
-                color: Colors.redAccent.withValues(alpha: 0.10),
+                color: Colors.redAccent.withValues(
+                  alpha: 0.10,
+                ),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
-                Icons.storefront_outlined,
+                Icons.chat_bubble_outline,
                 color: Colors.redAccent,
-                size: 28,
+                size: 27,
               ),
             ),
             if (unread > 0)
@@ -241,11 +333,13 @@ class _BuyerMessagesPageState extends State<BuyerMessagesPage> {
                 right: -3,
                 top: -3,
                 child: Container(
-                  constraints: const BoxConstraints(
+                  constraints:
+                      const BoxConstraints(
                     minWidth: 20,
                     minHeight: 20,
                   ),
-                  padding: const EdgeInsets.symmetric(
+                  padding:
+                      const EdgeInsets.symmetric(
                     horizontal: 5,
                     vertical: 2,
                   ),
@@ -258,7 +352,9 @@ class _BuyerMessagesPageState extends State<BuyerMessagesPage> {
                     ),
                   ),
                   child: Text(
-                    unread > 99 ? '99+' : unread.toString(),
+                    unread > 99
+                        ? '99+'
+                        : unread.toString(),
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: Colors.white,
@@ -274,12 +370,14 @@ class _BuyerMessagesPageState extends State<BuyerMessagesPage> {
           children: [
             Expanded(
               child: Text(
-                sellerName,
+                otherName,
                 maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                overflow:
+                    TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontWeight:
-                      unread > 0 ? FontWeight.bold : FontWeight.w600,
+                  fontWeight: unread > 0
+                      ? FontWeight.bold
+                      : FontWeight.w600,
                 ),
               ),
             ),
@@ -291,24 +389,28 @@ class _BuyerMessagesPageState extends State<BuyerMessagesPage> {
                       ? Colors.redAccent
                       : Colors.grey.shade600,
                   fontSize: 11,
-                  fontWeight:
-                      unread > 0 ? FontWeight.bold : FontWeight.normal,
+                  fontWeight: unread > 0
+                      ? FontWeight.bold
+                      : FontWeight.normal,
                 ),
               ),
           ],
         ),
         subtitle: Padding(
-          padding: const EdgeInsets.only(top: 5),
+          padding:
+              const EdgeInsets.only(top: 5),
           child: Text(
             lastMessage,
             maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+            overflow:
+                TextOverflow.ellipsis,
             style: TextStyle(
               color: unread > 0
                   ? Colors.black87
                   : Colors.grey.shade600,
-              fontWeight:
-                  unread > 0 ? FontWeight.w600 : FontWeight.normal,
+              fontWeight: unread > 0
+                  ? FontWeight.w600
+                  : FontWeight.normal,
             ),
           ),
         ),
@@ -325,30 +427,30 @@ class _BuyerMessagesPageState extends State<BuyerMessagesPage> {
     );
   }
 
-  List<QueryDocumentSnapshot<Map<String, dynamic>>>
-      _sortedDocuments(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> documents,
+  List<QueryDocumentSnapshot<
+      Map<String, dynamic>>> _sortedDocuments(
+    List<QueryDocumentSnapshot<
+            Map<String, dynamic>>>
+        documents,
   ) {
-    final sorted = List<
-        QueryDocumentSnapshot<Map<String, dynamic>>>.from(
+    final sorted =
+        List<QueryDocumentSnapshot<
+            Map<String, dynamic>>>.from(
       documents,
     );
 
     sorted.sort((a, b) {
-      final dateA = _lastMessageDate(a.data());
-      final dateB = _lastMessageDate(b.data());
+      final dateA =
+          _lastMessageDate(a.data());
+      final dateB =
+          _lastMessageDate(b.data());
 
       if (dateA == null && dateB == null) {
         return 0;
       }
 
-      if (dateA == null) {
-        return 1;
-      }
-
-      if (dateB == null) {
-        return -1;
-      }
+      if (dateA == null) return 1;
+      if (dateB == null) return -1;
 
       return dateB.compareTo(dateA);
     });
@@ -377,15 +479,18 @@ class _BuyerMessagesPageState extends State<BuyerMessagesPage> {
         title: const Text('Messages'),
         centerTitle: true,
       ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      body: StreamBuilder<
+          QuerySnapshot<Map<String, dynamic>>>(
         stream: _conversationStream(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Center(
               child: Padding(
-                padding: const EdgeInsets.all(24),
+                padding:
+                    const EdgeInsets.all(24),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisAlignment:
+                      MainAxisAlignment.center,
                   children: [
                     const Icon(
                       Icons.error_outline,
@@ -396,16 +501,19 @@ class _BuyerMessagesPageState extends State<BuyerMessagesPage> {
                     const Text(
                       'Unable to load messages.',
                       style: TextStyle(
-                        fontWeight: FontWeight.bold,
+                        fontWeight:
+                            FontWeight.bold,
                         fontSize: 17,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       'Please check your connection and try again.',
-                      textAlign: TextAlign.center,
+                      textAlign:
+                          TextAlign.center,
                       style: TextStyle(
-                        color: Colors.grey.shade600,
+                        color:
+                            Colors.grey.shade600,
                       ),
                     ),
                   ],
@@ -417,11 +525,13 @@ class _BuyerMessagesPageState extends State<BuyerMessagesPage> {
           if (snapshot.connectionState ==
               ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(),
+              child:
+                  CircularProgressIndicator(),
             );
           }
 
-          final documents = _sortedDocuments(
+          final documents =
+              _sortedDocuments(
             snapshot.data?.docs ?? [],
           );
 
@@ -432,18 +542,24 @@ class _BuyerMessagesPageState extends State<BuyerMessagesPage> {
           return RefreshIndicator(
             onRefresh: () async {
               await Future<void>.delayed(
-                const Duration(milliseconds: 400),
+                const Duration(
+                  milliseconds: 400,
+                ),
               );
             },
             child: ListView.builder(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.only(
+              physics:
+                  const AlwaysScrollableScrollPhysics(),
+              padding:
+                  const EdgeInsets.only(
                 top: 16,
                 bottom: 24,
               ),
               itemCount: documents.length,
-              itemBuilder: (context, index) {
-                final document = documents[index];
+              itemBuilder:
+                  (context, index) {
+                final document =
+                    documents[index];
 
                 return _conversationTile(
                   document.id,
