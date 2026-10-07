@@ -205,7 +205,7 @@ class SellerInformationPage extends StatelessWidget {
           final phone = data['phone']?.toString() ?? '';
 
           final email = data['email']?.toString() ??
-              (isOwnProfile ? currentUser?.email ?? '' : '');
+              (isOwnProfile ? currentUser.email ?? '' : '');
 
           final sellerCode = data['sellerCode']?.toString() ?? '';
 
