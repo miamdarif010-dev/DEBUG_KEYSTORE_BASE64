@@ -3,7 +3,16 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class SellerInformationPage extends StatelessWidget {
-  const SellerInformationPage({super.key});
+  /// If sellerId is provided, this page shows that seller's information.
+  ///
+  /// If sellerId is null, it shows the currently logged-in user's
+  /// seller information exactly as before.
+  final String? sellerId;
+
+  const SellerInformationPage({
+    super.key,
+    this.sellerId,
+  });
 
   // =========================================================
   // STATUS COLOR
@@ -98,9 +107,16 @@ class SellerInformationPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
+    final currentUser = FirebaseAuth.instance.currentUser;
 
-    if (user == null) {
+    // If sellerId is provided, open that seller.
+    // Otherwise, open the currently logged-in user's profile.
+    final targetSellerId = sellerId?.trim().isNotEmpty == true
+        ? sellerId!.trim()
+        : currentUser?.uid;
+
+    // No seller/user ID available.
+    if (targetSellerId == null || targetSellerId.isEmpty) {
       return Scaffold(
         backgroundColor: const Color(0xFFFFF9F7),
         appBar: AppBar(
@@ -122,6 +138,9 @@ class SellerInformationPage extends StatelessWidget {
       );
     }
 
+    final bool isOwnProfile =
+        currentUser != null && targetSellerId == currentUser.uid;
+
     return Scaffold(
       backgroundColor: const Color(0xFFFFF9F7),
       appBar: AppBar(
@@ -131,19 +150,18 @@ class SellerInformationPage extends StatelessWidget {
         iconTheme: const IconThemeData(
           color: Colors.black,
         ),
-        title: const Text(
-          'Seller Information',
-          style: TextStyle(
+        title: Text(
+          isOwnProfile ? 'Seller Information' : 'Seller Profile',
+          style: const TextStyle(
             color: Colors.black,
             fontWeight: FontWeight.bold,
           ),
         ),
       ),
-      body: StreamBuilder<
-          DocumentSnapshot<Map<String, dynamic>>>(
+      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
         stream: FirebaseFirestore.instance
             .collection('users')
-            .doc(user.uid)
+            .doc(targetSellerId)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
@@ -159,39 +177,44 @@ class SellerInformationPage extends StatelessWidget {
             );
           }
 
-          if (snapshot.connectionState ==
-              ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
               child: CircularProgressIndicator(),
             );
           }
 
+          if (!snapshot.hasData || !snapshot.data!.exists) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: Text(
+                  'Seller information not found.',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
+          }
+
           final data = snapshot.data?.data() ?? {};
 
-          final name =
-              data['name']?.toString() ?? '';
+          final name = data['name']?.toString() ?? '';
 
-          final phone =
-              data['phone']?.toString() ?? '';
+          final phone = data['phone']?.toString() ?? '';
 
-          final email =
-              data['email']?.toString() ??
-                  user.email ??
-                  '';
+          final email = data['email']?.toString() ??
+              (isOwnProfile ? currentUser?.email ?? '' : '');
 
-          final sellerId =
-              data['sellerCode']?.toString() ??
-                  'Not assigned';
+          final sellerCode = data['sellerCode']?.toString() ?? '';
 
           final sellerStatus =
-              data['sellerStatus']?.toString() ??
-                  'pending';
+              data['sellerStatus']?.toString() ?? 'pending';
 
-          final shopName =
-              data['shopName']?.toString() ?? '';
+          final shopName = data['shopName']?.toString() ?? '';
 
-          final statusColor =
-              _statusColor(sellerStatus);
+          final profileImageUrl =
+              data['profileImageUrl']?.toString().trim() ?? '';
+
+          final statusColor = _statusColor(sellerStatus);
 
           return RefreshIndicator(
             onRefresh: () async {
@@ -215,8 +238,7 @@ class SellerInformationPage extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color:
-                            Colors.black.withValues(alpha: 0.04),
+                        color: Colors.black.withValues(alpha: 0.04),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
@@ -224,6 +246,7 @@ class SellerInformationPage extends StatelessWidget {
                   ),
                   child: Column(
                     children: [
+                      // PROFILE IMAGE
                       Container(
                         width: 78,
                         height: 78,
@@ -233,32 +256,65 @@ class SellerInformationPage extends StatelessWidget {
                           ),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(
-                          Icons.storefront,
-                          size: 40,
-                          color: Colors.redAccent,
+                        child: ClipOval(
+                          child: profileImageUrl.isNotEmpty
+                              ? Image.network(
+                                  profileImageUrl,
+                                  width: 78,
+                                  height: 78,
+                                  fit: BoxFit.cover,
+                                  errorBuilder:
+                                      (context, error, stackTrace) {
+                                    return const Icon(
+                                      Icons.storefront,
+                                      size: 40,
+                                      color: Colors.redAccent,
+                                    );
+                                  },
+                                )
+                              : const Icon(
+                                  Icons.storefront,
+                                  size: 40,
+                                  color: Colors.redAccent,
+                                ),
                         ),
                       ),
+
                       const SizedBox(height: 14),
+
                       Text(
-                        name.isEmpty
-                            ? 'BuyNova Seller'
-                            : name,
+                        name.isEmpty ? 'BuyNova Seller' : name,
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           fontSize: 21,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        email,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 13,
+
+                      if (shopName.isNotEmpty) ...[
+                        const SizedBox(height: 5),
+                        Text(
+                          shopName,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.grey.shade700,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      ),
+                      ],
+
+                      if (email.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          email,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -281,7 +337,9 @@ class SellerInformationPage extends StatelessWidget {
 
                 _informationCard(
                   title: 'Seller ID',
-                  value: sellerId,
+                  value: sellerCode.isEmpty
+                      ? 'Not assigned'
+                      : sellerCode,
                   icon: Icons.badge_outlined,
                 ),
 
@@ -291,17 +349,19 @@ class SellerInformationPage extends StatelessWidget {
                   icon: Icons.person_outline,
                 ),
 
-                _informationCard(
-                  title: 'Email',
-                  value: email,
-                  icon: Icons.email_outlined,
-                ),
+                if (email.isNotEmpty)
+                  _informationCard(
+                    title: 'Email',
+                    value: email,
+                    icon: Icons.email_outlined,
+                  ),
 
-                _informationCard(
-                  title: 'Phone',
-                  value: phone,
-                  icon: Icons.phone_outlined,
-                ),
+                if (phone.isNotEmpty)
+                  _informationCard(
+                    title: 'Phone',
+                    value: phone,
+                    icon: Icons.phone_outlined,
+                  ),
 
                 if (shopName.isNotEmpty)
                   _informationCard(
@@ -348,12 +408,10 @@ class SellerInformationPage extends StatelessWidget {
                           color: statusColor.withValues(
                             alpha: 0.12,
                           ),
-                          borderRadius:
-                              BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(14),
                         ),
                         child: Icon(
-                          sellerStatus.toLowerCase() ==
-                                  'approved'
+                          sellerStatus.toLowerCase() == 'approved'
                               ? Icons.verified
                               : Icons.info_outline,
                           color: statusColor,
@@ -369,8 +427,7 @@ class SellerInformationPage extends StatelessWidget {
                             Text(
                               'Current Status',
                               style: TextStyle(
-                                color:
-                                    Colors.grey.shade600,
+                                color: Colors.grey.shade600,
                                 fontSize: 12,
                               ),
                             ),
@@ -396,21 +453,26 @@ class SellerInformationPage extends StatelessWidget {
                 // ACCOUNT INFORMATION
                 // =================================================
 
-                const Text(
-                  'Account Information',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
+                // Keep Firebase UID visible only on the seller's
+                // own information page. This prevents exposing the
+                // Firebase UID when customers view another seller.
+                if (isOwnProfile) ...[
+                  const Text(
+                    'Account Information',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
 
-                const SizedBox(height: 12),
+                  const SizedBox(height: 12),
 
-                _informationCard(
-                  title: 'Firebase Account ID',
-                  value: user.uid,
-                  icon: Icons.fingerprint,
-                ),
+                  _informationCard(
+                    title: 'Firebase Account ID',
+                    value: currentUser!.uid,
+                    icon: Icons.fingerprint,
+                  ),
+                ],
 
                 const SizedBox(height: 20),
               ],
