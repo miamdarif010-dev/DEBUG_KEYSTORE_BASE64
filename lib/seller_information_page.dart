@@ -195,7 +195,10 @@ class SellerInformationPage extends StatelessWidget {
             );
           }
 
-          final data = snapshot.data?.data() ?? {};
+          // FIXED:
+          // snapshot.data is guaranteed to be non-null after
+          // the hasData check above.
+          final data = snapshot.data!.data() ?? {};
 
           final name = data['name']?.toString() ?? '';
 
@@ -469,7 +472,7 @@ class SellerInformationPage extends StatelessWidget {
 
                   _informationCard(
                     title: 'Firebase Account ID',
-                    value: currentUser!.uid,
+                    value: currentUser.uid,
                     icon: Icons.fingerprint,
                   ),
                 ],
