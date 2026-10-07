@@ -16,6 +16,7 @@ import 'news_feed_page.dart';
 import 'product_details_page.dart';
 import 'global_notifications_page.dart';
 import 'coupon_page.dart';
+import 'seller_information_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -79,6 +80,10 @@ class _HomePageState extends State<HomePage>
     super.dispose();
   }
 
+  // =========================================================
+  // CATEGORY
+  // =========================================================
+
   bool _matchesCategory(Map<String, dynamic> productData) {
     final selectedCategory = categories[_selectedCategory];
 
@@ -86,14 +91,81 @@ class _HomePageState extends State<HomePage>
       return true;
     }
 
-    final productCategory = productData['category']?.toString().trim() ?? '';
+    final productCategory =
+        productData['category']?.toString().trim() ?? '';
 
     if (productCategory.isEmpty) {
       return false;
     }
 
-    return productCategory.toLowerCase() == selectedCategory.toLowerCase();
+    return productCategory.toLowerCase() ==
+        selectedCategory.toLowerCase();
   }
+
+  IconData _categoryIcon(String category) {
+    switch (category.toLowerCase()) {
+      case 'all':
+        return Icons.apps_rounded;
+      case 'phones':
+        return Icons.phone_iphone;
+      case 'laptops':
+        return Icons.laptop_mac;
+      case 'watches':
+        return Icons.watch;
+      case 'earbuds':
+        return Icons.headphones;
+      case 'cameras':
+        return Icons.camera_alt;
+      case 'fashion':
+        return Icons.checkroom;
+      case 'shoes':
+        return Icons.directions_run;
+      case 'bags':
+        return Icons.shopping_bag;
+      case 'beauty':
+        return Icons.face_retouching_natural;
+      case 'sports':
+        return Icons.sports_soccer;
+      case 'toys':
+        return Icons.toys;
+      case 'grocery':
+        return Icons.local_grocery_store;
+      default:
+        return Icons.category;
+    }
+  }
+
+  String? _getCategoryImageUrl(
+    String category,
+    List<QueryDocumentSnapshot> products,
+  ) {
+    final normalizedCategory = category.trim().toLowerCase();
+
+    for (final product in products) {
+      final data = product.data() as Map<String, dynamic>;
+
+      final imageUrl =
+          data['imageUrl']?.toString().trim() ?? '';
+
+      if (imageUrl.isEmpty) {
+        continue;
+      }
+
+      final productCategory =
+          data['category']?.toString().trim().toLowerCase() ?? '';
+
+      if (normalizedCategory == 'all' ||
+          productCategory == normalizedCategory) {
+        return imageUrl;
+      }
+    }
+
+    return null;
+  }
+
+  // =========================================================
+  // PRICE
+  // =========================================================
 
   double _displayBdtPrice(Map<String, dynamic> productData) {
     final rawPrice = productData['price'] is num
@@ -116,6 +188,10 @@ class _HomePageState extends State<HomePage>
     return '৳${bdtPrice.toStringAsFixed(2)}';
   }
 
+  // =========================================================
+  // FAVORITES
+  // =========================================================
+
   DocumentReference<Map<String, dynamic>> _favoriteReference(
     String userId,
     String productId,
@@ -132,7 +208,10 @@ class _HomePageState extends State<HomePage>
     required String productId,
     required Map<String, dynamic> productData,
   }) async {
-    final favoriteRef = _favoriteReference(user.uid, productId);
+    final favoriteRef = _favoriteReference(
+      user.uid,
+      productId,
+    );
 
     try {
       final favoriteSnapshot = await favoriteRef.get();
@@ -150,10 +229,17 @@ class _HomePageState extends State<HomePage>
           ),
         );
       } else {
-        final name = productData['name']?.toString() ?? 'Unnamed Product';
-        final imageUrl = productData['imageUrl']?.toString() ?? '';
-        final category = productData['category']?.toString() ?? '';
-        final price = _displayBdtPrice(productData);
+        final name =
+            productData['name']?.toString() ?? 'Unnamed Product';
+
+        final imageUrl =
+            productData['imageUrl']?.toString() ?? '';
+
+        final category =
+            productData['category']?.toString() ?? '';
+
+        final price =
+            _displayBdtPrice(productData);
 
         await favoriteRef.set({
           'productId': productId,
@@ -189,6 +275,64 @@ class _HomePageState extends State<HomePage>
     }
   }
 
+  // =========================================================
+  // SELLER PROFILE
+  // =========================================================
+
+  String? _getProductSellerId(
+    Map<String, dynamic> product,
+  ) {
+    // Reseller/Entrepreneur product:
+    final entrepreneurUid =
+        product['entrepreneurUid']?.toString().trim() ?? '';
+
+    if (entrepreneurUid.isNotEmpty) {
+      return entrepreneurUid;
+    }
+
+    // Normal seller product:
+    final sellerId =
+        product['sellerId']?.toString().trim() ?? '';
+
+    if (sellerId.isNotEmpty) {
+      return sellerId;
+    }
+
+    return null;
+  }
+
+  Future<void> _openSellerProfile({
+    required Map<String, dynamic> product,
+  }) async {
+    final sellerId = _getProductSellerId(product);
+
+    if (sellerId == null || sellerId.isEmpty) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Seller information is not available.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      return;
+    }
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SellerInformationPage(
+          sellerId: sellerId,
+        ),
+      ),
+    );
+  }
+
+  // =========================================================
+  // PRODUCT DETAILS
+  // =========================================================
+
   void _openProductDetails({
     required String productId,
     required Map<String, dynamic> product,
@@ -204,11 +348,16 @@ class _HomePageState extends State<HomePage>
     );
   }
 
+  // =========================================================
+  // GLOBAL NOTIFICATIONS
+  // =========================================================
+
   Future<void> _openGlobalNotifications() async {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const GlobalNotificationsPage(),
+        builder: (context) =>
+            const GlobalNotificationsPage(),
       ),
     );
 
@@ -217,18 +366,24 @@ class _HomePageState extends State<HomePage>
     }
   }
 
-  // ------------------------------------------------------------
+  // =========================================================
   // CAMERA / GALLERY IMAGE SEARCH
-  // ------------------------------------------------------------
+  // =========================================================
 
   Future<void> _openCameraSearch() async {
-    final ImageSource? source = await showModalBottomSheet<ImageSource>(
+    final ImageSource? source =
+        await showModalBottomSheet<ImageSource>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (context) {
         return SafeArea(
           child: Container(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+            padding: const EdgeInsets.fromLTRB(
+              16,
+              12,
+              16,
+              20,
+            ),
             decoration: const BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.vertical(
@@ -241,10 +396,12 @@ class _HomePageState extends State<HomePage>
                 Container(
                   width: 42,
                   height: 4,
-                  margin: const EdgeInsets.only(bottom: 18),
+                  margin:
+                      const EdgeInsets.only(bottom: 18),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius:
+                        BorderRadius.circular(10),
                   ),
                 ),
                 const Align(
@@ -264,8 +421,11 @@ class _HomePageState extends State<HomePage>
                     width: 48,
                     height: 48,
                     decoration: BoxDecoration(
-                      color: Colors.redAccent.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(14),
+                      color: Colors.redAccent.withValues(
+                        alpha: 0.10,
+                      ),
+                      borderRadius:
+                          BorderRadius.circular(14),
                     ),
                     child: const Icon(
                       Icons.camera_alt_outlined,
@@ -274,11 +434,18 @@ class _HomePageState extends State<HomePage>
                   ),
                   title: const Text(
                     'Take Photo',
-                    style: TextStyle(fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                  subtitle: const Text('Take a new picture with camera'),
+                  subtitle: const Text(
+                    'Take a new picture with camera',
+                  ),
                   onTap: () {
-                    Navigator.pop(context, ImageSource.camera);
+                    Navigator.pop(
+                      context,
+                      ImageSource.camera,
+                    );
                   },
                 ),
                 const SizedBox(height: 6),
@@ -288,8 +455,11 @@ class _HomePageState extends State<HomePage>
                     width: 48,
                     height: 48,
                     decoration: BoxDecoration(
-                      color: Colors.blueAccent.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(14),
+                      color: Colors.blueAccent.withValues(
+                        alpha: 0.10,
+                      ),
+                      borderRadius:
+                          BorderRadius.circular(14),
                     ),
                     child: const Icon(
                       Icons.photo_library_outlined,
@@ -298,11 +468,18 @@ class _HomePageState extends State<HomePage>
                   ),
                   title: const Text(
                     'Choose from Gallery',
-                    style: TextStyle(fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                  subtitle: const Text('Select an existing product photo'),
+                  subtitle: const Text(
+                    'Select an existing product photo',
+                  ),
                   onTap: () {
-                    Navigator.pop(context, ImageSource.gallery);
+                    Navigator.pop(
+                      context,
+                      ImageSource.gallery,
+                    );
                   },
                 ),
                 const SizedBox(height: 8),
@@ -346,18 +523,22 @@ class _HomePageState extends State<HomePage>
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Could not select image: $e'),
+          content: Text(
+            'Could not select image: $e',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
     }
   }
 
-  // ------------------------------------------------------------
+  // =========================================================
   // IMAGE PREVIEW
-  // ------------------------------------------------------------
+  // =========================================================
 
-  Future<void> _showImagePreview(XFile image) async {
+  Future<void> _showImagePreview(
+    XFile image,
+  ) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -378,10 +559,12 @@ class _HomePageState extends State<HomePage>
                 Container(
                   width: 42,
                   height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
+                  margin:
+                      const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius:
+                        BorderRadius.circular(10),
                   ),
                 ),
                 const Align(
@@ -396,7 +579,8 @@ class _HomePageState extends State<HomePage>
                 ),
                 const SizedBox(height: 12),
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius:
+                      BorderRadius.circular(16),
                   child: Image.file(
                     File(image.path),
                     width: double.infinity,
@@ -409,11 +593,19 @@ class _HomePageState extends State<HomePage>
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size.fromHeight(50),
-                          side: const BorderSide(color: Colors.redAccent),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
+                        style:
+                            OutlinedButton.styleFrom(
+                          minimumSize:
+                              const Size.fromHeight(50),
+                          side: const BorderSide(
+                            color: Colors.redAccent,
+                          ),
+                          shape:
+                              RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(
+                              14,
+                            ),
                           ),
                         ),
                         onPressed: () async {
@@ -436,22 +628,34 @@ class _HomePageState extends State<HomePage>
                     const SizedBox(width: 10),
                     Expanded(
                       child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.redAccent,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size.fromHeight(50),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
+                        style:
+                            ElevatedButton.styleFrom(
+                          backgroundColor:
+                              Colors.redAccent,
+                          foregroundColor:
+                              Colors.white,
+                          minimumSize:
+                              const Size.fromHeight(50),
+                          shape:
+                              RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(
+                              14,
+                            ),
                           ),
                         ),
                         onPressed: () async {
                           Navigator.pop(context);
-                          await _findProductsFromImage(image);
+                          await _findProductsFromImage(
+                            image,
+                          );
                         },
                         icon: const Icon(Icons.search),
                         label: const Text(
                           'Use Photo',
-                          style: TextStyle(fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
@@ -476,11 +680,13 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  // ------------------------------------------------------------
-  // IMAGE ANALYSIS + FIRESTORE PRODUCT MATCHING
-  // ------------------------------------------------------------
+  // =========================================================
+  // IMAGE ANALYSIS
+  // =========================================================
 
-  Future<void> _findProductsFromImage(XFile image) async {
+  Future<void> _findProductsFromImage(
+    XFile image,
+  ) async {
     if (!mounted) return;
 
     showDialog<void>(
@@ -493,10 +699,16 @@ class _HomePageState extends State<HomePage>
               SizedBox(
                 width: 28,
                 height: 28,
-                child: CircularProgressIndicator(strokeWidth: 3),
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                ),
               ),
               SizedBox(width: 18),
-              Expanded(child: Text('Analyzing image...')),
+              Expanded(
+                child: Text(
+                  'Analyzing image...',
+                ),
+              ),
             ],
           ),
         );
@@ -506,34 +718,56 @@ class _HomePageState extends State<HomePage>
     ImageLabeler? imageLabeler;
 
     try {
-      final inputImage = InputImage.fromFilePath(image.path);
+      final inputImage =
+          InputImage.fromFilePath(image.path);
 
       imageLabeler = ImageLabeler(
-        options: ImageLabelerOptions(confidenceThreshold: 0.45),
+        options: ImageLabelerOptions(
+          confidenceThreshold: 0.45,
+        ),
       );
 
-      final labels = await imageLabeler.processImage(inputImage);
+      final labels =
+          await imageLabeler.processImage(inputImage);
 
       final detectedLabels = labels
-          .map((label) => label.label.trim().toLowerCase())
-          .where((label) => label.isNotEmpty)
+          .map(
+            (label) =>
+                label.label.trim().toLowerCase(),
+          )
+          .where(
+            (label) => label.isNotEmpty,
+          )
           .toSet()
           .toList();
 
       final snapshot =
-          await FirebaseFirestore.instance.collection('products').get();
+          await FirebaseFirestore.instance
+              .collection('products')
+              .get();
 
-      final matchedProducts = <QueryDocumentSnapshot>[];
+      final matchedProducts =
+          <QueryDocumentSnapshot>[];
 
       for (final doc in snapshot.docs) {
         final data = doc.data();
 
-        final productName = data['name']?.toString().toLowerCase() ?? '';
-        final category = data['category']?.toString().toLowerCase() ?? '';
-        final description =
-            data['description']?.toString().toLowerCase() ?? '';
+        final productName =
+            data['name']?.toString().toLowerCase() ??
+                '';
 
-        final searchText = '$productName $category $description';
+        final category =
+            data['category']?.toString().toLowerCase() ??
+                '';
+
+        final description =
+            data['description']
+                    ?.toString()
+                    .toLowerCase() ??
+                '';
+
+        final searchText =
+            '$productName $category $description';
 
         bool matched = false;
 
@@ -545,7 +779,9 @@ class _HomePageState extends State<HomePage>
 
           final words = label
               .split(RegExp(r'[\s\-_]+'))
-              .where((word) => word.length >= 3);
+              .where(
+                (word) => word.length >= 3,
+              );
 
           for (final word in words) {
             if (searchText.contains(word)) {
@@ -587,16 +823,18 @@ class _HomePageState extends State<HomePage>
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Image search failed: $e'),
+          content: Text(
+            'Image search failed: $e',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
     }
   }
 
-  // ------------------------------------------------------------
+  // =========================================================
   // IMAGE SEARCH RESULTS
-  // ------------------------------------------------------------
+  // =========================================================
 
   Future<void> _showImageSearchResults({
     required XFile image,
@@ -612,7 +850,8 @@ class _HomePageState extends State<HomePage>
       builder: (context) {
         return SafeArea(
           child: Container(
-            height: MediaQuery.of(context).size.height * 0.82,
+            height:
+                MediaQuery.of(context).size.height * 0.82,
             decoration: const BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.vertical(
@@ -627,12 +866,14 @@ class _HomePageState extends State<HomePage>
                   height: 4,
                   decoration: BoxDecoration(
                     color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius:
+                        BorderRadius.circular(10),
                   ),
                 ),
                 const SizedBox(height: 16),
                 const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  padding:
+                      EdgeInsets.symmetric(horizontal: 16),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
@@ -646,11 +887,15 @@ class _HomePageState extends State<HomePage>
                 ),
                 const SizedBox(height: 12),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding:
+                      const EdgeInsets.symmetric(
+                    horizontal: 16,
+                  ),
                   child: Row(
                     children: [
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius:
+                            BorderRadius.circular(12),
                         child: Image.file(
                           File(image.path),
                           width: 70,
@@ -661,21 +906,29 @@ class _HomePageState extends State<HomePage>
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start,
                           children: [
                             const Text(
                               'Detected:',
-                              style: TextStyle(fontWeight: FontWeight.bold),
+                              style: TextStyle(
+                                fontWeight:
+                                    FontWeight.bold,
+                              ),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               detectedLabels.isEmpty
                                   ? 'No clear object detected'
-                                  : detectedLabels.take(5).join(', '),
+                                  : detectedLabels
+                                      .take(5)
+                                      .join(', '),
                               maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
+                              overflow:
+                                  TextOverflow.ellipsis,
                               style: TextStyle(
-                                color: Colors.grey.shade700,
+                                color:
+                                    Colors.grey.shade700,
                               ),
                             ),
                           ],
@@ -690,30 +943,37 @@ class _HomePageState extends State<HomePage>
                   child: products.isEmpty
                       ? Center(
                           child: Padding(
-                            padding: const EdgeInsets.all(30),
+                            padding:
+                                const EdgeInsets.all(30),
                             child: Column(
-                              mainAxisSize: MainAxisSize.min,
+                              mainAxisSize:
+                                  MainAxisSize.min,
                               children: [
                                 Icon(
                                   Icons.search_off_rounded,
                                   size: 60,
-                                  color: Colors.grey.shade400,
+                                  color:
+                                      Colors.grey.shade400,
                                 ),
                                 const SizedBox(height: 14),
                                 const Text(
                                   'No matching products found',
-                                  textAlign: TextAlign.center,
+                                  textAlign:
+                                      TextAlign.center,
                                   style: TextStyle(
                                     fontSize: 18,
-                                    fontWeight: FontWeight.bold,
+                                    fontWeight:
+                                        FontWeight.bold,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
                                   'Try another photo with the product clearly visible.',
-                                  textAlign: TextAlign.center,
+                                  textAlign:
+                                      TextAlign.center,
                                   style: TextStyle(
-                                    color: Colors.grey.shade600,
+                                    color:
+                                        Colors.grey.shade600,
                                   ),
                                 ),
                               ],
@@ -721,31 +981,52 @@ class _HomePageState extends State<HomePage>
                           ),
                         )
                       : ListView.builder(
-                          padding: const EdgeInsets.all(12),
+                          padding:
+                              const EdgeInsets.all(12),
                           itemCount: products.length,
-                          itemBuilder: (context, index) {
-                            final doc = products[index];
+                          itemBuilder:
+                              (context, index) {
+                            final doc =
+                                products[index];
 
                             final data =
-                                doc.data() as Map<String, dynamic>;
+                                doc.data()
+                                    as Map<String, dynamic>;
 
                             final name =
-                                data['name']?.toString() ?? 'Unnamed Product';
+                                data['name']?.toString() ??
+                                    'Unnamed Product';
 
-                            final imageUrl = data['imageUrl']?.toString();
+                            final imageUrl =
+                                data['imageUrl']
+                                    ?.toString();
 
-                            final price = _formatBdtPrice(data);
+                            final price =
+                                _formatBdtPrice(data);
 
                             return Card(
                               elevation: 2,
-                              margin: const EdgeInsets.only(bottom: 10),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
+                              margin:
+                                  const EdgeInsets.only(
+                                bottom: 10,
+                              ),
+                              shape:
+                                  RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.circular(
+                                  14,
+                                ),
                               ),
                               child: ListTile(
-                                contentPadding: const EdgeInsets.all(8),
+                                contentPadding:
+                                    const EdgeInsets.all(
+                                  8,
+                                ),
                                 leading: ClipRRect(
-                                  borderRadius: BorderRadius.circular(10),
+                                  borderRadius:
+                                      BorderRadius.circular(
+                                    10,
+                                  ),
                                   child: imageUrl != null &&
                                           imageUrl.isNotEmpty
                                       ? Image.network(
@@ -753,7 +1034,8 @@ class _HomePageState extends State<HomePage>
                                           width: 65,
                                           height: 65,
                                           fit: BoxFit.cover,
-                                          errorBuilder: (
+                                          errorBuilder:
+                                              (
                                             context,
                                             error,
                                             stackTrace,
@@ -761,39 +1043,60 @@ class _HomePageState extends State<HomePage>
                                             return Container(
                                               width: 65,
                                               height: 65,
-                                              color: Colors.grey.shade200,
-                                              child: const Icon(Icons.image),
+                                              color: Colors
+                                                  .grey
+                                                  .shade200,
+                                              child:
+                                                  const Icon(
+                                                Icons.image,
+                                              ),
                                             );
                                           },
                                         )
                                       : Container(
                                           width: 65,
                                           height: 65,
-                                          color: Colors.grey.shade200,
-                                          child: const Icon(Icons.image),
+                                          color: Colors
+                                              .grey
+                                              .shade200,
+                                          child:
+                                              const Icon(
+                                            Icons.image,
+                                          ),
                                         ),
                                 ),
                                 title: Text(
                                   name,
                                   maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
+                                  overflow:
+                                      TextOverflow.ellipsis,
+                                  style:
+                                      const TextStyle(
+                                    fontWeight:
+                                        FontWeight.bold,
                                   ),
                                 ),
                                 subtitle: Padding(
-                                  padding: const EdgeInsets.only(top: 5),
+                                  padding:
+                                      const EdgeInsets.only(
+                                    top: 5,
+                                  ),
                                   child: Text(
                                     price,
-                                    style: const TextStyle(
-                                      color: Colors.redAccent,
-                                      fontWeight: FontWeight.bold,
+                                    style:
+                                        const TextStyle(
+                                      color:
+                                          Colors.redAccent,
+                                      fontWeight:
+                                          FontWeight.bold,
                                       fontSize: 16,
                                     ),
                                   ),
                                 ),
-                                trailing: const Icon(
-                                  Icons.arrow_forward_ios,
+                                trailing:
+                                    const Icon(
+                                  Icons
+                                      .arrow_forward_ios,
                                   size: 16,
                                 ),
                                 onTap: () {
@@ -817,9 +1120,9 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  // ------------------------------------------------------------
+  // =========================================================
   // COUPON
-  // ------------------------------------------------------------
+  // =========================================================
 
   void _openCoupon() {
     Navigator.push(
@@ -830,9 +1133,9 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  // ------------------------------------------------------------
+  // =========================================================
   // BOTTOM NAVIGATION
-  // ------------------------------------------------------------
+  // =========================================================
 
   Future<void> _onNavTap(int index) async {
     setState(() {
@@ -844,15 +1147,18 @@ class _HomePageState extends State<HomePage>
     }
 
     if (index == 1) {
-      final result = await Navigator.push<String>(
+      final result =
+          await Navigator.push<String>(
         context,
         MaterialPageRoute(
-          builder: (context) => const CategoriesPage(),
+          builder: (context) =>
+              const CategoriesPage(),
         ),
       );
 
       if (result != null && mounted) {
-        final matchIndex = categories.indexOf(result);
+        final matchIndex =
+            categories.indexOf(result);
 
         if (matchIndex != -1) {
           setState(() {
@@ -874,7 +1180,8 @@ class _HomePageState extends State<HomePage>
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => const NewsFeedPage(),
+          builder: (context) =>
+              const NewsFeedPage(),
         ),
       );
 
@@ -905,20 +1212,23 @@ class _HomePageState extends State<HomePage>
     }
 
     if (index == 4) {
-      final currentUser = FirebaseAuth.instance.currentUser;
+      final currentUser =
+          FirebaseAuth.instance.currentUser;
 
       if (currentUser == null) {
         await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => const LoginPage(),
+            builder: (context) =>
+                const LoginPage(),
           ),
         );
       } else {
         await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => const UserProfilePage(),
+            builder: (context) =>
+                const UserProfilePage(),
           ),
         );
       }
@@ -931,44 +1241,47 @@ class _HomePageState extends State<HomePage>
     }
   }
 
-  // ------------------------------------------------------------
+  // =========================================================
   // VIDEOS
-  // ------------------------------------------------------------
+  // =========================================================
 
   void _openVideos() {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const NewsFeedPage(),
+        builder: (context) =>
+            const NewsFeedPage(),
       ),
     );
   }
 
-  // ------------------------------------------------------------
+  // =========================================================
   // ACCOUNT
-  // ------------------------------------------------------------
+  // =========================================================
 
   void _openAccount(bool isLoggedIn) {
     if (isLoggedIn) {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => const UserProfilePage(),
+          builder: (context) =>
+              const UserProfilePage(),
         ),
       );
     } else {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => const LoginPage(),
+          builder: (context) =>
+              const LoginPage(),
         ),
       );
     }
   }
 
-  // ------------------------------------------------------------
+  // =========================================================
   // BUYNOVA LOGO
-  // ------------------------------------------------------------
+  // =========================================================
 
   Widget _buildBuyNovaLogo() {
     return RichText(
@@ -979,16 +1292,48 @@ class _HomePageState extends State<HomePage>
           letterSpacing: -0.4,
         ),
         children: [
-          TextSpan(text: 'B', style: TextStyle(color: Colors.white)),
-          TextSpan(text: 'u', style: TextStyle(color: Colors.yellow)),
-          TextSpan(text: 'y', style: TextStyle(color: Colors.orange)),
-          TextSpan(text: 'N', style: TextStyle(color: Colors.greenAccent)),
+          TextSpan(
+            text: 'B',
+            style: TextStyle(
+              color: Colors.white,
+            ),
+          ),
+          TextSpan(
+            text: 'u',
+            style: TextStyle(
+              color: Colors.yellow,
+            ),
+          ),
+          TextSpan(
+            text: 'y',
+            style: TextStyle(
+              color: Colors.orange,
+            ),
+          ),
+          TextSpan(
+            text: 'N',
+            style: TextStyle(
+              color: Colors.greenAccent,
+            ),
+          ),
           TextSpan(
             text: 'o',
-            style: TextStyle(color: Colors.lightBlueAccent),
+            style: TextStyle(
+              color: Colors.lightBlueAccent,
+            ),
           ),
-          TextSpan(text: 'v', style: TextStyle(color: Colors.white)),
-          TextSpan(text: 'a', style: TextStyle(color: Colors.cyanAccent)),
+          TextSpan(
+            text: 'v',
+            style: TextStyle(
+              color: Colors.white,
+            ),
+          ),
+          TextSpan(
+            text: 'a',
+            style: TextStyle(
+              color: Colors.cyanAccent,
+            ),
+          ),
         ],
       ),
     );
@@ -1000,20 +1345,27 @@ class _HomePageState extends State<HomePage>
       child: GestureDetector(
         onTap: _openCoupon,
         child: Container(
-          padding: const EdgeInsets.symmetric(
+          padding:
+              const EdgeInsets.symmetric(
             horizontal: 9,
             vertical: 5,
           ),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                Colors.yellowAccent.withValues(alpha: 0.16),
-                Colors.white.withValues(alpha: 0.10),
+                Colors.yellowAccent.withValues(
+                  alpha: 0.16,
+                ),
+                Colors.white.withValues(
+                  alpha: 0.10,
+                ),
               ],
             ),
-            borderRadius: BorderRadius.circular(9),
+            borderRadius:
+                BorderRadius.circular(9),
             border: Border.all(
-              color: Colors.yellowAccent.withValues(alpha: 0.75),
+              color: Colors.yellowAccent
+                  .withValues(alpha: 0.75),
               width: 1,
             ),
           ),
@@ -1030,16 +1382,19 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  // ------------------------------------------------------------
+  // =========================================================
   // CART BADGE
-  // ------------------------------------------------------------
+  // =========================================================
 
   Widget _buildCartNavIcon(User? user) {
     if (user == null) {
-      return const Icon(Icons.shopping_cart_outlined);
+      return const Icon(
+        Icons.shopping_cart_outlined,
+      );
     }
 
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+    return StreamBuilder<
+        QuerySnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -1049,10 +1404,12 @@ class _HomePageState extends State<HomePage>
         int cartCount = 0;
 
         if (snapshot.hasData) {
-          for (final doc in snapshot.data!.docs) {
+          for (final doc
+              in snapshot.data!.docs) {
             final data = doc.data();
 
-            final quantity = data['quantity'];
+            final quantity =
+                data['quantity'];
 
             if (quantity is num) {
               cartCount += quantity.toInt();
@@ -1065,32 +1422,41 @@ class _HomePageState extends State<HomePage>
         return Stack(
           clipBehavior: Clip.none,
           children: [
-            const Icon(Icons.shopping_cart_outlined),
-
+            const Icon(
+              Icons.shopping_cart_outlined,
+            ),
             if (cartCount > 0)
               Positioned(
                 right: -9,
                 top: -9,
                 child: Container(
-                  constraints: const BoxConstraints(
+                  constraints:
+                      const BoxConstraints(
                     minWidth: 18,
                     minHeight: 18,
                   ),
-                  padding: const EdgeInsets.symmetric(
+                  padding:
+                      const EdgeInsets.symmetric(
                     horizontal: 4,
                     vertical: 2,
                   ),
-                  decoration: const BoxDecoration(
+                  decoration:
+                      const BoxDecoration(
                     color: Colors.redAccent,
                     shape: BoxShape.circle,
                   ),
                   child: Text(
-                    cartCount > 99 ? '99+' : '$cartCount',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    cartCount > 99
+                        ? '99+'
+                        : '$cartCount',
+                    textAlign:
+                        TextAlign.center,
+                    style:
+                        const TextStyle(
                       color: Colors.white,
                       fontSize: 9,
-                      fontWeight: FontWeight.bold,
+                      fontWeight:
+                          FontWeight.bold,
                     ),
                   ),
                 ),
@@ -1101,29 +1467,150 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  // ------------------------------------------------------------
+  // =========================================================
+  // CATEGORY WIDGET
+  // =========================================================
+
+  Widget _buildCategoryItem({
+    required String category,
+    required int index,
+    required List<QueryDocumentSnapshot> products,
+  }) {
+    final isSelected =
+        _selectedCategory == index;
+
+    final imageUrl =
+        _getCategoryImageUrl(
+      category,
+      products,
+    );
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedCategory = index;
+        });
+      },
+      child: SizedBox(
+        width: 78,
+        child: Column(
+          mainAxisAlignment:
+              MainAxisAlignment.center,
+          children: [
+            AnimatedContainer(
+              duration:
+                  const Duration(
+                milliseconds: 180,
+              ),
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.grey.shade100,
+                border: Border.all(
+                  color: isSelected
+                      ? Colors.redAccent
+                      : Colors.grey.shade200,
+                  width: isSelected ? 2.5 : 1,
+                ),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: Colors.redAccent
+                              .withValues(
+                            alpha: 0.18,
+                          ),
+                          blurRadius: 7,
+                          spreadRadius: 1,
+                        ),
+                      ]
+                    : null,
+              ),
+              child: ClipOval(
+                child: imageUrl != null &&
+                        imageUrl.isNotEmpty
+                    ? Image.network(
+                        imageUrl,
+                        width: 60,
+                        height: 60,
+                        fit: BoxFit.cover,
+                        errorBuilder:
+                            (
+                          context,
+                          error,
+                          stackTrace,
+                        ) {
+                          return Icon(
+                            _categoryIcon(
+                              category,
+                            ),
+                            color:
+                                isSelected
+                                    ? Colors.redAccent
+                                    : Colors.grey.shade600,
+                            size: 28,
+                          );
+                        },
+                      )
+                    : Icon(
+                        _categoryIcon(category),
+                        color: isSelected
+                            ? Colors.redAccent
+                            : Colors.grey.shade600,
+                        size: 28,
+                      ),
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              category,
+              maxLines: 1,
+              overflow:
+                  TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: isSelected
+                    ? Colors.redAccent
+                    : Colors.black87,
+                fontSize: 11,
+                fontWeight: isSelected
+                    ? FontWeight.bold
+                    : FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // =========================================================
   // BUILD
-  // ------------------------------------------------------------
+  // =========================================================
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
+      stream: FirebaseAuth.instance
+          .authStateChanges(),
       builder: (context, authSnapshot) {
         final user = authSnapshot.data;
         final isLoggedIn = user != null;
 
         return Scaffold(
-          // ----------------------------------------------------
+          // ==================================================
           // DRAWER
-          // ----------------------------------------------------
+          // ==================================================
+
           drawer: Drawer(
             child: SafeArea(
               child: ListView(
                 padding: EdgeInsets.zero,
                 children: [
                   const DrawerHeader(
-                    decoration: BoxDecoration(color: Colors.redAccent),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent,
+                    ),
                     child: Row(
                       children: [
                         Icon(
@@ -1137,23 +1624,32 @@ class _HomePageState extends State<HomePage>
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 24,
-                            fontWeight: FontWeight.bold,
+                            fontWeight:
+                                FontWeight.bold,
                           ),
                         ),
                       ],
                     ),
                   ),
                   ListTile(
-                    leading: const Icon(Icons.person_outline),
-                    title: const Text('Account'),
+                    leading: const Icon(
+                      Icons.person_outline,
+                    ),
+                    title:
+                        const Text('Account'),
                     onTap: () {
                       Navigator.pop(context);
-                      _openAccount(isLoggedIn);
+                      _openAccount(
+                        isLoggedIn,
+                      );
                     },
                   ),
                   ListTile(
-                    leading: const Icon(Icons.home_outlined),
-                    title: const Text('Home'),
+                    leading: const Icon(
+                      Icons.home_outlined,
+                    ),
+                    title:
+                        const Text('Home'),
                     onTap: () {
                       Navigator.pop(context);
 
@@ -1163,24 +1659,35 @@ class _HomePageState extends State<HomePage>
                     },
                   ),
                   ListTile(
-                    leading: const Icon(Icons.category_outlined),
-                    title: const Text('Categories'),
+                    leading: const Icon(
+                      Icons.category_outlined,
+                    ),
+                    title:
+                        const Text('Categories'),
                     onTap: () async {
                       Navigator.pop(context);
 
-                      final result = await Navigator.push<String>(
+                      final result =
+                          await Navigator.push<
+                              String>(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const CategoriesPage(),
+                          builder: (context) =>
+                              const CategoriesPage(),
                         ),
                       );
 
-                      if (result != null && mounted) {
-                        final matchIndex = categories.indexOf(result);
+                      if (result != null &&
+                          mounted) {
+                        final matchIndex =
+                            categories.indexOf(
+                          result,
+                        );
 
                         if (matchIndex != -1) {
                           setState(() {
-                            _selectedCategory = matchIndex;
+                            _selectedCategory =
+                                matchIndex;
                           });
                         }
                       }
@@ -1188,64 +1695,91 @@ class _HomePageState extends State<HomePage>
                   ),
                   if (isLoggedIn)
                     ListTile(
-                      leading: const Icon(Icons.add_circle_outline),
-                      title: const Text('Add Product'),
+                      leading: const Icon(
+                        Icons.add_circle_outline,
+                      ),
+                      title: const Text(
+                        'Add Product',
+                      ),
                       onTap: () {
-                        Navigator.pop(context);
+                        Navigator.pop(
+                          context,
+                        );
 
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const AddProductPage(),
+                            builder: (context) =>
+                                const AddProductPage(),
                           ),
                         );
                       },
                     ),
                   ListTile(
-                    leading: const Icon(Icons.video_library_outlined),
-                    title: const Text('Videos'),
-                    subtitle: const Text('Watch Reels & Videos'),
+                    leading: const Icon(
+                      Icons.video_library_outlined,
+                    ),
+                    title:
+                        const Text('Videos'),
+                    subtitle: const Text(
+                      'Watch Reels & Videos',
+                    ),
                     onTap: () {
                       Navigator.pop(context);
                       _openVideos();
                     },
                   ),
                   ListTile(
-                    leading: const Icon(Icons.shopping_cart_outlined),
-                    title: const Text('Cart'),
+                    leading: const Icon(
+                      Icons.shopping_cart_outlined,
+                    ),
+                    title:
+                        const Text('Cart'),
                     onTap: () {
                       Navigator.pop(context);
 
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const CartPage(),
+                          builder: (context) =>
+                              const CartPage(),
                         ),
                       );
                     },
                   ),
                   ListTile(
-                    leading: const Icon(Icons.settings_outlined),
-                    title: const Text('Settings'),
+                    leading: const Icon(
+                      Icons.settings_outlined,
+                    ),
+                    title:
+                        const Text('Settings'),
                     onTap: () {
                       Navigator.pop(context);
 
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const SettingsPage(),
+                          builder: (context) =>
+                              const SettingsPage(),
                         ),
                       );
                     },
                   ),
                   if (isLoggedIn)
                     ListTile(
-                      leading: const Icon(Icons.logout),
-                      title: const Text('Logout'),
+                      leading: const Icon(
+                        Icons.logout,
+                      ),
+                      title:
+                          const Text('Logout'),
                       onTap: () async {
-                        Navigator.pop(context);
+                        Navigator.pop(
+                          context,
+                        );
 
-                        await FirebaseAuth.instance.signOut();
+                        await FirebaseAuth
+                            .instance
+                            .signOut();
                       },
                     ),
                 ],
@@ -1253,18 +1787,24 @@ class _HomePageState extends State<HomePage>
             ),
           ),
 
-          // ----------------------------------------------------
+          // ==================================================
           // APP BAR
-          // ----------------------------------------------------
+          // ==================================================
+
           appBar: AppBar(
-            backgroundColor: Colors.redAccent,
+            backgroundColor:
+                Colors.redAccent,
             elevation: 0,
             leading: Builder(
               builder: (context) {
                 return IconButton(
-                  icon: const Icon(Icons.menu, color: Colors.white),
+                  icon: const Icon(
+                    Icons.menu,
+                    color: Colors.white,
+                  ),
                   onPressed: () {
-                    Scaffold.of(context).openDrawer();
+                    Scaffold.of(context)
+                        .openDrawer();
                   },
                 );
               },
@@ -1284,75 +1824,124 @@ class _HomePageState extends State<HomePage>
                     Icons.notifications_outlined,
                     color: Colors.white,
                   ),
-                  onPressed: _openGlobalNotifications,
+                  onPressed:
+                      _openGlobalNotifications,
                 )
               else
                 StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('global_notifications')
-                      .where('active', isEqualTo: true)
+                  stream: FirebaseFirestore
+                      .instance
+                      .collection(
+                        'global_notifications',
+                      )
+                      .where(
+                        'active',
+                        isEqualTo: true,
+                      )
                       .snapshots(),
-                  builder: (context, notificationSnapshot) {
+                  builder:
+                      (context, notificationSnapshot) {
                     final notifications =
-                        notificationSnapshot.data?.docs ?? [];
+                        notificationSnapshot
+                                .data
+                                ?.docs ??
+                            [];
 
-                    return StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance
-                          .collection('users')
-                          .doc(user.uid)
-                          .collection('globalNotificationReads')
-                          .snapshots(),
-                      builder: (context, readSnapshot) {
-                        final readIds = <String>{};
+                    return StreamBuilder<
+                        QuerySnapshot>(
+                      stream:
+                          FirebaseFirestore
+                              .instance
+                              .collection(
+                                'users',
+                              )
+                              .doc(user.uid)
+                              .collection(
+                                'globalNotificationReads',
+                              )
+                              .snapshots(),
+                      builder:
+                          (context, readSnapshot) {
+                        final readIds =
+                            <String>{};
 
-                        for (final readDoc in readSnapshot.data?.docs ?? []) {
-                          readIds.add(readDoc.id);
+                        for (final readDoc
+                            in readSnapshot
+                                    .data
+                                    ?.docs ??
+                                []) {
+                          readIds.add(
+                            readDoc.id,
+                          );
                         }
 
                         int unreadCount = 0;
 
-                        for (final notification in notifications) {
-                          if (!readIds.contains(notification.id)) {
+                        for (final notification
+                            in notifications) {
+                          if (!readIds.contains(
+                            notification.id,
+                          )) {
                             unreadCount++;
                           }
                         }
 
                         return Stack(
-                          clipBehavior: Clip.none,
+                          clipBehavior:
+                              Clip.none,
                           children: [
                             IconButton(
                               icon: const Icon(
-                                Icons.notifications_outlined,
-                                color: Colors.white,
+                                Icons
+                                    .notifications_outlined,
+                                color:
+                                    Colors.white,
                               ),
-                              onPressed: _openGlobalNotifications,
+                              onPressed:
+                                  _openGlobalNotifications,
                             ),
-                            if (unreadCount > 0)
+                            if (unreadCount >
+                                0)
                               Positioned(
                                 right: 4,
                                 top: 4,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
+                                child:
+                                    Container(
+                                  padding:
+                                      const EdgeInsets
+                                          .symmetric(
                                     horizontal: 4,
                                     vertical: 2,
                                   ),
-                                  constraints: const BoxConstraints(
+                                  constraints:
+                                      const BoxConstraints(
                                     minWidth: 17,
                                     minHeight: 17,
                                   ),
-                                  decoration: const BoxDecoration(
-                                    color: Colors.white,
-                                    shape: BoxShape.circle,
+                                  decoration:
+                                      const BoxDecoration(
+                                    color:
+                                        Colors.white,
+                                    shape:
+                                        BoxShape.circle,
                                   ),
                                   child: Text(
-                                    unreadCount > 99
+                                    unreadCount >
+                                            99
                                         ? '99+'
                                         : '$unreadCount',
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      color: Colors.redAccent,
+                                    textAlign:
+                                        TextAlign
+                                            .center,
+                                    style:
+                                        const TextStyle(
+                                      color:
+                                          Colors
+                                              .redAccent,
                                       fontSize: 9,
-                                      fontWeight: FontWeight.bold,
+                                      fontWeight:
+                                          FontWeight
+                                              .bold,
                                     ),
                                   ),
                                 ),
@@ -1366,101 +1955,162 @@ class _HomePageState extends State<HomePage>
             ],
           ),
 
-          // ----------------------------------------------------
+          // ==================================================
           // BODY
-          // ----------------------------------------------------
+          // ==================================================
+
           body: Column(
             children: [
+              // ==================================================
               // SEARCH BAR
+              // ==================================================
+
               Container(
                 color: Colors.redAccent,
-                padding: const EdgeInsets.fromLTRB(14, 2, 14, 12),
+                padding:
+                    const EdgeInsets.fromLTRB(
+                  14,
+                  2,
+                  14,
+                  12,
+                ),
                 child: Container(
                   height: 48,
-                  decoration: BoxDecoration(
+                  decoration:
+                      BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius:
+                        BorderRadius.circular(
+                      24,
+                    ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.12),
+                        color: Colors.black
+                            .withValues(
+                          alpha: 0.12,
+                        ),
                         blurRadius: 7,
-                        offset: const Offset(0, 2),
+                        offset:
+                            const Offset(0, 2),
                       ),
                     ],
                   ),
                   child: TextField(
-                    controller: _searchController,
-                    textInputAction: TextInputAction.search,
+                    controller:
+                        _searchController,
+                    textInputAction:
+                        TextInputAction.search,
                     onChanged: (value) {
                       setState(() {
-                        _searchQuery = value.trim().toLowerCase();
+                        _searchQuery = value
+                            .trim()
+                            .toLowerCase();
                       });
                     },
-                    decoration: InputDecoration(
-                      hintText: 'Search products...',
-                      hintStyle: TextStyle(
-                        color: Colors.grey.shade500,
+                    decoration:
+                        InputDecoration(
+                      hintText:
+                          'Search products...',
+                      hintStyle:
+                          TextStyle(
+                        color: Colors
+                            .grey
+                            .shade500,
                         fontSize: 14,
-                        fontWeight: FontWeight.w400,
+                        fontWeight:
+                            FontWeight.w400,
                       ),
-                      prefixIcon: const Padding(
-                        padding: EdgeInsets.only(left: 4, right: 2),
+                      prefixIcon:
+                          const Padding(
+                        padding:
+                            EdgeInsets.only(
+                          left: 4,
+                          right: 2,
+                        ),
                         child: Icon(
-                          Icons.search_rounded,
-                          color: Colors.redAccent,
+                          Icons
+                              .search_rounded,
+                          color:
+                              Colors.redAccent,
                           size: 24,
                         ),
                       ),
-                      prefixIconConstraints: const BoxConstraints(
+                      prefixIconConstraints:
+                          const BoxConstraints(
                         minWidth: 46,
                         minHeight: 48,
                       ),
                       suffixIcon: Row(
-                        mainAxisSize: MainAxisSize.min,
+                        mainAxisSize:
+                            MainAxisSize.min,
                         children: [
-                          if (_searchQuery.isNotEmpty)
+                          if (_searchQuery
+                              .isNotEmpty)
                             IconButton(
-                              tooltip: 'Clear',
-                              splashRadius: 20,
+                              tooltip:
+                                  'Clear',
+                              splashRadius:
+                                  20,
                               icon: Icon(
-                                Icons.close_rounded,
-                                color: Colors.grey.shade600,
+                                Icons
+                                    .close_rounded,
+                                color: Colors
+                                    .grey
+                                    .shade600,
                                 size: 20,
                               ),
                               onPressed: () {
-                                _searchController.clear();
+                                _searchController
+                                    .clear();
 
                                 setState(() {
-                                  _searchQuery = '';
+                                  _searchQuery =
+                                      '';
                                 });
                               },
                             ),
                           Container(
                             height: 26,
                             width: 1,
-                            color: Colors.grey.shade300,
+                            color: Colors
+                                .grey
+                                .shade300,
                           ),
                           IconButton(
-                            tooltip: 'Search by camera',
-                            splashRadius: 20,
+                            tooltip:
+                                'Search by camera',
+                            splashRadius:
+                                20,
                             icon: Icon(
-                              Icons.camera_alt_outlined,
-                              color: Colors.grey.shade700,
+                              Icons
+                                  .camera_alt_outlined,
+                              color: Colors
+                                  .grey
+                                  .shade700,
                               size: 21,
                             ),
-                            onPressed: _openCameraSearch,
+                            onPressed:
+                                _openCameraSearch,
                           ),
-                          const SizedBox(width: 4),
+                          const SizedBox(
+                            width: 4,
+                          ),
                         ],
                       ),
-                      suffixIconConstraints: const BoxConstraints(
+                      suffixIconConstraints:
+                          const BoxConstraints(
                         minWidth: 0,
                         minHeight: 48,
                       ),
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(
+                      border:
+                          InputBorder.none,
+                      enabledBorder:
+                          InputBorder.none,
+                      focusedBorder:
+                          InputBorder.none,
+                      contentPadding:
+                          const EdgeInsets
+                              .symmetric(
                         vertical: 13,
                         horizontal: 4,
                       ),
@@ -1469,71 +2119,68 @@ class _HomePageState extends State<HomePage>
                 ),
               ),
 
-              // CATEGORIES
-              Container(
-                height: 58,
-                color: Colors.white,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 9,
-                  ),
-                  itemCount: categories.length,
-                  itemBuilder: (context, index) {
-                    final isSelected = _selectedCategory == index;
+              // ==================================================
+              // TEMU STYLE CATEGORIES
+              // ==================================================
 
-                    return GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _selectedCategory = index;
-                        });
-                      },
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        margin: const EdgeInsets.symmetric(horizontal: 5),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 17,
-                          vertical: 8,
+              SizedBox(
+                height: 104,
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore
+                      .instance
+                      .collection('products')
+                      .snapshots(),
+                  builder:
+                      (context, categorySnapshot) {
+                    final categoryProducts =
+                        categorySnapshot
+                                .data
+                                ?.docs ??
+                            [];
+
+                    return Container(
+                      color: Colors.white,
+                      child: ListView.builder(
+                        scrollDirection:
+                            Axis.horizontal,
+                        physics:
+                            const BouncingScrollPhysics(),
+                        padding:
+                            const EdgeInsets
+                                .symmetric(
+                          horizontal: 10,
                         ),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? Colors.redAccent
-                              : Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: isSelected
-                                ? Colors.redAccent
-                                : Colors.grey.shade300,
-                          ),
-                        ),
-                        child: Center(
-                          child: Text(
-                            categories[index],
-                            style: TextStyle(
-                              color:
-                                  isSelected ? Colors.white : Colors.black87,
-                              fontWeight: isSelected
-                                  ? FontWeight.bold
-                                  : FontWeight.w500,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
+                        itemCount:
+                            categories.length,
+                        itemBuilder:
+                            (context, index) {
+                          return _buildCategoryItem(
+                            category:
+                                categories[index],
+                            index: index,
+                            products:
+                                categoryProducts,
+                          );
+                        },
                       ),
                     );
                   },
                 ),
               ),
 
+              // ==================================================
               // PRODUCTS
+              // ==================================================
+
               Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
+                child: StreamBuilder<
+                    QuerySnapshot>(
+                  stream: FirebaseFirestore
+                      .instance
                       .collection('products')
                       .snapshots(),
-                  builder: (context, snapshot) {
+                  builder:
+                      (context, snapshot) {
                     if (snapshot.hasError) {
                       return const Center(
                         child: Text(
@@ -1546,120 +2193,196 @@ class _HomePageState extends State<HomePage>
                       );
                     }
 
-                    if (snapshot.connectionState ==
-                        ConnectionState.waiting) {
+                    if (snapshot
+                            .connectionState ==
+                        ConnectionState
+                            .waiting) {
                       return const Center(
-                        child: CircularProgressIndicator(),
+                        child:
+                            CircularProgressIndicator(),
                       );
                     }
 
-                    final allDocs = snapshot.data?.docs ?? [];
+                    final allDocs =
+                        snapshot.data?.docs ??
+                            [];
 
-                    final filteredDocs = allDocs.where((doc) {
-                      final data = doc.data() as Map<String, dynamic>;
+                    final filteredDocs =
+                        allDocs.where((doc) {
+                      final data =
+                          doc.data()
+                              as Map<String,
+                                  dynamic>;
 
-                      if (!_matchesCategory(data)) {
+                      if (!_matchesCategory(
+                        data,
+                      )) {
                         return false;
                       }
 
-                      if (_searchQuery.isEmpty) {
+                      if (_searchQuery
+                          .isEmpty) {
                         return true;
                       }
 
                       final productName =
-                          data['name']?.toString().toLowerCase() ?? '';
+                          data['name']
+                                  ?.toString()
+                                  .toLowerCase() ??
+                              '';
 
-                      return productName.contains(_searchQuery);
+                      return productName
+                          .contains(
+                        _searchQuery,
+                      );
                     }).toList();
 
-                    if (filteredDocs.isEmpty) {
+                    if (filteredDocs
+                        .isEmpty) {
                       return Center(
                         child: Text(
-                          _searchQuery.isNotEmpty
+                          _searchQuery
+                                  .isNotEmpty
                               ? 'No products found for "$_searchQuery"'
-                              : _selectedCategory == 0
+                              : _selectedCategory ==
+                                      0
                                   ? 'No products found yet'
                                   : 'No products found in ${categories[_selectedCategory]}',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
+                          textAlign:
+                              TextAlign.center,
+                          style:
+                              const TextStyle(
                             fontSize: 16,
-                            color: Colors.grey,
+                            color:
+                                Colors.grey,
                           ),
                         ),
                       );
                     }
 
-                    return StreamBuilder<QuerySnapshot>(
+                    return StreamBuilder<
+                        QuerySnapshot>(
                       stream: user == null
                           ? null
-                          : FirebaseFirestore.instance
-                              .collection('users')
+                          : FirebaseFirestore
+                              .instance
+                              .collection(
+                                'users',
+                              )
                               .doc(user.uid)
-                              .collection('favorites')
+                              .collection(
+                                'favorites',
+                              )
                               .snapshots(),
-                      builder: (context, favoriteSnapshot) {
-                        final favoriteIds = <String>{};
+                      builder: (
+                        context,
+                        favoriteSnapshot,
+                      ) {
+                        final favoriteIds =
+                            <String>{};
 
                         for (final favoriteDoc
-                            in favoriteSnapshot.data?.docs ?? []) {
-                          favoriteIds.add(favoriteDoc.id);
+                            in favoriteSnapshot
+                                    .data
+                                    ?.docs ??
+                                []) {
+                          favoriteIds.add(
+                            favoriteDoc.id,
+                          );
                         }
 
                         return GridView.builder(
-                          padding: const EdgeInsets.all(8),
+                          padding:
+                              const EdgeInsets.all(
+                            8,
+                          ),
                           gridDelegate:
                               const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            childAspectRatio: 0.75,
-                            crossAxisSpacing: 8,
-                            mainAxisSpacing: 8,
+                            crossAxisCount:
+                                2,
+                            childAspectRatio:
+                                0.75,
+                            crossAxisSpacing:
+                                8,
+                            mainAxisSpacing:
+                                8,
                           ),
-                          itemCount: filteredDocs.length,
-                          itemBuilder: (context, index) {
-                            final productDoc = filteredDocs[index];
+                          itemCount:
+                              filteredDocs.length,
+                          itemBuilder:
+                              (context, index) {
+                            final productDoc =
+                                filteredDocs[
+                                    index];
 
                             final data =
-                                productDoc.data() as Map<String, dynamic>;
+                                productDoc.data()
+                                    as Map<String,
+                                        dynamic>;
 
-                            final productId = productDoc.id;
+                            final productId =
+                                productDoc.id;
 
                             final name =
-                                data['name']?.toString() ?? 'Unnamed Product';
+                                data['name']
+                                        ?.toString() ??
+                                    'Unnamed Product';
 
-                            final displayPrice = _formatBdtPrice(data);
+                            final displayPrice =
+                                _formatBdtPrice(
+                              data,
+                            );
 
-                            final imageUrl = data['imageUrl']?.toString();
+                            final imageUrl =
+                                data['imageUrl']
+                                    ?.toString();
 
                             final isFavorite =
-                                favoriteIds.contains(productId);
+                                favoriteIds
+                                    .contains(
+                              productId,
+                            );
 
                             return Card(
                               elevation: 2,
-                              clipBehavior: Clip.antiAlias,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
+                              clipBehavior:
+                                  Clip.antiAlias,
+                              shape:
+                                  RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius
+                                        .circular(
+                                  10,
+                                ),
                               ),
                               child: InkWell(
                                 onTap: () {
-                                  _openProductDetails(
-                                    productId: productId,
-                                    product: data,
+                                  _openSellerProfile(
+                                    product:
+                                        data,
                                   );
                                 },
                                 child: Column(
                                   crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                      CrossAxisAlignment
+                                          .start,
                                   children: [
                                     Expanded(
-                                      child: Stack(
+                                      child:
+                                          Stack(
                                         children: [
                                           Container(
-                                            width: double.infinity,
-                                            decoration: BoxDecoration(
-                                              color: Colors.grey[300],
+                                            width:
+                                                double.infinity,
+                                            decoration:
+                                                BoxDecoration(
+                                              color: Colors
+                                                  .grey[300],
                                             ),
-                                            child: imageUrl != null &&
-                                                    imageUrl.isNotEmpty
+                                            child: imageUrl !=
+                                                        null &&
+                                                    imageUrl
+                                                        .isNotEmpty
                                                 ? Image.network(
                                                     imageUrl,
                                                     fit: BoxFit.cover,
@@ -1680,55 +2403,77 @@ class _HomePageState extends State<HomePage>
                                                     },
                                                   )
                                                 : const Center(
-                                                    child: Icon(
-                                                      Icons.image,
-                                                      size: 50,
-                                                      color: Colors.grey,
+                                                    child:
+                                                        Icon(
+                                                      Icons
+                                                          .image,
+                                                      size:
+                                                          50,
+                                                      color:
+                                                          Colors.grey,
                                                     ),
                                                   ),
                                           ),
                                           Positioned(
                                             top: 8,
                                             right: 8,
-                                            child: Material(
-                                              color: Colors.white,
-                                              shape: const CircleBorder(),
-                                              elevation: 2,
-                                              child: InkWell(
+                                            child:
+                                                Material(
+                                              color: Colors
+                                                  .white,
+                                              shape:
+                                                  const CircleBorder(),
+                                              elevation:
+                                                  2,
+                                              child:
+                                                  InkWell(
                                                 customBorder:
                                                     const CircleBorder(),
-                                                onTap: () async {
-                                                  final currentUser = user;
+                                                onTap:
+                                                    () async {
+                                                  final currentUser =
+                                                      user;
 
-                                                  if (currentUser == null) {
-                                                    await Navigator.push(
+                                                  if (currentUser ==
+                                                      null) {
+                                                    await Navigator
+                                                        .push(
                                                       context,
                                                       MaterialPageRoute(
-                                                        builder: (context) =>
-                                                            const LoginPage(),
+                                                        builder:
+                                                            (context) =>
+                                                                const LoginPage(),
                                                       ),
                                                     );
                                                     return;
                                                   }
 
                                                   await _toggleFavorite(
-                                                    user: currentUser,
-                                                    productId: productId,
-                                                    productData: data,
+                                                    user:
+                                                        currentUser,
+                                                    productId:
+                                                        productId,
+                                                    productData:
+                                                        data,
                                                   );
                                                 },
-                                                child: Padding(
+                                                child:
+                                                    Padding(
                                                   padding:
-                                                      const EdgeInsets.all(7),
-                                                  child: Icon(
+                                                      const EdgeInsets.all(
+                                                    7,
+                                                  ),
+                                                  child:
+                                                      Icon(
                                                     isFavorite
                                                         ? Icons.favorite
-                                                        : Icons
-                                                            .favorite_border,
-                                                    color: isFavorite
-                                                        ? Colors.redAccent
-                                                        : Colors.grey,
-                                                    size: 21,
+                                                        : Icons.favorite_border,
+                                                    color:
+                                                        isFavorite
+                                                            ? Colors.redAccent
+                                                            : Colors.grey,
+                                                    size:
+                                                        21,
                                                   ),
                                                 ),
                                               ),
@@ -1738,98 +2483,148 @@ class _HomePageState extends State<HomePage>
                                       ),
                                     ),
                                     Padding(
-                                      padding: const EdgeInsets.all(8),
+                                      padding:
+                                          const EdgeInsets
+                                              .all(
+                                        8,
+                                      ),
                                       child: Column(
                                         crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                                            CrossAxisAlignment
+                                                .start,
                                         children: [
                                           Text(
                                             name,
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
+                                            style:
+                                                const TextStyle(
+                                              fontWeight:
+                                                  FontWeight.bold,
                                             ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
+                                            maxLines:
+                                                1,
+                                            overflow:
+                                                TextOverflow
+                                                    .ellipsis,
                                           ),
-                                          const SizedBox(height: 4),
+                                          const SizedBox(
+                                            height: 4,
+                                          ),
                                           Row(
                                             mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
+                                                MainAxisAlignment
+                                                    .spaceBetween,
                                             children: [
                                               Flexible(
-                                                child: Text(
+                                                child:
+                                                    Text(
                                                   displayPrice,
-                                                  style: const TextStyle(
-                                                    color: Colors.redAccent,
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 16,
+                                                  style:
+                                                      const TextStyle(
+                                                    color:
+                                                        Colors.redAccent,
+                                                    fontWeight:
+                                                        FontWeight.bold,
+                                                    fontSize:
+                                                        16,
                                                   ),
-                                                  maxLines: 1,
+                                                  maxLines:
+                                                      1,
                                                   overflow:
                                                       TextOverflow.ellipsis,
                                                 ),
                                               ),
-                                              const SizedBox(width: 5),
+                                              const SizedBox(
+                                                width:
+                                                    5,
+                                              ),
                                               InkWell(
                                                 borderRadius:
-                                                    BorderRadius.circular(20),
-                                                onTap: () async {
-                                                  final currentUser = user;
+                                                    BorderRadius.circular(
+                                                  20,
+                                                ),
+                                                onTap:
+                                                    () async {
+                                                  final currentUser =
+                                                      user;
 
-                                                  if (currentUser == null) {
-                                                    await Navigator.push(
+                                                  if (currentUser ==
+                                                      null) {
+                                                    await Navigator
+                                                        .push(
                                                       context,
                                                       MaterialPageRoute(
-                                                        builder: (context) =>
-                                                            const LoginPage(),
+                                                        builder:
+                                                            (context) =>
+                                                                const LoginPage(),
                                                       ),
                                                     );
                                                     return;
                                                   }
 
                                                   final bdtPrice =
-                                                      _displayBdtPrice(data);
-
-                                                  await CartService.addItem(
-                                                    id: productId,
-                                                    name: name,
-                                                    price: bdtPrice,
-                                                    imageUrl: imageUrl,
+                                                      _displayBdtPrice(
+                                                    data,
                                                   );
 
-                                                  if (!context.mounted) {
+                                                  await CartService
+                                                      .addItem(
+                                                    id:
+                                                        productId,
+                                                    name:
+                                                        name,
+                                                    price:
+                                                        bdtPrice,
+                                                    imageUrl:
+                                                        imageUrl,
+                                                  );
+
+                                                  if (!context
+                                                      .mounted) {
                                                     return;
                                                   }
 
-                                                  ScaffoldMessenger.of(
+                                                  ScaffoldMessenger
+                                                      .of(
                                                     context,
                                                   ).showSnackBar(
                                                     SnackBar(
-                                                      content: Text(
+                                                      content:
+                                                          Text(
                                                         '$name added to cart',
                                                       ),
-                                                      behavior: SnackBarBehavior
-                                                          .floating,
-                                                      duration: const Duration(
-                                                        seconds: 1,
+                                                      behavior:
+                                                          SnackBarBehavior.floating,
+                                                      duration:
+                                                          const Duration(
+                                                        seconds:
+                                                            1,
                                                       ),
                                                     ),
                                                   );
                                                 },
-                                                child: Container(
+                                                child:
+                                                    Container(
                                                   padding:
-                                                      const EdgeInsets.all(6),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.redAccent,
+                                                      const EdgeInsets.all(
+                                                    6,
+                                                  ),
+                                                  decoration:
+                                                      BoxDecoration(
+                                                    color:
+                                                        Colors.redAccent,
                                                     borderRadius:
                                                         BorderRadius.circular(
                                                       20,
                                                     ),
                                                   ),
-                                                  child: const Icon(
-                                                    Icons.add_shopping_cart,
-                                                    size: 16,
-                                                    color: Colors.white,
+                                                  child:
+                                                      const Icon(
+                                                    Icons
+                                                        .add_shopping_cart,
+                                                    size:
+                                                        16,
+                                                    color:
+                                                        Colors.white,
                                                   ),
                                                 ),
                                               ),
@@ -1852,79 +2647,108 @@ class _HomePageState extends State<HomePage>
             ],
           ),
 
-          // ----------------------------------------------------
+          // ==================================================
           // SIGN-IN BANNER
-          // ----------------------------------------------------
+          // ==================================================
+
           bottomSheet: isLoggedIn
               ? null
               : Container(
-                  color: Colors.orangeAccent,
-                  padding: const EdgeInsets.symmetric(
+                  color:
+                      Colors.orangeAccent,
+                  padding:
+                      const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 8,
                   ),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisAlignment:
+                        MainAxisAlignment
+                            .spaceBetween,
                     children: [
                       const Expanded(
                         child: Text(
                           'Sign in for best experience!',
                           style: TextStyle(
                             color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                            fontWeight:
+                                FontWeight.bold,
                           ),
                         ),
                       ),
                       ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.orangeAccent,
+                        style:
+                            ElevatedButton.styleFrom(
+                          backgroundColor:
+                              Colors.white,
+                          foregroundColor:
+                              Colors.orangeAccent,
                         ),
                         onPressed: () {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => const LoginPage(),
+                              builder:
+                                  (context) =>
+                                      const LoginPage(),
                             ),
                           );
                         },
-                        child: const Text('Sign In'),
+                        child:
+                            const Text(
+                          'Sign In',
+                        ),
                       ),
                     ],
                   ),
                 ),
 
-          // ----------------------------------------------------
+          // ==================================================
           // BOTTOM NAVIGATION
-          // ----------------------------------------------------
-          bottomNavigationBar: BottomNavigationBar(
-            currentIndex: _selectedIndex,
+          // ==================================================
+
+          bottomNavigationBar:
+              BottomNavigationBar(
+            currentIndex:
+                _selectedIndex,
             onTap: _onNavTap,
-            selectedItemColor: Colors.redAccent,
-            unselectedItemColor: Colors.grey,
-            type: BottomNavigationBarType.fixed,
+            selectedItemColor:
+                Colors.redAccent,
+            unselectedItemColor:
+                Colors.grey,
+            type:
+                BottomNavigationBarType
+                    .fixed,
             items: [
               const BottomNavigationBarItem(
-                icon: Icon(Icons.home),
+                icon: Icon(
+                  Icons.home,
+                ),
                 label: 'Home',
               ),
               const BottomNavigationBarItem(
-                icon: Icon(Icons.category),
+                icon: Icon(
+                  Icons.category,
+                ),
                 label: 'Categories',
               ),
               const BottomNavigationBarItem(
-                icon: Icon(Icons.video_library),
+                icon: Icon(
+                  Icons.video_library,
+                ),
                 label: 'Videos',
               ),
-
-              // NEW: LIVE CART QUANTITY BADGE
               BottomNavigationBarItem(
-                icon: _buildCartNavIcon(user),
+                icon:
+                    _buildCartNavIcon(
+                  user,
+                ),
                 label: 'Cart',
               ),
-
               const BottomNavigationBarItem(
-                icon: Icon(Icons.person),
+                icon: Icon(
+                  Icons.person,
+                ),
                 label: 'Profile',
               ),
             ],
