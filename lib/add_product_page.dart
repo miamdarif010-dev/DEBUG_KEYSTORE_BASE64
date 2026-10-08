@@ -22,10 +22,20 @@ class _AddProductPageState extends State<AddProductPage> {
 
   final ImagePicker _imagePicker = ImagePicker();
 
-  File? _pickedImage;
-  String? _uploadedImageUrl;
+  // =========================================================
+  // PRODUCT MEDIA
+  // =========================================================
+
+  static const int _maxImages = 10;
+
+  final List<File> _pickedImages = [];
+  final List<String> _uploadedImageUrls = [];
+
+  File? _pickedVideo;
+  String? _uploadedVideoUrl;
 
   bool _isUploadingPhoto = false;
+  bool _isUploadingVideo = false;
   bool _isUploading = false;
   bool _isCheckingSeller = true;
   bool _isApprovedSeller = false;
@@ -71,7 +81,8 @@ class _AddProductPageState extends State<AddProductPage> {
 
       final data = snapshot.data();
 
-      final sellerStatus = data?['sellerStatus']?.toString().trim();
+      final sellerStatus =
+          data?['sellerStatus']?.toString().trim();
 
       final sellerCode =
           data?['sellerCode']?.toString().trim() ?? '';
@@ -102,41 +113,64 @@ class _AddProductPageState extends State<AddProductPage> {
   }
 
   // =========================================================
-  // PICK IMAGE
+  // PICK MULTIPLE IMAGES
   // =========================================================
 
-  Future<void> _pickImage() async {
+  Future<void> _pickImages() async {
     if (!_isApprovedSeller) {
       _showSellerMessage();
       return;
     }
 
-    if (_isUploadingPhoto || _isUploading) {
+    if (_isUploadingPhoto || _isUploadingVideo || _isUploading) {
+      return;
+    }
+
+    if (_pickedImages.length >= _maxImages) {
+      _showMessage(
+        'You can add up to $_maxImages product images.',
+      );
       return;
     }
 
     try {
-      final XFile? picked = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
+      final remaining =
+          _maxImages - _pickedImages.length;
+
+      final picked = await _imagePicker.pickMultiImage(
         imageQuality: 85,
-        maxWidth: 1200,
-        maxHeight: 1200,
+        maxWidth: 1400,
+        maxHeight: 1400,
       );
 
-      if (picked == null) {
+      if (picked.isEmpty) {
         return;
       }
 
-      await _uploadToCloudinary(
-        File(picked.path),
-      );
+      final selected = picked.take(remaining).toList();
+
+      setState(() {
+        for (final image in selected) {
+          _pickedImages.add(
+            File(image.path),
+          );
+        }
+      });
+
+      if (picked.length > remaining) {
+        _showMessage(
+          'Only $_maxImages images can be added.',
+        );
+      }
+
+      await _uploadSelectedImages(selected);
     } catch (e) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Could not select photo: $e',
+            'Could not select photos: $e',
           ),
         ),
       );
@@ -144,89 +178,49 @@ class _AddProductPageState extends State<AddProductPage> {
   }
 
   // =========================================================
-  // CLOUDINARY IMAGE UPLOAD
+  // UPLOAD SELECTED IMAGES
   // =========================================================
 
-  Future<void> _uploadToCloudinary(
-    File imageFile,
+  Future<void> _uploadSelectedImages(
+    List<XFile> selected,
   ) async {
+    if (selected.isEmpty) return;
+
     if (!mounted) return;
 
     setState(() {
-      _pickedImage = imageFile;
       _isUploadingPhoto = true;
     });
 
     try {
-      final uri = Uri.parse(
-        'https://api.cloudinary.com/v1_1/$_cloudName/image/upload',
-      );
-
-      final request = http.MultipartRequest(
-        'POST',
-        uri,
-      );
-
-      request.fields['upload_preset'] = _uploadPreset;
-
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          'file',
-          imageFile.path,
-        ),
-      );
-
-      final streamedResponse = await request.send();
-
-      final response = await http.Response.fromStream(
-        streamedResponse,
-      );
-
-      if (response.statusCode < 200 ||
-          response.statusCode >= 300) {
-        throw Exception(
-          'Cloudinary upload failed: '
-          '${response.statusCode}\n${response.body}',
+      for (final image in selected) {
+        final url = await _uploadImageToCloudinary(
+          File(image.path),
         );
-      }
 
-      final Map<String, dynamic> result =
-          jsonDecode(response.body);
-
-      final String? secureUrl =
-          result['secure_url']?.toString();
-
-      if (secureUrl == null || secureUrl.isEmpty) {
-        throw Exception(
-          'Cloudinary did not return an image URL.',
-        );
+        if (url.isNotEmpty) {
+          _uploadedImageUrls.add(url);
+        }
       }
 
       if (!mounted) return;
 
-      setState(() {
-        _uploadedImageUrl = secureUrl;
-      });
+      setState(() {});
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Product image uploaded successfully.',
+            '${selected.length} image(s) uploaded successfully.',
           ),
         ),
       );
     } catch (e) {
       if (!mounted) return;
 
-      setState(() {
-        _pickedImage = null;
-        _uploadedImageUrl = null;
-      });
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Photo upload failed: $e',
+            'Some image uploads failed: $e',
           ),
         ),
       );
@@ -237,6 +231,241 @@ class _AddProductPageState extends State<AddProductPage> {
         });
       }
     }
+  }
+
+  // =========================================================
+  // CLOUDINARY IMAGE UPLOAD
+  // =========================================================
+
+  Future<String> _uploadImageToCloudinary(
+    File imageFile,
+  ) async {
+    final uri = Uri.parse(
+      'https://api.cloudinary.com/v1_1/$_cloudName/image/upload',
+    );
+
+    final request = http.MultipartRequest(
+      'POST',
+      uri,
+    );
+
+    request.fields['upload_preset'] =
+        _uploadPreset;
+
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        'file',
+        imageFile.path,
+      ),
+    );
+
+    final streamedResponse =
+        await request.send();
+
+    final response =
+        await http.Response.fromStream(
+      streamedResponse,
+    );
+
+    if (response.statusCode < 200 ||
+        response.statusCode >= 300) {
+      throw Exception(
+        'Cloudinary image upload failed: '
+        '${response.statusCode}',
+      );
+    }
+
+    final Map<String, dynamic> result =
+        jsonDecode(response.body);
+
+    final secureUrl =
+        result['secure_url']?.toString();
+
+    if (secureUrl == null ||
+        secureUrl.isEmpty) {
+      throw Exception(
+        'Cloudinary did not return image URL.',
+      );
+    }
+
+    return secureUrl;
+  }
+
+  // =========================================================
+  // REMOVE IMAGE
+  // =========================================================
+
+  void _removeImage(int index) {
+    if (_isUploadingPhoto || _isUploading) {
+      return;
+    }
+
+    if (index < 0 ||
+        index >= _pickedImages.length) {
+      return;
+    }
+
+    setState(() {
+      _pickedImages.removeAt(index);
+
+      if (index < _uploadedImageUrls.length) {
+        _uploadedImageUrls.removeAt(index);
+      }
+    });
+  }
+
+  // =========================================================
+  // PICK VIDEO
+  // =========================================================
+
+  Future<void> _pickVideo() async {
+    if (!_isApprovedSeller) {
+      _showSellerMessage();
+      return;
+    }
+
+    if (_isUploadingPhoto ||
+        _isUploadingVideo ||
+        _isUploading) {
+      return;
+    }
+
+    try {
+      final picked =
+          await _imagePicker.pickVideo(
+        source: ImageSource.gallery,
+        maxDuration:
+            const Duration(
+          seconds: 60,
+        ),
+      );
+
+      if (picked == null) {
+        return;
+      }
+
+      final file = File(picked.path);
+
+      setState(() {
+        _pickedVideo = file;
+        _uploadedVideoUrl = null;
+        _isUploadingVideo = true;
+      });
+
+      final videoUrl =
+          await _uploadVideoToCloudinary(
+        file,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _uploadedVideoUrl = videoUrl;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Product video uploaded successfully.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _pickedVideo = null;
+        _uploadedVideoUrl = null;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Video upload failed: $e',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploadingVideo = false;
+        });
+      }
+    }
+  }
+
+  // =========================================================
+  // CLOUDINARY VIDEO UPLOAD
+  // =========================================================
+
+  Future<String> _uploadVideoToCloudinary(
+    File videoFile,
+  ) async {
+    final uri = Uri.parse(
+      'https://api.cloudinary.com/v1_1/$_cloudName/video/upload',
+    );
+
+    final request = http.MultipartRequest(
+      'POST',
+      uri,
+    );
+
+    request.fields['upload_preset'] =
+        _uploadPreset;
+
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        'file',
+        videoFile.path,
+      ),
+    );
+
+    final streamedResponse =
+        await request.send();
+
+    final response =
+        await http.Response.fromStream(
+      streamedResponse,
+    );
+
+    if (response.statusCode < 200 ||
+        response.statusCode >= 300) {
+      throw Exception(
+        'Cloudinary video upload failed: '
+        '${response.statusCode}\n'
+        '${response.body}',
+      );
+    }
+
+    final Map<String, dynamic> result =
+        jsonDecode(response.body);
+
+    final secureUrl =
+        result['secure_url']?.toString();
+
+    if (secureUrl == null ||
+        secureUrl.isEmpty) {
+      throw Exception(
+        'Cloudinary did not return video URL.',
+      );
+    }
+
+    return secureUrl;
+  }
+
+  // =========================================================
+  // REMOVE VIDEO
+  // =========================================================
+
+  void _removeVideo() {
+    if (_isUploadingVideo || _isUploading) {
+      return;
+    }
+
+    setState(() {
+      _pickedVideo = null;
+      _uploadedVideoUrl = null;
+    });
   }
 
   // =========================================================
@@ -253,6 +482,16 @@ class _AddProductPageState extends State<AddProductPage> {
     );
   }
 
+  void _showMessage(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+      ),
+    );
+  }
+
   // =========================================================
   // UPLOAD PRODUCT
   // =========================================================
@@ -263,10 +502,15 @@ class _AddProductPageState extends State<AddProductPage> {
       return;
     }
 
-    final title = _titleController.text.trim();
-    final priceText = _priceController.text.trim();
+    final title =
+        _titleController.text.trim();
+
+    final priceText =
+        _priceController.text.trim();
+
     final description =
         _descriptionController.text.trim();
+
     final category =
         _categoryController.text.trim();
 
@@ -274,34 +518,35 @@ class _AddProductPageState extends State<AddProductPage> {
     // VALIDATE PRICE
     // =======================================================
 
-    final price = double.tryParse(priceText);
+    final price =
+        double.tryParse(priceText);
 
     if (title.isEmpty ||
         price == null ||
         price <= 0 ||
         description.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please enter product name, valid BDT price and description.',
-          ),
-        ),
+      _showMessage(
+        'Please enter product name, valid BDT price and description.',
       );
 
       return;
     }
 
     // =======================================================
-    // WAIT FOR IMAGE UPLOAD
+    // WAIT FOR MEDIA UPLOAD
     // =======================================================
 
     if (_isUploadingPhoto) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please wait until the photo upload finishes.',
-          ),
-        ),
+      _showMessage(
+        'Please wait until all image uploads finish.',
+      );
+
+      return;
+    }
+
+    if (_isUploadingVideo) {
+      _showMessage(
+        'Please wait until the video upload finishes.',
       );
 
       return;
@@ -311,15 +556,12 @@ class _AddProductPageState extends State<AddProductPage> {
     // CURRENT USER
     // =======================================================
 
-    final user = FirebaseAuth.instance.currentUser;
+    final user =
+        FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please login first.',
-          ),
-        ),
+      _showMessage(
+        'Please login first.',
       );
 
       return;
@@ -335,26 +577,29 @@ class _AddProductPageState extends State<AddProductPage> {
 
     try {
       // =====================================================
-      // READ CURRENT USER DATA AGAIN
+      // READ CURRENT USER DATA
       // =====================================================
 
-      final userSnapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
+      final userSnapshot =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .get();
 
-      final userData = userSnapshot.data() ?? {};
+      final userData =
+          userSnapshot.data() ?? {};
 
       final sellerStatus =
-          userData['sellerStatus']?.toString().trim() ?? '';
+          userData['sellerStatus']
+                  ?.toString()
+                  .trim() ??
+              '';
 
-      // sellerCode is OPTIONAL.
-      //
-      // Firebase UID is the real seller identity.
-      // Therefore, a missing sellerCode must NOT block
-      // product creation.
       final sellerCode =
-          userData['sellerCode']?.toString().trim() ?? '';
+          userData['sellerCode']
+                  ?.toString()
+                  .trim() ??
+              '';
 
       if (sellerStatus != 'approved') {
         throw Exception(
@@ -367,7 +612,10 @@ class _AddProductPageState extends State<AddProductPage> {
       // =====================================================
 
       final sellerName =
-          userData['name']?.toString().trim() ?? '';
+          userData['name']
+                  ?.toString()
+                  .trim() ??
+              '';
 
       // =====================================================
       // SELLER EMAIL
@@ -384,72 +632,120 @@ class _AddProductPageState extends State<AddProductPage> {
           FirebaseFirestore.instance;
 
       final productRef =
-          firestore.collection('products').doc();
+          firestore
+              .collection('products')
+              .doc();
+
+      // =====================================================
+      // MAIN IMAGE
+      // =====================================================
+
+      final mainImageUrl =
+          _uploadedImageUrls.isNotEmpty
+              ? _uploadedImageUrls.first
+              : '';
 
       // =====================================================
       // PRODUCT DATA
       // =====================================================
 
-      final productData = <String, dynamic>{
-        // Basic product information
+      final productData =
+          <String, dynamic>{
+        // ---------------------------------------------------
+        // BASIC PRODUCT INFORMATION
+        // ---------------------------------------------------
+
         'name': title,
 
-        // ===================================================
+        // ---------------------------------------------------
         // PRICE
-        // Directly stored as BDT
-        // Example: 2000 = ৳2,000
-        // ===================================================
+        // ---------------------------------------------------
 
         'price': price,
         'currency': 'BDT',
         'currencySymbol': '৳',
 
-        // Product description
+        // ---------------------------------------------------
+        // DESCRIPTION
+        // ---------------------------------------------------
+
         'description': description,
 
-        // Cloudinary image
-        'imageUrl': _uploadedImageUrl ?? '',
+        // ---------------------------------------------------
+        // MAIN IMAGE
+        // ---------------------------------------------------
 
-        // Category
+        'imageUrl': mainImageUrl,
+
+        // ---------------------------------------------------
+        // MULTIPLE IMAGES
+        // ---------------------------------------------------
+
+        'imageUrls':
+            List<String>.from(
+          _uploadedImageUrls,
+        ),
+
+        // Compatibility with Product Details Page.
+        'images':
+            List<String>.from(
+          _uploadedImageUrls,
+        ),
+
+        // ---------------------------------------------------
+        // PRODUCT VIDEO
+        // ---------------------------------------------------
+
+        'videoUrl':
+            _uploadedVideoUrl ?? '',
+
+        // ---------------------------------------------------
+        // CATEGORY
+        // ---------------------------------------------------
+
         'category': category.isNotEmpty
             ? category
             : 'General',
 
-        // ===================================================
+        // ---------------------------------------------------
         // SELLER INFORMATION
-        // ===================================================
+        // ---------------------------------------------------
 
-        // IMPORTANT:
-        // Firebase UID is the primary seller identifier.
         'sellerId': user.uid,
 
-        // Seller code is optional.
         'sellerCode': sellerCode,
 
         'sellerEmail': sellerEmail,
+
         'sellerName': sellerName,
+
         'sellerApproved': true,
 
-        // ===================================================
+        // ---------------------------------------------------
         // PRODUCT STATUS
-        // ===================================================
+        // ---------------------------------------------------
 
         'active': true,
+
         'status': 'active',
 
-        // ===================================================
+        // ---------------------------------------------------
         // PRODUCT STATS
-        // ===================================================
+        // ---------------------------------------------------
 
         'rating': 5,
+
         'reviewCount': 0,
+
         'stock': 10,
+
         'views': 0,
+
         'salesCount': 0,
 
-        // ===================================================
+        // ---------------------------------------------------
         // TIMESTAMP
-        // ===================================================
+        // ---------------------------------------------------
 
         'createdAt':
             FieldValue.serverTimestamp(),
@@ -458,66 +754,70 @@ class _AddProductPageState extends State<AddProductPage> {
       // =====================================================
       // SAVE PRODUCT FIRST
       // =====================================================
-      //
-      // Product creation is NOT dependent on the
-      // global notification system.
-      //
-      // This is important because if notification rules
-      // have a problem, the product should still be saved.
-      // =====================================================
 
       await productRef.set(
         productData,
       );
 
       // =====================================================
-      // CREATE GLOBAL NOTIFICATION SEPARATELY
+      // CREATE GLOBAL NOTIFICATION
       // =====================================================
 
       try {
         final notificationRef =
             firestore
-                .collection('global_notifications')
+                .collection(
+                  'global_notifications',
+                )
                 .doc();
 
         await notificationRef.set(
           {
-            'type': 'new_product',
-            'title': 'New Product Added',
+            'type':
+                'new_product',
+
+            'title':
+                'New Product Added',
+
             'message':
                 '$title is now available on BuyNova.',
 
-            // Product information
-            'productId': productRef.id,
-            'productName': title,
+            'productId':
+                productRef.id,
+
+            'productName':
+                title,
+
             'productImageUrl':
-                _uploadedImageUrl ?? '',
-            'productPrice': price,
+                mainImageUrl,
 
-            // BDT
-            'currency': 'BDT',
-            'currencySymbol': '৳',
+            'productPrice':
+                price,
 
-            // Seller information
-            'sellerId': user.uid,
-            'sellerCode': sellerCode,
-            'sellerName': sellerName,
+            'currency':
+                'BDT',
 
-            // Notification status
-            'active': true,
+            'currencySymbol':
+                '৳',
 
-            // Timestamp
+            'sellerId':
+                user.uid,
+
+            'sellerCode':
+                sellerCode,
+
+            'sellerName':
+                sellerName,
+
+            'active':
+                true,
+
             'createdAt':
-                FieldValue.serverTimestamp(),
+                FieldValue
+                    .serverTimestamp(),
           },
         );
       } catch (notificationError) {
-        // ===================================================
-        // IMPORTANT:
-        // Notification failure must NOT delete/fail
-        // the already-created product.
-        // ===================================================
-
         debugPrint(
           'Global notification creation failed: '
           '$notificationError',
@@ -530,15 +830,17 @@ class _AddProductPageState extends State<AddProductPage> {
 
       if (!mounted) return;
 
-      // Clear fields
       _titleController.clear();
       _priceController.clear();
       _descriptionController.clear();
       _categoryController.clear();
 
       setState(() {
-        _pickedImage = null;
-        _uploadedImageUrl = null;
+        _pickedImages.clear();
+        _uploadedImageUrls.clear();
+
+        _pickedVideo = null;
+        _uploadedVideoUrl = null;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -549,9 +851,10 @@ class _AddProductPageState extends State<AddProductPage> {
         ),
       );
 
-      // Give the SnackBar a moment to appear before leaving.
       await Future<void>.delayed(
-        const Duration(milliseconds: 500),
+        const Duration(
+          milliseconds: 500,
+        ),
       );
 
       if (!mounted) return;
@@ -562,7 +865,8 @@ class _AddProductPageState extends State<AddProductPage> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          duration: const Duration(seconds: 5),
+          duration:
+              const Duration(seconds: 5),
           content: Text(
             'Product upload failed:\n$e',
           ),
@@ -598,9 +902,11 @@ class _AddProductPageState extends State<AddProductPage> {
   Widget _sellerNotApprovedView() {
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding:
+            const EdgeInsets.all(24),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment:
+              MainAxisAlignment.center,
           children: [
             Icon(
               Icons.storefront_rounded,
@@ -613,7 +919,8 @@ class _AddProductPageState extends State<AddProductPage> {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 23,
-                fontWeight: FontWeight.bold,
+                fontWeight:
+                    FontWeight.bold,
               ),
             ),
             const SizedBox(height: 12),
@@ -622,13 +929,15 @@ class _AddProductPageState extends State<AddProductPage> {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 15,
-                color: Colors.grey.shade600,
+                color:
+                    Colors.grey.shade600,
                 height: 1.5,
               ),
             ),
             const SizedBox(height: 24),
             FilledButton.icon(
-              onPressed: _checkSellerApproval,
+              onPressed:
+                  _checkSellerApproval,
               icon: const Icon(
                 Icons.refresh_rounded,
               ),
@@ -639,6 +948,495 @@ class _AddProductPageState extends State<AddProductPage> {
           ],
         ),
       ),
+    );
+  }
+
+  // =========================================================
+  // IMAGE PICKER SECTION
+  // =========================================================
+
+  Widget _buildImagePickerSection() {
+    return Column(
+      crossAxisAlignment:
+          CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Product Images',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight:
+                      FontWeight.bold,
+                ),
+              ),
+            ),
+            Text(
+              '${_pickedImages.length}/$_maxImages',
+              style: TextStyle(
+                color:
+                    Colors.grey.shade600,
+                fontWeight:
+                    FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 8),
+
+        Text(
+          'Add up to $_maxImages photos. The first photo will be the main product image.',
+          style: TextStyle(
+            color:
+                Colors.grey.shade600,
+            fontSize: 13,
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        GestureDetector(
+          onTap: _pickImages,
+          child: Container(
+            height: 155,
+            width: double.infinity,
+            decoration:
+                BoxDecoration(
+              color:
+                  Colors.grey.shade200,
+              borderRadius:
+                  BorderRadius.circular(
+                12,
+              ),
+              border: Border.all(
+                color:
+                    Colors.grey.shade400,
+              ),
+            ),
+            child:
+                _pickedImages.isEmpty
+                    ? Column(
+                        mainAxisAlignment:
+                            MainAxisAlignment
+                                .center,
+                        children: [
+                          Icon(
+                            Icons
+                                .add_photo_alternate_outlined,
+                            size: 45,
+                            color: Colors
+                                .grey
+                                .shade600,
+                          ),
+                          const SizedBox(
+                            height: 8,
+                          ),
+                          Text(
+                            'Tap to select product photos',
+                            style:
+                                TextStyle(
+                              color: Colors
+                                  .grey
+                                  .shade600,
+                            ),
+                          ),
+                        ],
+                      )
+                    : Stack(
+                        children: [
+                          ClipRRect(
+                            borderRadius:
+                                BorderRadius
+                                    .circular(
+                              12,
+                            ),
+                            child:
+                                Image.file(
+                              _pickedImages
+                                  .first,
+                              width:
+                                  double.infinity,
+                              height: 155,
+                              fit: BoxFit
+                                  .cover,
+                            ),
+                          ),
+                          Positioned(
+                            left: 10,
+                            bottom: 10,
+                            child:
+                                Container(
+                              padding:
+                                  const EdgeInsets
+                                      .symmetric(
+                                horizontal:
+                                    10,
+                                vertical:
+                                    6,
+                              ),
+                              decoration:
+                                  BoxDecoration(
+                                color: Colors
+                                    .black54,
+                                borderRadius:
+                                    BorderRadius
+                                        .circular(
+                                  20,
+                                ),
+                              ),
+                              child:
+                                  Text(
+                                '${_pickedImages.length} photos',
+                                style:
+                                    const TextStyle(
+                                  color:
+                                      Colors.white,
+                                  fontWeight:
+                                      FontWeight
+                                          .bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            right: 10,
+                            bottom: 10,
+                            child:
+                                Container(
+                              padding:
+                                  const EdgeInsets
+                                      .symmetric(
+                                horizontal:
+                                    12,
+                                vertical:
+                                    7,
+                              ),
+                              decoration:
+                                  BoxDecoration(
+                                color: Colors
+                                    .redAccent,
+                                borderRadius:
+                                    BorderRadius
+                                        .circular(
+                                  20,
+                                ),
+                              ),
+                              child:
+                                  const Text(
+                                'Add Photos',
+                                style:
+                                    TextStyle(
+                                  color:
+                                      Colors.white,
+                                  fontWeight:
+                                      FontWeight
+                                          .bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        if (_pickedImages.isNotEmpty)
+          SizedBox(
+            height: 92,
+            child: ListView.builder(
+              scrollDirection:
+                  Axis.horizontal,
+              itemCount:
+                  _pickedImages.length,
+              itemBuilder:
+                  (context, index) {
+                return Container(
+                  width: 82,
+                  margin:
+                      const EdgeInsets.only(
+                    right: 8,
+                  ),
+                  child: Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius:
+                            BorderRadius
+                                .circular(
+                          9,
+                        ),
+                        child:
+                            Image.file(
+                          _pickedImages[
+                              index],
+                          width: 82,
+                          height: 82,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+
+                      Positioned(
+                        right: 2,
+                        top: 2,
+                        child:
+                            GestureDetector(
+                          onTap: () =>
+                              _removeImage(
+                            index,
+                          ),
+                          child:
+                              Container(
+                            width: 24,
+                            height: 24,
+                            decoration:
+                                const BoxDecoration(
+                              color:
+                                  Colors.red,
+                              shape: BoxShape
+                                  .circle,
+                            ),
+                            child:
+                                const Icon(
+                              Icons.close,
+                              color: Colors
+                                  .white,
+                              size: 16,
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      if (index == 0)
+                        Positioned(
+                          left: 4,
+                          bottom: 4,
+                          child:
+                              Container(
+                            padding:
+                                const EdgeInsets
+                                    .symmetric(
+                              horizontal:
+                                  5,
+                              vertical:
+                                  2,
+                            ),
+                            decoration:
+                                BoxDecoration(
+                              color: Colors
+                                  .redAccent,
+                              borderRadius:
+                                  BorderRadius
+                                      .circular(
+                                5,
+                              ),
+                            ),
+                            child:
+                                const Text(
+                              'MAIN',
+                              style:
+                                  TextStyle(
+                                color:
+                                    Colors.white,
+                                fontSize:
+                                    8,
+                                fontWeight:
+                                    FontWeight
+                                        .bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+
+        if (_isUploadingPhoto)
+          const Padding(
+            padding:
+                EdgeInsets.only(
+              top: 12,
+            ),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child:
+                      CircularProgressIndicator(
+                    strokeWidth: 2,
+                  ),
+                ),
+                SizedBox(width: 10),
+                Text(
+                  'Uploading images...',
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  // =========================================================
+  // VIDEO PICKER SECTION
+  // =========================================================
+
+  Widget _buildVideoPickerSection() {
+    return Column(
+      crossAxisAlignment:
+          CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Product Video',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight:
+                FontWeight.bold,
+          ),
+        ),
+
+        const SizedBox(height: 8),
+
+        Text(
+          'Add one short product video. Maximum length: 60 seconds.',
+          style: TextStyle(
+            color:
+                Colors.grey.shade600,
+            fontSize: 13,
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        if (_pickedVideo == null)
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed:
+                  _pickVideo,
+              icon: const Icon(
+                Icons.video_library_outlined,
+              ),
+              label: const Text(
+                'Choose Product Video',
+              ),
+              style:
+                  OutlinedButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(
+                  vertical: 15,
+                ),
+                foregroundColor:
+                    Colors.redAccent,
+                side:
+                    const BorderSide(
+                  color:
+                      Colors.redAccent,
+                ),
+              ),
+            ),
+          )
+        else
+          Container(
+            width: double.infinity,
+            padding:
+                const EdgeInsets.all(14),
+            decoration:
+                BoxDecoration(
+              color:
+                  Colors.grey.shade100,
+              borderRadius:
+                  BorderRadius.circular(
+                12,
+              ),
+              border: Border.all(
+                color:
+                    Colors.grey.shade300,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 58,
+                  height: 58,
+                  decoration:
+                      BoxDecoration(
+                    color: Colors.black,
+                    borderRadius:
+                        BorderRadius.circular(
+                      9,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.play_circle_fill,
+                    color:
+                        Colors.white,
+                    size: 35,
+                  ),
+                ),
+
+                const SizedBox(width: 12),
+
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Product Video',
+                        style: TextStyle(
+                          fontWeight:
+                              FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(
+                        height: 4,
+                      ),
+                      Text(
+                        _uploadedVideoUrl != null
+                            ? 'Uploaded successfully'
+                            : 'Uploading...',
+                        style: TextStyle(
+                          color: _uploadedVideoUrl !=
+                                  null
+                              ? Colors.green
+                              : Colors.grey,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                if (_isUploadingVideo)
+                  const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child:
+                        CircularProgressIndicator(
+                      strokeWidth: 2,
+                    ),
+                  )
+                else
+                  IconButton(
+                    onPressed:
+                        _removeVideo,
+                    icon:
+                        const Icon(
+                      Icons.delete_outline,
+                      color: Colors.red,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 
@@ -656,13 +1454,18 @@ class _AddProductPageState extends State<AddProductPage> {
       ),
       body: _isCheckingSeller
           ? const Center(
-              child: CircularProgressIndicator(),
+              child:
+                  CircularProgressIndicator(),
             )
           : !_isApprovedSeller
               ? _sellerNotApprovedView()
               : Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: SingleChildScrollView(
+                  padding:
+                      const EdgeInsets.all(
+                    16,
+                  ),
+                  child:
+                      SingleChildScrollView(
                     child: Column(
                       children: [
                         // =================================================
@@ -670,181 +1473,157 @@ class _AddProductPageState extends State<AddProductPage> {
                         // =================================================
 
                         Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context)
+                          width:
+                              double.infinity,
+                          padding:
+                              const EdgeInsets
+                                  .all(
+                            14,
+                          ),
+                          decoration:
+                              BoxDecoration(
+                            color: Theme.of(
+                              context,
+                            )
                                 .colorScheme
                                 .surfaceContainerHighest,
                             borderRadius:
-                                BorderRadius.circular(14),
+                                BorderRadius
+                                    .circular(
+                              14,
+                            ),
                           ),
                           child: Row(
                             children: [
                               const Icon(
-                                Icons.verified_user_rounded,
+                                Icons
+                                    .verified_user_rounded,
                               ),
-                              const SizedBox(width: 10),
+                              const SizedBox(
+                                width: 10,
+                              ),
                               Expanded(
-                                child: Column(
+                                child:
+                                    Column(
                                   crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                      CrossAxisAlignment
+                                          .start,
                                   children: [
                                     const Text(
                                       'Approved Seller',
-                                      style: TextStyle(
+                                      style:
+                                          TextStyle(
                                         fontWeight:
-                                            FontWeight.bold,
+                                            FontWeight
+                                                .bold,
                                       ),
                                     ),
-                                    const SizedBox(height: 3),
+                                    const SizedBox(
+                                      height: 3,
+                                    ),
                                     Text(
-                                      _sellerCode.isNotEmpty
+                                      _sellerCode
+                                              .isNotEmpty
                                           ? 'Seller ID: $_sellerCode'
                                           : 'Seller ID: ${FirebaseAuth.instance.currentUser?.uid ?? 'N/A'}',
-                                      style: TextStyle(
-                                        fontSize: 13,
+                                      style:
+                                          TextStyle(
+                                        fontSize:
+                                            13,
                                         color: Colors
-                                            .grey.shade600,
+                                            .grey
+                                            .shade600,
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
                               const Icon(
-                                Icons.check_circle,
-                                color: Colors.green,
+                                Icons
+                                    .check_circle,
+                                color:
+                                    Colors.green,
                               ),
                             ],
                           ),
                         ),
 
-                        const SizedBox(height: 16),
-
-                        // =================================================
-                        // IMAGE PICKER
-                        // =================================================
-
-                        GestureDetector(
-                          onTap: _pickImage,
-                          child: Container(
-                            height: 180,
-                            width: double.infinity,
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade200,
-                              borderRadius:
-                                  BorderRadius.circular(10),
-                              border: Border.all(
-                                color: Colors.grey.shade400,
-                              ),
-                            ),
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                if (_pickedImage != null)
-                                  ClipRRect(
-                                    borderRadius:
-                                        BorderRadius.circular(
-                                      10,
-                                    ),
-                                    child: Image.file(
-                                      _pickedImage!,
-                                      fit: BoxFit.cover,
-                                      width:
-                                          double.infinity,
-                                      height: 180,
-                                    ),
-                                  )
-                                else
-                                  Column(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons
-                                            .add_a_photo_outlined,
-                                        size: 40,
-                                        color: Colors
-                                            .grey.shade600,
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        'Tap to pick product image',
-                                        style: TextStyle(
-                                          color: Colors
-                                              .grey.shade600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                if (_isUploadingPhoto)
-                                  Container(
-                                    decoration:
-                                        BoxDecoration(
-                                      color:
-                                          Colors.black45,
-                                      borderRadius:
-                                          BorderRadius
-                                              .circular(
-                                        10,
-                                      ),
-                                    ),
-                                    child:
-                                        const Center(
-                                      child:
-                                          CircularProgressIndicator(
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
+                        const SizedBox(
+                          height: 18,
                         ),
 
-                        const SizedBox(height: 16),
+                        // =================================================
+                        // MULTIPLE IMAGES
+                        // =================================================
+
+                        _buildImagePickerSection(),
+
+                        const SizedBox(
+                          height: 22,
+                        ),
+
+                        // =================================================
+                        // PRODUCT VIDEO
+                        // =================================================
+
+                        _buildVideoPickerSection(),
+
+                        const SizedBox(
+                          height: 20,
+                        ),
 
                         // =================================================
                         // PRODUCT NAME
                         // =================================================
 
                         TextField(
-                          controller: _titleController,
+                          controller:
+                              _titleController,
                           textInputAction:
-                              TextInputAction.next,
+                              TextInputAction
+                                  .next,
                           decoration:
                               const InputDecoration(
-                            labelText: 'Product Name',
+                            labelText:
+                                'Product Name',
                             border:
                                 OutlineInputBorder(),
                           ),
                         ),
 
-                        const SizedBox(height: 12),
+                        const SizedBox(
+                          height: 12,
+                        ),
 
                         // =================================================
                         // PRICE — BDT
                         // =================================================
 
                         TextField(
-                          controller: _priceController,
+                          controller:
+                              _priceController,
                           keyboardType:
                               const TextInputType
                                   .numberWithOptions(
-                            decimal: true,
+                            decimal:
+                                true,
                           ),
                           decoration:
                               const InputDecoration(
-                            labelText: 'Price (৳ BDT)',
+                            labelText:
+                                'Price (৳ BDT)',
                             hintText:
                                 'Example: 1500',
-                            prefixText: '৳ ',
+                            prefixText:
+                                '৳ ',
                             border:
                                 OutlineInputBorder(),
                           ),
                         ),
 
-                        const SizedBox(height: 12),
+                        const SizedBox(
+                          height: 12,
+                        ),
 
                         // =================================================
                         // CATEGORY
@@ -854,10 +1633,12 @@ class _AddProductPageState extends State<AddProductPage> {
                           controller:
                               _categoryController,
                           textInputAction:
-                              TextInputAction.next,
+                              TextInputAction
+                                  .next,
                           decoration:
                               const InputDecoration(
-                            labelText: 'Category',
+                            labelText:
+                                'Category',
                             hintText:
                                 'Example: Men, Women, Electronics',
                             border:
@@ -865,7 +1646,9 @@ class _AddProductPageState extends State<AddProductPage> {
                           ),
                         ),
 
-                        const SizedBox(height: 12),
+                        const SizedBox(
+                          height: 12,
+                        ),
 
                         // =================================================
                         // DESCRIPTION
@@ -878,44 +1661,57 @@ class _AddProductPageState extends State<AddProductPage> {
                           maxLength: 1000,
                           decoration:
                               const InputDecoration(
-                            labelText: 'Description',
+                            labelText:
+                                'Description',
                             border:
                                 OutlineInputBorder(),
                           ),
                         ),
 
-                        const SizedBox(height: 20),
+                        const SizedBox(
+                          height: 20,
+                        ),
 
                         // =================================================
                         // UPLOAD BUTTON
                         // =================================================
 
                         SizedBox(
-                          width: double.infinity,
+                          width:
+                              double.infinity,
                           height: 50,
-                          child: ElevatedButton(
+                          child:
+                              ElevatedButton(
                             onPressed:
                                 (_isUploading ||
-                                        _isUploadingPhoto)
+                                        _isUploadingPhoto ||
+                                        _isUploadingVideo)
                                     ? null
                                     : _uploadProduct,
-                            child: _isUploading
-                                ? const SizedBox(
-                                    height: 22,
-                                    width: 22,
-                                    child:
-                                        CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Text(
-                                    'Upload Product',
-                                  ),
+                            child:
+                                _isUploading
+                                    ? const SizedBox(
+                                        height:
+                                            22,
+                                        width:
+                                            22,
+                                        child:
+                                            CircularProgressIndicator(
+                                          color:
+                                              Colors.white,
+                                          strokeWidth:
+                                              2,
+                                        ),
+                                      )
+                                    : const Text(
+                                        'Upload Product',
+                                      ),
                           ),
                         ),
 
-                        const SizedBox(height: 20),
+                        const SizedBox(
+                          height: 20,
+                        ),
                       ],
                     ),
                   ),
