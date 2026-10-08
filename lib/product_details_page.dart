@@ -23,8 +23,11 @@ class ProductDetailsPage extends StatefulWidget {
       _ProductDetailsPageState();
 }
 
-class _ProductDetailsPageState
-    extends State<ProductDetailsPage> {
+class _ProductDetailsPageState extends State<ProductDetailsPage> {
+  // =========================================================
+  // BASIC STATE
+  // =========================================================
+
   int _quantity = 1;
 
   bool _isFavorite = false;
@@ -44,12 +47,16 @@ class _ProductDetailsPageState
 
   bool _videoLoading = false;
 
+  final PageController _mediaPageController = PageController();
+
   // =========================================================
-  // DRAGGABLE CART POSITION
+  // FLOATING CART POSITION
   // =========================================================
 
   double _cartLeft = 0;
   double _cartTop = 20;
+
+  bool _cartPositionInitialized = false;
 
   // =========================================================
   // INIT
@@ -62,6 +69,20 @@ class _ProductDetailsPageState
     _prepareMedia();
     _loadFavoriteStatus();
     _initializeVideo();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    if (!_cartPositionInitialized) {
+      final screenWidth = MediaQuery.of(context).size.width;
+
+      _cartLeft = screenWidth - 78;
+      _cartTop = 20;
+
+      _cartPositionInitialized = true;
+    }
   }
 
   // =========================================================
@@ -88,8 +109,8 @@ class _ProductDetailsPageState
   String get imageUrl {
     final value =
         widget.product['imageUrl']?.toString() ??
-            widget.product['productImageUrl']?.toString() ??
-            '';
+        widget.product['productImageUrl']?.toString() ??
+        '';
 
     return value.trim();
   }
@@ -106,17 +127,14 @@ class _ProductDetailsPageState
   double get rawPrice {
     final value =
         widget.product['price'] ??
-            widget.product['sellingPrice'] ??
-            0;
+        widget.product['sellingPrice'] ??
+        0;
 
     if (value is num) {
       return value.toDouble();
     }
 
-    return double.tryParse(
-          value.toString(),
-        ) ??
-        0;
+    return double.tryParse(value.toString()) ?? 0;
   }
 
   // =========================================================
@@ -132,7 +150,7 @@ class _ProductDetailsPageState
   }
 
   bool get isBdt {
-    return currency == 'BDT';
+    return currency == 'BDT' || currency == '৳';
   }
 
   double get price {
@@ -140,6 +158,7 @@ class _ProductDetailsPageState
       return rawPrice;
     }
 
+    // Legacy products were stored as KRW.
     return rawPrice * 0.09;
   }
 
@@ -152,21 +171,15 @@ class _ProductDetailsPageState
   }
 
   String get sellerCode {
-    return widget.product['sellerCode']
-            ?.toString() ??
-        '';
+    return widget.product['sellerCode']?.toString() ?? '';
   }
 
   String get sellerId {
-    return widget.product['sellerId']
-            ?.toString() ??
-        '';
+    return widget.product['sellerId']?.toString() ?? '';
   }
 
   String get sellerEmail {
-    return widget.product['sellerEmail']
-            ?.toString() ??
-        '';
+    return widget.product['sellerEmail']?.toString() ?? '';
   }
 
   // =========================================================
@@ -174,35 +187,24 @@ class _ProductDetailsPageState
   // =========================================================
 
   String get entrepreneurUid {
-    return widget.product['entrepreneurUid']
-            ?.toString()
-            .trim() ??
-        '';
+    return widget.product['entrepreneurUid']?.toString().trim() ?? '';
   }
 
   String get entrepreneurName {
-    return widget.product['entrepreneurName']
-            ?.toString()
-            .trim() ??
-        '';
+    return widget.product['entrepreneurName']?.toString().trim() ?? '';
   }
 
   bool get isResellerProduct {
-    return widget.product['isResellerProduct'] ==
-            true ||
+    return widget.product['isResellerProduct'] == true ||
         entrepreneurUid.isNotEmpty;
   }
 
   String get sellerNameFromProduct {
-    return widget.product['sellerName']
-            ?.toString()
-            .trim() ??
-        '';
+    return widget.product['sellerName']?.toString().trim() ?? '';
   }
 
   String get recipientId {
-    if (isResellerProduct &&
-        entrepreneurUid.isNotEmpty) {
+    if (isResellerProduct && entrepreneurUid.isNotEmpty) {
       return entrepreneurUid;
     }
 
@@ -210,8 +212,7 @@ class _ProductDetailsPageState
   }
 
   String get recipientNameFromProduct {
-    if (isResellerProduct &&
-        entrepreneurName.isNotEmpty) {
+    if (isResellerProduct && entrepreneurName.isNotEmpty) {
       return entrepreneurName;
     }
 
@@ -227,9 +228,7 @@ class _ProductDetailsPageState
       return sellerEmail;
     }
 
-    return isResellerProduct
-        ? 'Reseller'
-        : 'Seller';
+    return isResellerProduct ? 'Reseller' : 'Seller';
   }
 
   double get subtotal {
@@ -241,11 +240,11 @@ class _ProductDetailsPageState
   }
 
   // =========================================================
-  // PREPARE MULTIPLE IMAGES
+  // PREPARE MEDIA
   // =========================================================
 
   void _prepareMedia() {
-    final images = <String>[];
+    final List<String> images = <String>[];
 
     void addImage(dynamic value) {
       if (value == null) return;
@@ -253,8 +252,7 @@ class _ProductDetailsPageState
       if (value is String) {
         final url = value.trim();
 
-        if (url.isNotEmpty &&
-            !images.contains(url)) {
+        if (url.isNotEmpty && !images.contains(url)) {
           images.add(url);
         }
 
@@ -269,30 +267,14 @@ class _ProductDetailsPageState
     }
 
     // Main image first.
-    addImage(
-      widget.product['imageUrl'],
-    );
-
-    addImage(
-      widget.product['productImageUrl'],
-    );
+    addImage(widget.product['imageUrl']);
+    addImage(widget.product['productImageUrl']);
 
     // Multiple image fields.
-    addImage(
-      widget.product['imageUrls'],
-    );
-
-    addImage(
-      widget.product['images'],
-    );
-
-    addImage(
-      widget.product['productImages'],
-    );
-
-    addImage(
-      widget.product['gallery'],
-    );
+    addImage(widget.product['imageUrls']);
+    addImage(widget.product['images']);
+    addImage(widget.product['productImages']);
+    addImage(widget.product['gallery']);
 
     if (images.isEmpty) {
       images.add('');
@@ -300,42 +282,35 @@ class _ProductDetailsPageState
 
     _productImages = images;
 
-    // -------------------------------------------------------
+    // =======================================================
     // VIDEO
-    // -------------------------------------------------------
+    // =======================================================
 
-    final possibleVideoFields = [
+    final List<dynamic> possibleVideoFields = <dynamic>[
       widget.product['videoUrl'],
       widget.product['productVideoUrl'],
       widget.product['video'],
     ];
 
     for (final value in possibleVideoFields) {
-      if (value != null) {
-        final text =
-            value.toString().trim();
+      if (value == null) continue;
 
-        if (text.isNotEmpty) {
-          _videoUrl = text;
-          break;
-        }
+      final text = value.toString().trim();
+
+      if (text.isNotEmpty) {
+        _videoUrl = text;
+        break;
       }
     }
 
     // Support videoUrls list.
     if (_videoUrl.isEmpty) {
-      final videoUrls =
-          widget.product['videoUrls'];
+      final dynamic videoUrls = widget.product['videoUrls'];
 
-      if (videoUrls is List &&
-          videoUrls.isNotEmpty) {
-        final first =
-            videoUrls.first
-                ?.toString()
-                .trim();
+      if (videoUrls is List && videoUrls.isNotEmpty) {
+        final first = videoUrls.first?.toString().trim();
 
-        if (first != null &&
-            first.isNotEmpty) {
+        if (first != null && first.isNotEmpty) {
           _videoUrl = first;
         }
       }
@@ -358,14 +333,12 @@ class _ProductDetailsPageState
     });
 
     try {
-      final controller =
-          VideoPlayerController.networkUrl(
+      final controller = VideoPlayerController.networkUrl(
         Uri.parse(_videoUrl),
       );
 
       await controller.initialize();
-
-      controller.setLooping(true);
+      await controller.setLooping(true);
 
       if (!mounted) {
         await controller.dispose();
@@ -376,7 +349,9 @@ class _ProductDetailsPageState
         _videoController = controller;
         _videoLoading = false;
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Product video initialization failed: $e');
+
       if (!mounted) return;
 
       setState(() {
@@ -389,8 +364,7 @@ class _ProductDetailsPageState
   // FAVORITE REFERENCE
   // =========================================================
 
-  DocumentReference<Map<String, dynamic>>
-      _favoriteReference(
+  DocumentReference<Map<String, dynamic>> _favoriteReference(
     String userId,
   ) {
     return FirebaseFirestore.instance
@@ -405,32 +379,30 @@ class _ProductDetailsPageState
   // =========================================================
 
   Future<void> _loadFavoriteStatus() async {
-    final user =
-        FirebaseAuth.instance.currentUser;
+    final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      if (mounted) {
-        setState(() {
-          _loadingFavorite = false;
-        });
-      }
+      if (!mounted) return;
+
+      setState(() {
+        _loadingFavorite = false;
+      });
+
       return;
     }
 
     try {
-      final snapshot =
-          await _favoriteReference(
-        user.uid,
-      ).get();
+      final snapshot = await _favoriteReference(user.uid).get();
 
       if (!mounted) return;
 
       setState(() {
-        _isFavorite =
-            snapshot.exists;
+        _isFavorite = snapshot.exists;
         _loadingFavorite = false;
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Favorite load failed: $e');
+
       if (!mounted) return;
 
       setState(() {
@@ -444,15 +416,13 @@ class _ProductDetailsPageState
   // =========================================================
 
   Future<void> _toggleFavorite() async {
-    final user =
-        FirebaseAuth.instance.currentUser;
+    final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) =>
-              const LoginPage(),
+          builder: (context) => const LoginPage(),
         ),
       );
 
@@ -460,10 +430,7 @@ class _ProductDetailsPageState
       return;
     }
 
-    final favoriteRef =
-        _favoriteReference(
-      user.uid,
-    );
+    final favoriteRef = _favoriteReference(user.uid);
 
     try {
       if (_isFavorite) {
@@ -475,33 +442,24 @@ class _ProductDetailsPageState
           _isFavorite = false;
         });
 
-        ScaffoldMessenger.of(context)
-            .showSnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              'Removed from Favorites',
-            ),
-            behavior:
-                SnackBarBehavior.floating,
-            duration:
-                Duration(seconds: 1),
+            content: Text('Removed from Favorites'),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 1),
           ),
         );
       } else {
         await favoriteRef.set({
-          'productId':
-              widget.productId,
-          'productName':
-              productName,
-          'productImageUrl':
-              imageUrl,
+          'productId': widget.productId,
+          'productName': productName,
+          'productImageUrl': imageUrl,
           'category': category,
           'price': price,
           'currency': 'BDT',
           'currencySymbol': '৳',
           'userId': user.uid,
-          'createdAt':
-              FieldValue.serverTimestamp(),
+          'createdAt': FieldValue.serverTimestamp(),
         });
 
         if (!mounted) return;
@@ -510,30 +468,21 @@ class _ProductDetailsPageState
           _isFavorite = true;
         });
 
-        ScaffoldMessenger.of(context)
-            .showSnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              'Added to Favorites ❤️',
-            ),
-            behavior:
-                SnackBarBehavior.floating,
-            duration:
-                Duration(seconds: 1),
+            content: Text('Added to Favorites ❤️'),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 1),
           ),
         );
       }
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Favorite update failed: $e',
-          ),
-          behavior:
-              SnackBarBehavior.floating,
+          content: Text('Favorite update failed: $e'),
+          behavior: SnackBarBehavior.floating,
         ),
       );
     }
@@ -544,83 +493,35 @@ class _ProductDetailsPageState
   // =========================================================
 
   Future<void> _addToCart() async {
-    final user =
-        FirebaseAuth.instance.currentUser;
+    final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) =>
-              const LoginPage(),
+          builder: (context) => const LoginPage(),
         ),
       );
       return;
     }
 
     try {
-      await CartService.addItem(
-        id: widget.productId,
-        name: productName,
-        price: price,
-        imageUrl:
-            imageUrl.isEmpty
-                ? null
-                : imageUrl,
-        isResellerProduct:
-            isResellerProduct,
-        entrepreneurUid:
-            entrepreneurUid.isEmpty
-                ? null
-                : entrepreneurUid,
-        sellerId:
-            sellerId.isEmpty
-                ? null
-                : sellerId,
-        supplierProductId:
-            widget.product['supplierProductId']
-                ?.toString(),
-        supplierPrice:
-            _nullableDouble(
-          widget.product['supplierPrice'],
-        ),
-        resellerProfit:
-            _nullableDouble(
-          widget.product['resellerProfit'],
-        ),
-      );
-
-      // If quantity is more than one, add remaining quantity.
-      for (int i = 1;
-          i < _quantity;
-          i++) {
+      for (int i = 0; i < _quantity; i++) {
         await CartService.addItem(
           id: widget.productId,
           name: productName,
           price: price,
-          imageUrl:
-              imageUrl.isEmpty
-                  ? null
-                  : imageUrl,
-          isResellerProduct:
-              isResellerProduct,
+          imageUrl: imageUrl.isEmpty ? null : imageUrl,
+          isResellerProduct: isResellerProduct,
           entrepreneurUid:
-              entrepreneurUid.isEmpty
-                  ? null
-                  : entrepreneurUid,
-          sellerId:
-              sellerId.isEmpty
-                  ? null
-                  : sellerId,
+              entrepreneurUid.isEmpty ? null : entrepreneurUid,
+          sellerId: sellerId.isEmpty ? null : sellerId,
           supplierProductId:
-              widget.product['supplierProductId']
-                  ?.toString(),
-          supplierPrice:
-              _nullableDouble(
+              widget.product['supplierProductId']?.toString(),
+          supplierPrice: _nullableDouble(
             widget.product['supplierPrice'],
           ),
-          resellerProfit:
-              _nullableDouble(
+          resellerProfit: _nullableDouble(
             widget.product['resellerProfit'],
           ),
         );
@@ -628,29 +529,22 @@ class _ProductDetailsPageState
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             '$_quantity × $productName added to cart',
           ),
-          behavior:
-              SnackBarBehavior.floating,
-          duration:
-              const Duration(seconds: 1),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 1),
         ),
       );
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Could not add to cart: $e',
-          ),
-          behavior:
-              SnackBarBehavior.floating,
+          content: Text('Could not add to cart: $e'),
+          behavior: SnackBarBehavior.floating,
         ),
       );
     }
@@ -661,15 +555,13 @@ class _ProductDetailsPageState
   // =========================================================
 
   Future<void> _buyNow() async {
-    final user =
-        FirebaseAuth.instance.currentUser;
+    final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) =>
-              const LoginPage(),
+          builder: (context) => const LoginPage(),
         ),
       );
       return;
@@ -678,41 +570,25 @@ class _ProductDetailsPageState
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) =>
-            CheckoutPage(
+        builder: (context) => CheckoutPage(
           items: [
             CheckoutItem(
               id: widget.productId,
               name: productName,
               price: price,
-              imageUrl:
-                  imageUrl.isEmpty
-                      ? null
-                      : imageUrl,
+              imageUrl: imageUrl.isEmpty ? null : imageUrl,
               quantity: _quantity,
-              isResellerProduct:
-                  isResellerProduct,
+              isResellerProduct: isResellerProduct,
               entrepreneurUid:
-                  entrepreneurUid.isEmpty
-                      ? null
-                      : entrepreneurUid,
-              sellerId:
-                  sellerId.isEmpty
-                      ? null
-                      : sellerId,
+                  entrepreneurUid.isEmpty ? null : entrepreneurUid,
+              sellerId: sellerId.isEmpty ? null : sellerId,
               supplierProductId:
-                  widget.product[
-                          'supplierProductId']
-                      ?.toString(),
-              supplierPrice:
-                  _nullableDouble(
-                widget.product[
-                    'supplierPrice'],
+                  widget.product['supplierProductId']?.toString(),
+              supplierPrice: _nullableDouble(
+                widget.product['supplierPrice'],
               ),
-              resellerProfit:
-                  _nullableDouble(
-                widget.product[
-                    'resellerProfit'],
+              resellerProfit: _nullableDouble(
+                widget.product['resellerProfit'],
               ),
             ),
           ],
@@ -729,8 +605,7 @@ class _ProductDetailsPageState
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) =>
-            const CartPage(),
+        builder: (context) => const CartPage(),
       ),
     );
   }
@@ -740,20 +615,17 @@ class _ProductDetailsPageState
   // =========================================================
 
   Future<void> _openMessageChat() async {
-    User? user =
-        FirebaseAuth.instance.currentUser;
+    User? user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) =>
-              const LoginPage(),
+          builder: (context) => const LoginPage(),
         ),
       );
 
-      user =
-          FirebaseAuth.instance.currentUser;
+      user = FirebaseAuth.instance.currentUser;
 
       if (user == null) {
         return;
@@ -788,75 +660,63 @@ class _ProductDetailsPageState
       return;
     }
 
-    String targetName =
-        recipientNameFromProduct;
+    String targetName = recipientNameFromProduct;
 
     final shouldLoadUserName =
         targetName == 'Seller' ||
-            targetName == 'Reseller' ||
-            targetName.isEmpty;
+        targetName == 'Reseller' ||
+        targetName.isEmpty;
 
     if (shouldLoadUserName) {
       try {
-        final userDoc =
-            await FirebaseFirestore
-                .instance
-                .collection('users')
-                .doc(targetId)
-                .get();
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(targetId)
+            .get();
 
         if (userDoc.exists) {
-          final data =
-              userDoc.data();
+          final data = userDoc.data();
 
-          final name =
-              data?['name']
-                  ?.toString()
-                  .trim();
-
+          final name = data?['name']?.toString().trim();
           final displayName =
-              data?['displayName']
-                  ?.toString()
-                  .trim();
+              data?['displayName']?.toString().trim();
 
-          if (name != null &&
-              name.isNotEmpty) {
+          if (name != null && name.isNotEmpty) {
             targetName = name;
-          } else if (displayName != null &&
-              displayName.isNotEmpty) {
+          } else if (displayName != null && displayName.isNotEmpty) {
             targetName = displayName;
           }
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Seller name load failed: $e');
+      }
     }
 
     String conversationId = '';
 
     try {
-      final existing =
-          await FirebaseFirestore
-              .instance
-              .collection('conversations')
-              .where(
-                'buyerId',
-                isEqualTo: user.uid,
-              )
-              .where(
-                'sellerId',
-                isEqualTo: targetId,
-              )
-              .limit(1)
-              .get();
+      final existing = await FirebaseFirestore.instance
+          .collection('conversations')
+          .where(
+            'buyerId',
+            isEqualTo: user.uid,
+          )
+          .where(
+            'sellerId',
+            isEqualTo: targetId,
+          )
+          .limit(1)
+          .get();
 
       if (existing.docs.isNotEmpty) {
-        conversationId =
-            existing.docs.first.id;
+        conversationId = existing.docs.first.id;
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Conversation lookup failed: $e');
+    }
 
     if (conversationId.isEmpty) {
-      conversationId =
-          'chat_${user.uid}_$targetId';
+      conversationId = 'chat_${user.uid}_$targetId';
     }
 
     if (!mounted) return;
@@ -864,14 +724,11 @@ class _ProductDetailsPageState
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) =>
-            BuyerChatPage(
-          conversationId:
-              conversationId,
+        builder: (context) => BuyerChatPage(
+          conversationId: conversationId,
           sellerId: targetId,
           sellerName: targetName,
-          isReseller:
-              isResellerProduct,
+          isReseller: isResellerProduct,
         ),
       ),
     );
@@ -896,50 +753,37 @@ class _ProductDetailsPageState
   }
 
   // =========================================================
-  // REVIEWS REFERENCE
+  // REVIEWS
   // =========================================================
 
-  CollectionReference<Map<String, dynamic>>
-      get _reviewsReference {
-    return FirebaseFirestore.instance
-        .collection('product_reviews');
+  CollectionReference<Map<String, dynamic>> get _reviewsReference {
+    return FirebaseFirestore.instance.collection('product_reviews');
   }
 
-  // =========================================================
-  // CHECK PURCHASE
-  // =========================================================
-
   Future<bool> _hasDeliveredProduct() async {
-    final user =
-        FirebaseAuth.instance.currentUser;
+    final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) return false;
 
     try {
-      final snapshot =
-          await FirebaseFirestore.instance
-              .collection('seller_orders')
-              .where(
-                'customerId',
-                isEqualTo: user.uid,
-              )
-              .get();
+      final snapshot = await FirebaseFirestore.instance
+          .collection('seller_orders')
+          .where(
+            'customerId',
+            isEqualTo: user.uid,
+          )
+          .get();
 
-      for (final doc
-          in snapshot.docs) {
+      for (final doc in snapshot.docs) {
         final data = doc.data();
 
-        final status =
-            data['orderStatus']
-                    ?.toString() ??
-                '';
+        final status = data['orderStatus']?.toString() ?? '';
 
         if (status != 'delivered') {
           continue;
         }
 
-        final items =
-            data['items'];
+        final items = data['items'];
 
         if (items is! List) {
           continue;
@@ -951,58 +795,49 @@ class _ProductDetailsPageState
           }
 
           final itemProductId =
-              item['productId']
-                      ?.toString() ??
-                  item['id']
-                      ?.toString() ??
-                  '';
+              item['productId']?.toString() ??
+              item['id']?.toString() ??
+              '';
 
-          if (itemProductId ==
-              widget.productId) {
+          if (itemProductId == widget.productId) {
             return true;
           }
         }
       }
 
       return false;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Delivered order check failed: $e');
       return false;
     }
   }
 
-  // =========================================================
-  // FIND USER REVIEW
-  // =========================================================
-
-  Future<QueryDocumentSnapshot<
-          Map<String, dynamic>>?>
+  Future<QueryDocumentSnapshot<Map<String, dynamic>>?>
       _findMyReview() async {
-    final user =
-        FirebaseAuth.instance.currentUser;
+    final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) return null;
 
     try {
-      final snapshot =
-          await _reviewsReference
-              .where(
-                'productId',
-                isEqualTo:
-                    widget.productId,
-              )
-              .where(
-                'userId',
-                isEqualTo: user.uid,
-              )
-              .limit(1)
-              .get();
+      final snapshot = await _reviewsReference
+          .where(
+            'productId',
+            isEqualTo: widget.productId,
+          )
+          .where(
+            'userId',
+            isEqualTo: user.uid,
+          )
+          .limit(1)
+          .get();
 
       if (snapshot.docs.isEmpty) {
         return null;
       }
 
       return snapshot.docs.first;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Review lookup failed: $e');
       return null;
     }
   }
@@ -1012,27 +847,22 @@ class _ProductDetailsPageState
   // =========================================================
 
   Future<void> _showReviewDialog({
-    DocumentSnapshot<
-            Map<String, dynamic>>?
-        existingReview,
+    DocumentSnapshot<Map<String, dynamic>>? existingReview,
   }) async {
-    final user =
-        FirebaseAuth.instance.currentUser;
+    final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) =>
-              const LoginPage(),
+          builder: (context) => const LoginPage(),
         ),
       );
       return;
     }
 
     if (existingReview == null) {
-      final eligible =
-          await _hasDeliveredProduct();
+      final eligible = await _hasDeliveredProduct();
 
       if (!eligible) {
         if (!mounted) return;
@@ -1048,32 +878,21 @@ class _ProductDetailsPageState
 
     int selectedRating = 5;
 
-    final existingData =
-        existingReview?.data();
+    final existingData = existingReview?.data();
 
     if (existingData != null) {
-      final oldRating =
-          existingData['rating'];
+      final oldRating = existingData['rating'];
 
       if (oldRating is num) {
-        selectedRating =
-            oldRating.toInt().clamp(
-                  1,
-                  5,
-                );
+        selectedRating = oldRating.toInt().clamp(1, 5);
       }
     }
 
-    final controller =
-        TextEditingController(
-      text:
-          existingData?['review']
-                  ?.toString() ??
-              '',
+    final controller = TextEditingController(
+      text: existingData?['review']?.toString() ?? '',
     );
 
-    final result =
-        await showDialog<bool>(
+    final result = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
@@ -1087,71 +906,51 @@ class _ProductDetailsPageState
                     ? 'Write a Review'
                     : 'Edit Your Review',
               ),
-              content:
-                  SingleChildScrollView(
+              content: SingleChildScrollView(
                 child: Column(
-                  mainAxisSize:
-                      MainAxisSize.min,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     const Text(
                       'How would you rate this product?',
                       style: TextStyle(
-                        fontWeight:
-                            FontWeight.w600,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(
-                      height: 12,
-                    ),
+                    const SizedBox(height: 12),
                     Row(
-                      mainAxisAlignment:
-                          MainAxisAlignment
-                              .center,
-                      children:
-                          List.generate(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(
                         5,
                         (index) {
-                          final star =
-                              index + 1;
+                          final star = index + 1;
 
                           return IconButton(
                             onPressed: () {
-                              setDialogState(
-                                () {
-                                  selectedRating =
-                                      star;
-                                },
-                              );
+                              setDialogState(() {
+                                selectedRating = star;
+                              });
                             },
                             icon: Icon(
-                              star <=
-                                      selectedRating
+                              star <= selectedRating
                                   ? Icons.star
                                   : Icons.star_border,
-                              color:
-                                  Colors.amber,
+                              color: Colors.amber,
                               size: 34,
                             ),
                           );
                         },
                       ),
                     ),
-                    const SizedBox(
-                      height: 10,
-                    ),
+                    const SizedBox(height: 10),
                     TextField(
-                      controller:
-                          controller,
+                      controller: controller,
                       maxLines: 4,
                       maxLength: 500,
-                      decoration:
-                          const InputDecoration(
-                        labelText:
-                            'Your Review',
+                      decoration: const InputDecoration(
+                        labelText: 'Your Review',
                         hintText:
                             'Tell other buyers about this product...',
-                        border:
-                            OutlineInputBorder(),
+                        border: OutlineInputBorder(),
                       ),
                     ),
                   ],
@@ -1165,20 +964,14 @@ class _ProductDetailsPageState
                       false,
                     );
                   },
-                  child:
-                      const Text('Cancel'),
+                  child: const Text('Cancel'),
                 ),
                 ElevatedButton(
                   onPressed: () async {
-                    final review =
-                        controller.text
-                            .trim();
+                    final review = controller.text.trim();
 
                     if (review.isEmpty) {
-                      ScaffoldMessenger
-                              .of(
-                        dialogContext,
-                      ).showSnackBar(
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
                         const SnackBar(
                           content: Text(
                             'Please write a review.',
@@ -1189,51 +982,32 @@ class _ProductDetailsPageState
                     }
 
                     try {
-                      if (existingReview ==
-                          null) {
-                        await _reviewsReference
-                            .add({
-                          'productId':
-                              widget.productId,
-                          'productName':
-                              productName,
-                          'productImageUrl':
-                              imageUrl,
-                          'userId':
-                              user.uid,
+                      if (existingReview == null) {
+                        await _reviewsReference.add({
+                          'productId': widget.productId,
+                          'productName': productName,
+                          'productImageUrl': imageUrl,
+                          'userId': user.uid,
                           'userName':
-                              user.displayName ??
-                                  'Buyer',
-                          'userEmail':
-                              user.email ??
-                                  '',
-                          'rating':
-                              selectedRating,
-                          'review':
-                              review,
+                              user.displayName ?? 'Buyer',
+                          'userEmail': user.email ?? '',
+                          'rating': selectedRating,
+                          'review': review,
                           'createdAt':
-                              FieldValue
-                                  .serverTimestamp(),
+                              FieldValue.serverTimestamp(),
                           'updatedAt':
-                              FieldValue
-                                  .serverTimestamp(),
+                              FieldValue.serverTimestamp(),
                         });
                       } else {
-                        await existingReview
-                            .reference
-                            .update({
-                          'rating':
-                              selectedRating,
-                          'review':
-                              review,
+                        await existingReview.reference.update({
+                          'rating': selectedRating,
+                          'review': review,
                           'updatedAt':
-                              FieldValue
-                                  .serverTimestamp(),
+                              FieldValue.serverTimestamp(),
                         });
                       }
 
-                      if (!dialogContext
-                          .mounted) {
+                      if (!dialogContext.mounted) {
                         return;
                       }
 
@@ -1242,15 +1016,11 @@ class _ProductDetailsPageState
                         true,
                       );
                     } catch (e) {
-                      if (!dialogContext
-                          .mounted) {
+                      if (!dialogContext.mounted) {
                         return;
                       }
 
-                      ScaffoldMessenger
-                              .of(
-                        dialogContext,
-                      ).showSnackBar(
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
                         SnackBar(
                           content: Text(
                             'Review failed: $e',
@@ -1259,13 +1029,9 @@ class _ProductDetailsPageState
                       );
                     }
                   },
-                  style:
-                      ElevatedButton
-                          .styleFrom(
-                    backgroundColor:
-                        Colors.redAccent,
-                    foregroundColor:
-                        Colors.white,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.redAccent,
+                    foregroundColor: Colors.white,
                   ),
                   child: Text(
                     existingReview == null
@@ -1304,12 +1070,9 @@ class _ProductDetailsPageState
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(
-                  context,
-                );
+                Navigator.pop(context);
               },
-              child:
-                  const Text('OK'),
+              child: const Text('OK'),
             ),
           ],
         );
@@ -1321,9 +1084,7 @@ class _ProductDetailsPageState
   // IMAGE VIEWER
   // =========================================================
 
-  Widget _buildImageViewer(
-    String url,
-  ) {
+  Widget _buildImageViewer(String url) {
     if (url.trim().isEmpty) {
       return Container(
         color: Colors.grey.shade200,
@@ -1342,8 +1103,24 @@ class _ProductDetailsPageState
       width: double.infinity,
       height: double.infinity,
       fit: BoxFit.contain,
-      errorBuilder:
-          (context, error, stackTrace) {
+      loadingBuilder: (
+        context,
+        child,
+        loadingProgress,
+      ) {
+        if (loadingProgress == null) {
+          return child;
+        }
+
+        return const Center(
+          child: CircularProgressIndicator(),
+        );
+      },
+      errorBuilder: (
+        context,
+        error,
+        stackTrace,
+      ) {
         return Container(
           color: Colors.grey.shade200,
           child: const Center(
@@ -1363,15 +1140,13 @@ class _ProductDetailsPageState
   // =========================================================
 
   Widget _buildVideoViewer() {
-    final controller =
-        _videoController;
+    final controller = _videoController;
 
     if (_videoLoading) {
       return Container(
         color: Colors.black,
         child: const Center(
-          child:
-              CircularProgressIndicator(
+          child: CircularProgressIndicator(
             color: Colors.white,
           ),
         ),
@@ -1384,12 +1159,10 @@ class _ProductDetailsPageState
         color: Colors.black,
         child: const Center(
           child: Column(
-            mainAxisSize:
-                MainAxisSize.min,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                Icons
-                    .video_library_outlined,
+                Icons.video_library_outlined,
                 color: Colors.white,
                 size: 50,
               ),
@@ -1414,30 +1187,28 @@ class _ProductDetailsPageState
           controller.play();
         }
 
-        setState(() {});
+        if (mounted) {
+          setState(() {});
+        }
       },
       child: Stack(
         alignment: Alignment.center,
         children: [
           Center(
             child: AspectRatio(
-              aspectRatio:
-                  controller.value.aspectRatio,
-              child: VideoPlayer(
-                controller,
-              ),
+              aspectRatio: controller.value.aspectRatio == 0
+                  ? 16 / 9
+                  : controller.value.aspectRatio,
+              child: VideoPlayer(controller),
             ),
           ),
-
           if (!controller.value.isPlaying)
             Container(
-              decoration:
-                  const BoxDecoration(
+              decoration: const BoxDecoration(
                 color: Colors.black54,
                 shape: BoxShape.circle,
               ),
-              padding:
-                  const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(12),
               child: const Icon(
                 Icons.play_arrow,
                 color: Colors.white,
@@ -1454,9 +1225,9 @@ class _ProductDetailsPageState
   // =========================================================
 
   Widget _buildMediaGallery() {
-    final totalMedia =
+    final int totalMedia =
         _productImages.length +
-            (_videoUrl.isNotEmpty ? 1 : 0);
+        (_videoUrl.isNotEmpty ? 1 : 0);
 
     return Column(
       children: [
@@ -1470,22 +1241,17 @@ class _ProductDetailsPageState
                 itemCount: totalMedia,
                 onPageChanged: (index) {
                   setState(() {
-                    _selectedMediaIndex =
-                        index;
+                    _selectedMediaIndex = index;
                   });
 
                   if (_videoUrl.isNotEmpty &&
-                      index ==
-                          _productImages.length) {
-                    _videoController
-                        ?.pause();
+                      index != _productImages.length) {
+                    _videoController?.pause();
                   }
                 },
-                itemBuilder:
-                    (context, index) {
+                itemBuilder: (context, index) {
                   if (_videoUrl.isNotEmpty &&
-                      index ==
-                          _productImages.length) {
+                      index == _productImages.length) {
                     return _buildVideoViewer();
                   }
 
@@ -1496,115 +1262,79 @@ class _ProductDetailsPageState
               ),
             ),
 
-            // -------------------------------------------------
+            // =================================================
             // MEDIA COUNTER
-            // -------------------------------------------------
+            // =================================================
 
             Positioned(
               right: 14,
               bottom: 14,
               child: Container(
-                padding:
-                    const EdgeInsets
-                        .symmetric(
+                padding: const EdgeInsets.symmetric(
                   horizontal: 12,
                   vertical: 6,
                 ),
-                decoration:
-                    BoxDecoration(
+                decoration: BoxDecoration(
                   color: Colors.black54,
-                  borderRadius:
-                      BorderRadius.circular(
-                    20,
-                  ),
+                  borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   '${_selectedMediaIndex + 1}/$totalMedia',
-                  style:
-                      const TextStyle(
+                  style: const TextStyle(
                     color: Colors.white,
-                    fontWeight:
-                        FontWeight.bold,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
             ),
 
-            // -------------------------------------------------
+            // =================================================
             // DRAGGABLE CART
-            // -------------------------------------------------
+            // =================================================
 
             _buildDraggableCart(),
           ],
         ),
 
-        // -----------------------------------------------------
+        // =====================================================
         // THUMBNAILS
-        // -----------------------------------------------------
+        // =====================================================
 
         if (totalMedia > 1)
           SizedBox(
-            height: 82,
+            height: 88,
             child: ListView.builder(
-              scrollDirection:
-                  Axis.horizontal,
-              padding:
-                  const EdgeInsets
-                      .symmetric(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(
                 horizontal: 12,
                 vertical: 8,
               ),
               itemCount: totalMedia,
-              itemBuilder:
-                  (context, index) {
-                final selected =
-                    index ==
-                        _selectedMediaIndex;
+              itemBuilder: (context, index) {
+                final bool selected =
+                    index == _selectedMediaIndex;
 
                 return GestureDetector(
                   onTap: () {
-                    // The PageView is controlled
-                    // through the thumbnail area
-                    // below.
-                    _selectMediaFromThumbnail(
-                      index,
-                    );
+                    _selectMediaFromThumbnail(index);
                   },
                   child: Container(
-                    width: 66,
-                    margin:
-                        const EdgeInsets
-                            .only(
+                    width: 68,
+                    margin: const EdgeInsets.only(
                       right: 8,
                     ),
-                    decoration:
-                        BoxDecoration(
-                      borderRadius:
-                          BorderRadius
-                              .circular(
-                        9,
-                      ),
-                      border:
-                          Border.all(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(
                         color: selected
                             ? Colors.redAccent
-                            : Colors.grey
-                                .shade300,
-                        width:
-                            selected ? 2 : 1,
+                            : Colors.grey.shade300,
+                        width: selected ? 2 : 1,
                       ),
                     ),
-                    child:
-                        ClipRRect(
-                      borderRadius:
-                          BorderRadius
-                              .circular(
-                        8,
-                      ),
-                      child:
-                          _buildThumbnail(
-                        index,
-                      ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: _buildThumbnail(index),
                     ),
                   ),
                 );
@@ -1616,31 +1346,22 @@ class _ProductDetailsPageState
   }
 
   // =========================================================
-  // THUMBNAIL PAGE CONTROLLER
+  // THUMBNAIL PAGE SELECTION
   // =========================================================
 
-  final PageController _mediaPageController =
-      PageController();
-
-  void _selectMediaFromThumbnail(
-    int index,
-  ) {
-    if (!_mediaPageController.hasClients) {
-      return;
+  void _selectMediaFromThumbnail(int index) {
+    if (_mediaPageController.hasClients) {
+      _mediaPageController.animateToPage(
+        index,
+        duration: const Duration(
+          milliseconds: 300,
+        ),
+        curve: Curves.easeInOut,
+      );
     }
 
-    _mediaPageController.animateToPage(
-      index,
-      duration:
-          const Duration(
-        milliseconds: 300,
-      ),
-      curve: Curves.easeInOut,
-    );
-
     setState(() {
-      _selectedMediaIndex =
-          index;
+      _selectedMediaIndex = index;
     });
   }
 
@@ -1648,13 +1369,10 @@ class _ProductDetailsPageState
   // THUMBNAIL
   // =========================================================
 
-  Widget _buildThumbnail(
-    int index,
-  ) {
-    final isVideo =
+  Widget _buildThumbnail(int index) {
+    final bool isVideo =
         _videoUrl.isNotEmpty &&
-            index ==
-                _productImages.length;
+        index == _productImages.length;
 
     if (isVideo) {
       return Container(
@@ -1663,19 +1381,18 @@ class _ProductDetailsPageState
           alignment: Alignment.center,
           children: [
             Icon(
-              Icons.video_library,
+              Icons.play_circle_outline,
               color: Colors.white,
-              size: 30,
+              size: 34,
             ),
             Positioned(
-              bottom: 4,
+              bottom: 3,
               child: Text(
                 'VIDEO',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 8,
-                  fontWeight:
-                      FontWeight.bold,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ),
@@ -1684,8 +1401,7 @@ class _ProductDetailsPageState
       );
     }
 
-    final url =
-        _productImages[index];
+    final url = _productImages[index];
 
     if (url.isEmpty) {
       return Container(
@@ -1700,8 +1416,11 @@ class _ProductDetailsPageState
     return Image.network(
       url,
       fit: BoxFit.cover,
-      errorBuilder:
-          (context, error, stackTrace) {
+      errorBuilder: (
+        context,
+        error,
+        stackTrace,
+      ) {
         return Container(
           color: Colors.grey.shade200,
           child: const Icon(
@@ -1724,72 +1443,45 @@ class _ProductDetailsPageState
       child: GestureDetector(
         onPanUpdate: (details) {
           final screenWidth =
-              MediaQuery.of(context)
-                  .size
-                  .width;
+              MediaQuery.of(context).size.width;
 
           setState(() {
-            _cartLeft +=
-                details.delta.dx;
+            _cartLeft += details.delta.dx;
+            _cartTop += details.delta.dy;
 
-            _cartTop +=
-                details.delta.dy;
-
-            // Keep inside screen.
-            _cartLeft =
-                _cartLeft.clamp(
+            _cartLeft = _cartLeft.clamp(
               0.0,
               screenWidth - 68,
             );
 
-            _cartTop =
-                _cartTop.clamp(
+            _cartTop = _cartTop.clamp(
               5.0,
-              330.0,
+              320.0,
             );
           });
         },
         onTap: _openCart,
         child: StreamBuilder<
-            QuerySnapshot<
-                Map<String, dynamic>>>(
-          stream:
-              FirebaseAuth
-                          .instance
-                          .currentUser ==
-                      null
-                  ? null
-                  : FirebaseFirestore
-                      .instance
-                      .collection(
-                        'users',
-                      )
-                      .doc(
-                        FirebaseAuth
-                            .instance
-                            .currentUser!
-                            .uid,
-                      )
-                      .collection(
-                        'cart',
-                      )
-                      .snapshots(),
-          builder:
-              (context, snapshot) {
+            QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseAuth.instance.currentUser == null
+              ? null
+              : FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(
+                    FirebaseAuth.instance.currentUser!.uid,
+                  )
+                  .collection('cart')
+                  .snapshots(),
+          builder: (context, snapshot) {
             int quantity = 0;
 
             if (snapshot.hasData) {
-              for (final doc
-                  in snapshot.data!.docs) {
-                final data =
-                    doc.data();
-
-                final value =
-                    data['quantity'];
+              for (final doc in snapshot.data!.docs) {
+                final data = doc.data();
+                final value = data['quantity'];
 
                 if (value is num) {
-                  quantity +=
-                      value.toInt();
+                  quantity += value.toInt();
                 } else {
                   quantity++;
                 }
@@ -1799,85 +1491,61 @@ class _ProductDetailsPageState
             return Container(
               width: 62,
               height: 62,
-              decoration:
-                  BoxDecoration(
-                color:
-                    Colors.white,
-                shape:
-                    BoxShape.circle,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black
-                        .withValues(
+                    color: Colors.black.withValues(
                       alpha: 0.22,
                     ),
                     blurRadius: 10,
-                    offset:
-                        const Offset(
+                    offset: const Offset(
                       0,
                       4,
                     ),
                   ),
                 ],
                 border: Border.all(
-                  color:
-                      Colors.redAccent,
+                  color: Colors.redAccent,
                   width: 2,
                 ),
               ),
               child: Stack(
-                clipBehavior:
-                    Clip.none,
+                clipBehavior: Clip.none,
                 children: [
                   const Center(
                     child: Icon(
-                      Icons
-                          .shopping_cart,
-                      color:
-                          Colors.redAccent,
+                      Icons.shopping_cart,
+                      color: Colors.redAccent,
                       size: 29,
                     ),
                   ),
-
                   if (quantity > 0)
                     Positioned(
                       right: -2,
                       top: -4,
-                      child:
-                          Container(
-                        constraints:
-                            const BoxConstraints(
+                      child: Container(
+                        constraints: const BoxConstraints(
                           minWidth: 22,
                           minHeight: 22,
                         ),
-                        padding:
-                            const EdgeInsets
-                                .symmetric(
+                        padding: const EdgeInsets.symmetric(
                           horizontal: 5,
                         ),
-                        decoration:
-                            const BoxDecoration(
-                          color:
-                              Colors.orange,
-                          shape:
-                              BoxShape.circle,
+                        decoration: const BoxDecoration(
+                          color: Colors.orange,
+                          shape: BoxShape.circle,
                         ),
-                        child:
-                            Center(
+                        child: Center(
                           child: Text(
-                            quantity >
-                                    99
+                            quantity > 99
                                 ? '99+'
                                 : '$quantity',
-                            style:
-                                const TextStyle(
-                              color:
-                                  Colors.white,
-                              fontSize:
-                                  10,
-                              fontWeight:
-                                  FontWeight
-                                      .bold,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
@@ -1898,21 +1566,17 @@ class _ProductDetailsPageState
 
   Widget _buildReviewsSection() {
     return StreamBuilder<
-        QuerySnapshot<
-            Map<String, dynamic>>>(
+        QuerySnapshot<Map<String, dynamic>>>(
       stream: _reviewsReference
           .where(
             'productId',
-            isEqualTo:
-                widget.productId,
+            isEqualTo: widget.productId,
           )
           .snapshots(),
-      builder:
-          (context, snapshot) {
+      builder: (context, snapshot) {
         if (snapshot.hasError) {
           return const Padding(
-            padding:
-                EdgeInsets.all(16),
+            padding: EdgeInsets.all(16),
             child: Text(
               'Unable to load reviews.',
             ),
@@ -1923,73 +1587,54 @@ class _ProductDetailsPageState
                 ConnectionState.waiting &&
             !snapshot.hasData) {
           return const Padding(
-            padding:
-                EdgeInsets.all(16),
+            padding: EdgeInsets.all(16),
             child: Center(
-              child:
-                  CircularProgressIndicator(),
+              child: CircularProgressIndicator(),
             ),
           );
         }
 
-        final reviews =
-            snapshot.data?.docs ?? [];
+        final reviews = snapshot.data?.docs ?? [];
 
         double averageRating = 0;
 
         if (reviews.isNotEmpty) {
           double total = 0;
 
-          for (final review
-              in reviews) {
-            final rating =
-                review.data()['rating'];
+          for (final review in reviews) {
+            final rating = review.data()['rating'];
 
             if (rating is num) {
-              total +=
-                  rating.toDouble();
+              total += rating.toDouble();
             }
           }
 
-          averageRating =
-              total / reviews.length;
+          averageRating = total / reviews.length;
         }
 
         return Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(
-              height: 28,
-            ),
+            const SizedBox(height: 28),
+
             const Text(
               'Ratings & Reviews',
               style: TextStyle(
                 fontSize: 20,
-                fontWeight:
-                    FontWeight.bold,
+                fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(
-              height: 12,
-            ),
+
+            const SizedBox(height: 12),
+
             Container(
               width: double.infinity,
-              padding:
-                  const EdgeInsets.all(
-                16,
-              ),
-              decoration:
-                  BoxDecoration(
-                color:
-                    Colors.grey.shade50,
-                borderRadius:
-                    BorderRadius.circular(
-                  14,
-                ),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color:
-                      Colors.grey.shade200,
+                  color: Colors.grey.shade200,
                 ),
               ),
               child: Row(
@@ -1997,75 +1642,55 @@ class _ProductDetailsPageState
                   Column(
                     children: [
                       Text(
-                        averageRating
-                            .toStringAsFixed(
-                          1,
-                        ),
-                        style:
-                            const TextStyle(
+                        averageRating.toStringAsFixed(1),
+                        style: const TextStyle(
                           fontSize: 34,
-                          fontWeight:
-                              FontWeight.bold,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                       Row(
-                        children:
-                            List.generate(
+                        children: List.generate(
                           5,
                           (index) {
                             return Icon(
-                              index <
-                                      averageRating
-                                          .round()
+                              index < averageRating.round()
                                   ? Icons.star
                                   : Icons.star_border,
-                              color:
-                                  Colors.amber,
+                              color: Colors.amber,
                               size: 20,
                             );
                           },
                         ),
                       ),
-                      const SizedBox(
-                        height: 4,
-                      ),
+                      const SizedBox(height: 4),
                       Text(
                         '${reviews.length} review${reviews.length == 1 ? '' : 's'}',
-                        style:
-                            const TextStyle(
-                          color:
-                              Colors.grey,
+                        style: const TextStyle(
+                          color: Colors.grey,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(
-                    width: 24,
-                  ),
-                  Expanded(
+
+                  const SizedBox(width: 24),
+
+                  const Expanded(
                     child: Column(
                       crossAxisAlignment:
-                          CrossAxisAlignment
-                              .start,
+                          CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'Customer Reviews',
-                          style:
-                              TextStyle(
-                            fontWeight:
-                                FontWeight.bold,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
                             fontSize: 16,
                           ),
                         ),
-                        const SizedBox(
-                          height: 6,
-                        ),
-                        const Text(
+                        SizedBox(height: 6),
+                        Text(
                           'See what other buyers think about this product.',
-                          style:
-                              TextStyle(
-                            color:
-                                Colors.grey,
+                          style: TextStyle(
+                            color: Colors.grey,
                           ),
                         ),
                       ],
@@ -2074,58 +1699,43 @@ class _ProductDetailsPageState
                 ],
               ),
             ),
-            const SizedBox(
-              height: 12,
-            ),
+
+            const SizedBox(height: 12),
+
             FutureBuilder<
                 QueryDocumentSnapshot<
-                    Map<String,
-                        dynamic>>?>(
+                    Map<String, dynamic>>?>(
               future: _findMyReview(),
               builder: (
                 context,
                 myReviewSnapshot,
               ) {
-                final myReview =
-                    myReviewSnapshot
-                        .data;
+                final myReview = myReviewSnapshot.data;
 
                 return SizedBox(
-                  width:
-                      double.infinity,
-                  child:
-                      OutlinedButton.icon(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
                     onPressed: () {
                       _showReviewDialog(
-                        existingReview:
-                            myReview,
+                        existingReview: myReview,
                       );
                     },
                     icon: Icon(
                       myReview == null
-                          ? Icons
-                              .rate_review_outlined
-                          : Icons
-                              .edit_outlined,
+                          ? Icons.rate_review_outlined
+                          : Icons.edit_outlined,
                     ),
                     label: Text(
                       myReview == null
                           ? 'Write a Review'
                           : 'Edit My Review',
                     ),
-                    style:
-                        OutlinedButton
-                            .styleFrom(
-                      foregroundColor:
-                          Colors.redAccent,
-                      side:
-                          const BorderSide(
-                        color:
-                            Colors.redAccent,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.redAccent,
+                      side: const BorderSide(
+                        color: Colors.redAccent,
                       ),
-                      padding:
-                          const EdgeInsets
-                              .symmetric(
+                      padding: const EdgeInsets.symmetric(
                         vertical: 13,
                       ),
                     ),
@@ -2133,59 +1743,37 @@ class _ProductDetailsPageState
                 );
               },
             ),
-            const SizedBox(
-              height: 16,
-            ),
+
+            const SizedBox(height: 16),
+
             if (reviews.isEmpty)
               Container(
-                width:
-                    double.infinity,
-                padding:
-                    const EdgeInsets.all(
-                  20,
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                decoration:
-                    BoxDecoration(
-                  color:
-                      Colors.grey.shade50,
-                  borderRadius:
-                      BorderRadius.circular(
-                    14,
-                  ),
-                ),
-                child:
-                    const Column(
+                child: const Column(
                   children: [
                     Icon(
-                      Icons
-                          .rate_review_outlined,
+                      Icons.rate_review_outlined,
                       size: 42,
-                      color:
-                          Colors.grey,
+                      color: Colors.grey,
                     ),
-                    SizedBox(
-                      height: 8,
-                    ),
+                    SizedBox(height: 8),
                     Text(
                       'No reviews yet',
-                      style:
-                          TextStyle(
-                        fontWeight:
-                            FontWeight
-                                .bold,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    SizedBox(
-                      height: 4,
-                    ),
+                    SizedBox(height: 4),
                     Text(
                       'Be the first buyer to review this product.',
-                      textAlign:
-                          TextAlign.center,
-                      style:
-                          TextStyle(
-                        color:
-                            Colors.grey,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.grey,
                       ),
                     ),
                   ],
@@ -2194,95 +1782,68 @@ class _ProductDetailsPageState
             else
               ...reviews.map(
                 (reviewDoc) {
-                  final data =
-                      reviewDoc.data();
+                  final data = reviewDoc.data();
 
-                  final ratingValue =
-                      data['rating'];
+                  final ratingValue = data['rating'];
 
                   final rating =
                       ratingValue is num
-                          ? ratingValue
-                              .toInt()
+                          ? ratingValue.toInt()
                           : 0;
 
                   final name =
-                      data['userName']
-                              ?.toString() ??
-                          'Buyer';
+                      data['userName']?.toString() ??
+                      'Buyer';
 
                   final reviewText =
-                      data['review']
-                              ?.toString() ??
-                          '';
+                      data['review']?.toString() ??
+                      '';
 
                   return Card(
-                    margin:
-                        const EdgeInsets
-                            .only(
+                    margin: const EdgeInsets.only(
                       bottom: 12,
                     ),
                     child: Padding(
-                      padding:
-                          const EdgeInsets
-                              .all(14),
+                      padding: const EdgeInsets.all(14),
                       child: Column(
                         crossAxisAlignment:
-                            CrossAxisAlignment
-                                .start,
+                            CrossAxisAlignment.start,
                         children: [
                           Row(
                             children: [
                               CircleAvatar(
                                 backgroundColor:
-                                    Colors
-                                        .redAccent
-                                        .withValues(
-                                  alpha:
-                                      0.10,
+                                    Colors.redAccent.withValues(
+                                  alpha: 0.10,
                                 ),
-                                child:
-                                    const Icon(
+                                child: const Icon(
                                   Icons.person,
-                                  color:
-                                      Colors.redAccent,
+                                  color: Colors.redAccent,
                                 ),
                               ),
-                              const SizedBox(
-                                width: 10,
-                              ),
+                              const SizedBox(width: 10),
                               Expanded(
-                                child:
-                                    Column(
+                                child: Column(
                                   crossAxisAlignment:
-                                      CrossAxisAlignment
-                                          .start,
+                                      CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       name,
-                                      style:
-                                          const TextStyle(
-                                        fontWeight:
-                                            FontWeight.bold,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
                                       ),
                                     ),
-                                    const SizedBox(
-                                      height: 3,
-                                    ),
+                                    const SizedBox(height: 3),
                                     Row(
-                                      children:
-                                          List.generate(
+                                      children: List.generate(
                                         5,
                                         (index) {
                                           return Icon(
-                                            index <
-                                                    rating
+                                            index < rating
                                                 ? Icons.star
                                                 : Icons.star_border,
-                                            color:
-                                                Colors.amber,
-                                            size:
-                                                17,
+                                            color: Colors.amber,
+                                            size: 17,
                                           );
                                         },
                                       ),
@@ -2292,13 +1853,10 @@ class _ProductDetailsPageState
                               ),
                             ],
                           ),
-                          const SizedBox(
-                            height: 10,
-                          ),
+                          const SizedBox(height: 10),
                           Text(
                             reviewText,
-                            style:
-                                const TextStyle(
+                            style: const TextStyle(
                               fontSize: 14,
                               height: 1.4,
                             ),
@@ -2320,51 +1878,40 @@ class _ProductDetailsPageState
   // =========================================================
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     final recipientType =
-        isResellerProduct
-            ? 'Reseller'
-            : 'Seller';
+        isResellerProduct ? 'Reseller' : 'Seller';
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor:
-            Colors.redAccent,
-        foregroundColor:
-            Colors.white,
+        backgroundColor: Colors.redAccent,
+        foregroundColor: Colors.white,
         title: const Text(
           'Product Details',
           style: TextStyle(
-            fontWeight:
-                FontWeight.bold,
+            fontWeight: FontWeight.bold,
           ),
         ),
         actions: [
           IconButton(
             icon: const Icon(
-              Icons
-                  .shopping_cart_outlined,
+              Icons.shopping_cart_outlined,
             ),
             onPressed: _openCart,
           ),
         ],
       ),
 
-      body:
-          SingleChildScrollView(
-        padding:
-            const EdgeInsets.only(
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.only(
           bottom: 120,
         ),
         child: Column(
           crossAxisAlignment:
-              CrossAxisAlignment
-                  .start,
+              CrossAxisAlignment.start,
           children: [
             // =================================================
-            // TEMU STYLE PRODUCT MEDIA
+            // PRODUCT MEDIA
             // =================================================
 
             _buildMediaGallery(),
@@ -2374,138 +1921,97 @@ class _ProductDetailsPageState
             // =================================================
 
             Padding(
-              padding:
-                  const EdgeInsets
-                      .all(16),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment:
-                    CrossAxisAlignment
-                        .start,
+                    CrossAxisAlignment.start,
                 children: [
                   Row(
                     crossAxisAlignment:
-                        CrossAxisAlignment
-                            .start,
+                        CrossAxisAlignment.start,
                     children: [
                       Expanded(
                         child: Text(
                           productName,
-                          style:
-                              const TextStyle(
+                          style: const TextStyle(
                             fontSize: 24,
-                            fontWeight:
-                                FontWeight
-                                    .bold,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
                       IconButton(
-                        onPressed:
-                            _loadingFavorite
-                                ? null
-                                : _toggleFavorite,
+                        onPressed: _loadingFavorite
+                            ? null
+                            : _toggleFavorite,
                         icon: Icon(
                           _isFavorite
                               ? Icons.favorite
-                              : Icons
-                                  .favorite_border,
-                          color:
-                              _isFavorite
-                                  ? Colors
-                                      .redAccent
-                                  : Colors
-                                      .grey,
+                              : Icons.favorite_border,
+                          color: _isFavorite
+                              ? Colors.redAccent
+                              : Colors.grey,
                           size: 30,
                         ),
                       ),
                     ],
                   ),
 
-                  const SizedBox(
-                    height: 8,
-                  ),
+                  const SizedBox(height: 8),
 
-                  if (category
-                      .isNotEmpty)
+                  if (category.isNotEmpty)
                     Container(
-                      padding:
-                          const EdgeInsets
-                              .symmetric(
+                      padding: const EdgeInsets.symmetric(
                         horizontal: 10,
                         vertical: 5,
                       ),
-                      decoration:
-                          BoxDecoration(
-                        color: Colors
-                            .redAccent
-                            .withValues(
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent.withValues(
                           alpha: 0.10,
                         ),
                         borderRadius:
-                            BorderRadius
-                                .circular(
-                          20,
-                        ),
+                            BorderRadius.circular(20),
                       ),
                       child: Text(
                         category,
-                        style:
-                            const TextStyle(
-                          fontWeight:
-                              FontWeight
-                                  .w600,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
 
-                  const SizedBox(
-                    height: 12,
-                  ),
+                  const SizedBox(height: 12),
 
                   Text(
                     formattedPrice,
-                    style:
-                        const TextStyle(
+                    style: const TextStyle(
                       fontSize: 25,
-                      color:
-                          Colors.redAccent,
-                      fontWeight:
-                          FontWeight.bold,
+                      color: Colors.redAccent,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
 
-                  const SizedBox(
-                    height: 20,
-                  ),
+                  const SizedBox(height: 20),
 
                   const Text(
                     'Description',
-                    style:
-                        TextStyle(
+                    style: TextStyle(
                       fontSize: 19,
-                      fontWeight:
-                          FontWeight.bold,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
 
-                  const SizedBox(
-                    height: 8,
-                  ),
+                  const SizedBox(height: 8),
 
                   Text(
                     description,
-                    style:
-                        const TextStyle(
+                    style: const TextStyle(
                       fontSize: 15,
                       height: 1.5,
-                      color:
-                          Colors.black87,
+                      color: Colors.black87,
                     ),
                   ),
 
-                  const SizedBox(
-                    height: 24,
-                  ),
+                  const SizedBox(height: 24),
 
                   // =================================================
                   // QUANTITY
@@ -2513,98 +2019,68 @@ class _ProductDetailsPageState
 
                   const Text(
                     'Quantity',
-                    style:
-                        TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
-                      fontWeight:
-                          FontWeight.bold,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
 
-                  const SizedBox(
-                    height: 10,
-                  ),
+                  const SizedBox(height: 10),
 
                   Row(
                     children: [
                       Container(
-                        decoration:
-                            BoxDecoration(
-                          border:
-                              Border.all(
-                            color: Colors
-                                .grey
-                                .shade300,
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: Colors.grey.shade300,
                           ),
                           borderRadius:
-                              BorderRadius
-                                  .circular(
-                            8,
-                          ),
+                              BorderRadius.circular(8),
                         ),
                         child: Row(
                           children: [
                             IconButton(
-                              onPressed:
-                                  _decreaseQuantity,
-                              icon:
-                                  const Icon(
-                                Icons
-                                    .remove,
+                              onPressed: _decreaseQuantity,
+                              icon: const Icon(
+                                Icons.remove,
                               ),
                             ),
                             SizedBox(
                               width: 35,
-                              child:
-                                  Text(
+                              child: Text(
                                 '$_quantity',
-                                textAlign:
-                                    TextAlign
-                                        .center,
-                                style:
-                                    const TextStyle(
-                                  fontSize:
-                                      18,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 18,
                                   fontWeight:
-                                      FontWeight
-                                          .bold,
+                                      FontWeight.bold,
                                 ),
                               ),
                             ),
                             IconButton(
-                              onPressed:
-                                  _increaseQuantity,
-                              icon:
-                                  const Icon(
-                                Icons
-                                    .add,
+                              onPressed: _increaseQuantity,
+                              icon: const Icon(
+                                Icons.add,
                               ),
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(
-                        width: 20,
-                      ),
+
+                      const SizedBox(width: 20),
+
                       Text(
                         'Total: $formattedSubtotal',
-                        style:
-                            const TextStyle(
+                        style: const TextStyle(
                           fontSize: 18,
-                          fontWeight:
-                              FontWeight
-                                  .bold,
-                          color:
-                              Colors
-                                  .redAccent,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.redAccent,
                         ),
                       ),
                     ],
                   ),
 
-                  const SizedBox(
-                    height: 24,
-                  ),
+                  const SizedBox(height: 24),
 
                   // =================================================
                   // SELLER / RESELLER
@@ -2615,59 +2091,51 @@ class _ProductDetailsPageState
                       sellerEmail.isNotEmpty ||
                       isResellerProduct)
                     Card(
-                      child:
-                          Padding(
+                      child: Padding(
                         padding:
-                            const EdgeInsets
-                                .all(
-                          14,
-                        ),
-                        child:
-                            Column(
+                            const EdgeInsets.all(14),
+                        child: Column(
                           crossAxisAlignment:
-                              CrossAxisAlignment
-                                  .start,
+                              CrossAxisAlignment.start,
                           children: [
                             Text(
                               isResellerProduct
                                   ? 'Reseller Information'
                                   : 'Seller Information',
-                              style:
-                                  const TextStyle(
-                                fontSize:
-                                    18,
+                              style: const TextStyle(
+                                fontSize: 18,
                                 fontWeight:
-                                    FontWeight
-                                        .bold,
+                                    FontWeight.bold,
                               ),
                             ),
-                            const SizedBox(
-                              height: 10,
-                            ),
+
+                            const SizedBox(height: 10),
+
                             if (isResellerProduct &&
                                 entrepreneurUid
                                     .isNotEmpty)
                               Text(
                                 'Reseller UID: $entrepreneurUid',
                               ),
+
                             if (isResellerProduct &&
                                 entrepreneurName
                                     .isNotEmpty)
                               Text(
                                 'Reseller Name: $entrepreneurName',
                               ),
-                            if (sellerCode
-                                .isNotEmpty)
+
+                            if (sellerCode.isNotEmpty)
                               Text(
                                 'Seller ID: $sellerCode',
                               ),
-                            if (sellerId
-                                .isNotEmpty)
+
+                            if (sellerId.isNotEmpty)
                               Text(
                                 'Seller UID: $sellerId',
                               ),
-                            if (sellerEmail
-                                .isNotEmpty)
+
+                            if (sellerEmail.isNotEmpty)
                               Text(
                                 'Seller Email: $sellerEmail',
                               ),
@@ -2692,121 +2160,86 @@ class _ProductDetailsPageState
       // BOTTOM ACTIONS
       // =========================================================
 
-      bottomNavigationBar:
-          SafeArea(
+      bottomNavigationBar: SafeArea(
         child: Container(
-          padding:
-              const EdgeInsets.all(10),
-          decoration:
-              const BoxDecoration(
+          padding: const EdgeInsets.all(10),
+          decoration: const BoxDecoration(
             color: Colors.white,
           ),
           child: Column(
-            mainAxisSize:
-                MainAxisSize.min,
+            mainAxisSize: MainAxisSize.min,
             children: [
               SizedBox(
-                width:
-                    double.infinity,
-                child:
-                    OutlinedButton.icon(
-                  onPressed:
-                      _openMessageChat,
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _openMessageChat,
                   icon: const Icon(
-                    Icons
-                        .chat_bubble_outline,
+                    Icons.chat_bubble_outline,
                   ),
                   label: Text(
                     'Message $recipientType',
                   ),
-                  style:
-                      OutlinedButton
-                          .styleFrom(
+                  style: OutlinedButton.styleFrom(
                     foregroundColor:
-                        Colors
-                            .redAccent,
-                    side:
-                        const BorderSide(
-                      color:
-                          Colors.redAccent,
+                        Colors.redAccent,
+                    side: const BorderSide(
+                      color: Colors.redAccent,
                     ),
                     padding:
-                        const EdgeInsets
-                            .symmetric(
+                        const EdgeInsets.symmetric(
                       vertical: 12,
                     ),
                   ),
                 ),
               ),
 
-              const SizedBox(
-                height: 8,
-              ),
+              const SizedBox(height: 8),
 
               Row(
                 children: [
                   Expanded(
-                    child:
-                        OutlinedButton
-                            .icon(
-                      onPressed:
-                          _addToCart,
+                    child: OutlinedButton.icon(
+                      onPressed: _addToCart,
                       icon: const Icon(
-                        Icons
-                            .shopping_cart_outlined,
+                        Icons.shopping_cart_outlined,
                       ),
-                      label:
-                          const Text(
+                      label: const Text(
                         'Add to Cart',
                       ),
                       style:
-                          OutlinedButton
-                              .styleFrom(
+                          OutlinedButton.styleFrom(
                         foregroundColor:
-                            Colors
-                                .redAccent,
-                        side:
-                            const BorderSide(
-                          color: Colors
-                              .redAccent,
+                            Colors.redAccent,
+                        side: const BorderSide(
+                          color: Colors.redAccent,
                         ),
                         padding:
-                            const EdgeInsets
-                                .symmetric(
+                            const EdgeInsets.symmetric(
                           vertical: 14,
                         ),
                       ),
                     ),
                   ),
 
-                  const SizedBox(
-                    width: 10,
-                  ),
+                  const SizedBox(width: 10),
 
                   Expanded(
-                    child:
-                        ElevatedButton
-                            .icon(
-                      onPressed:
-                          _buyNow,
+                    child: ElevatedButton.icon(
+                      onPressed: _buyNow,
                       icon: const Icon(
                         Icons.flash_on,
                       ),
-                      label:
-                          const Text(
+                      label: const Text(
                         'Buy Now',
                       ),
                       style:
-                          ElevatedButton
-                              .styleFrom(
+                          ElevatedButton.styleFrom(
                         backgroundColor:
-                            Colors
-                                .redAccent,
+                            Colors.redAccent,
                         foregroundColor:
                             Colors.white,
                         padding:
-                            const EdgeInsets
-                                .symmetric(
+                            const EdgeInsets.symmetric(
                           vertical: 14,
                         ),
                       ),
@@ -2825,9 +2258,7 @@ class _ProductDetailsPageState
   // NULLABLE DOUBLE
   // =========================================================
 
-  double? _nullableDouble(
-    dynamic value,
-  ) {
+  double? _nullableDouble(dynamic value) {
     if (value == null) {
       return null;
     }
