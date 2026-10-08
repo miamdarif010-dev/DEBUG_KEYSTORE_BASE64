@@ -361,6 +361,27 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
   }
 
   // =========================================================
+  // OPEN FULL-SCREEN MEDIA GALLERY
+  // =========================================================
+
+  void _openFullScreenGallery(int initialIndex) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (context) {
+          return _FullScreenMediaGallery(
+            imageUrls: _productImages,
+            videoUrl: _videoUrl,
+            initialIndex: initialIndex,
+            videoController: _videoController,
+            onCartTap: _openCart,
+          );
+        },
+      ),
+    );
+  }
+
+  // =========================================================
   // FAVORITE REFERENCE
   // =========================================================
 
@@ -683,7 +704,8 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
 
           if (name != null && name.isNotEmpty) {
             targetName = name;
-          } else if (displayName != null && displayName.isNotEmpty) {
+          } else if (displayName != null &&
+              displayName.isNotEmpty) {
             targetName = displayName;
           }
         }
@@ -1250,15 +1272,53 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                   }
                 },
                 itemBuilder: (context, index) {
-                  if (_videoUrl.isNotEmpty &&
-                      index == _productImages.length) {
-                    return _buildVideoViewer();
-                  }
+                  final bool isVideo =
+                      _videoUrl.isNotEmpty &&
+                      index == _productImages.length;
 
-                  return _buildImageViewer(
-                    _productImages[index],
+                  return GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: isVideo
+                        ? null
+                        : () {
+                            _openFullScreenGallery(index);
+                          },
+                    child: isVideo
+                        ? _buildVideoViewer()
+                        : _buildImageViewer(
+                            _productImages[index],
+                          ),
                   );
                 },
+              ),
+            ),
+
+            // =================================================
+            // FULL-SCREEN BUTTON
+            // =================================================
+
+            Positioned(
+              left: 14,
+              bottom: 14,
+              child: Material(
+                color: Colors.black54,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () {
+                    _openFullScreenGallery(
+                      _selectedMediaIndex,
+                    );
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.all(9),
+                    child: Icon(
+                      Icons.fullscreen,
+                      color: Colors.white,
+                      size: 25,
+                    ),
+                  ),
+                ),
               ),
             ),
 
@@ -2269,6 +2329,653 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
 
     return double.tryParse(
       value.toString(),
+    );
+  }
+}
+
+// ===================================================================
+// FULL-SCREEN MEDIA GALLERY
+// ===================================================================
+
+class _FullScreenMediaGallery extends StatefulWidget {
+  final List<String> imageUrls;
+  final String videoUrl;
+  final int initialIndex;
+  final VideoPlayerController? videoController;
+  final VoidCallback onCartTap;
+
+  const _FullScreenMediaGallery({
+    required this.imageUrls,
+    required this.videoUrl,
+    required this.initialIndex,
+    required this.videoController,
+    required this.onCartTap,
+  });
+
+  @override
+  State<_FullScreenMediaGallery> createState() =>
+      _FullScreenMediaGalleryState();
+}
+
+class _FullScreenMediaGalleryState
+    extends State<_FullScreenMediaGallery> {
+  late final PageController _pageController;
+
+  int _currentIndex = 0;
+
+  double _cartLeft = 0;
+  double _cartTop = 90;
+
+  bool _cartPositionInitialized = false;
+
+  int get totalMedia {
+    return widget.imageUrls.length +
+        (widget.videoUrl.isNotEmpty ? 1 : 0);
+  }
+
+  bool _isVideoIndex(int index) {
+    return widget.videoUrl.isNotEmpty &&
+        index == widget.imageUrls.length;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+
+    _currentIndex =
+        widget.initialIndex.clamp(0, totalMedia - 1);
+
+    _pageController = PageController(
+      initialPage: _currentIndex,
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    if (!_cartPositionInitialized) {
+      final width = MediaQuery.of(context).size.width;
+
+      _cartLeft = width - 78;
+      _cartTop = 90;
+
+      _cartPositionInitialized = true;
+    }
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  // =========================================================
+  // IMAGE
+  // =========================================================
+
+  Widget _buildFullScreenImage(String url) {
+    if (url.trim().isEmpty) {
+      return Container(
+        color: Colors.black,
+        alignment: Alignment.center,
+        child: const Icon(
+          Icons.image_outlined,
+          color: Colors.white54,
+          size: 90,
+        ),
+      );
+    }
+
+    return InteractiveViewer(
+      minScale: 1,
+      maxScale: 4,
+      panEnabled: true,
+      child: Image.network(
+        url,
+        width: double.infinity,
+        height: double.infinity,
+        fit: BoxFit.contain,
+        loadingBuilder: (
+          context,
+          child,
+          progress,
+        ) {
+          if (progress == null) {
+            return child;
+          }
+
+          return const Center(
+            child: CircularProgressIndicator(
+              color: Colors.white,
+            ),
+          );
+        },
+        errorBuilder: (
+          context,
+          error,
+          stackTrace,
+        ) {
+          return const Center(
+            child: Icon(
+              Icons.broken_image_outlined,
+              color: Colors.white54,
+              size: 80,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // =========================================================
+  // VIDEO
+  // =========================================================
+
+  Widget _buildFullScreenVideo() {
+    final controller = widget.videoController;
+
+    if (controller == null ||
+        !controller.value.isInitialized) {
+      return const ColoredBox(
+        color: Colors.black,
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(
+                color: Colors.white,
+              ),
+              SizedBox(height: 14),
+              Text(
+                'Loading video...',
+                style: TextStyle(
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: () {
+        if (controller.value.isPlaying) {
+          controller.pause();
+        } else {
+          controller.play();
+        }
+
+        setState(() {});
+      },
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Center(
+            child: AspectRatio(
+              aspectRatio: controller.value.aspectRatio == 0
+                  ? 16 / 9
+                  : controller.value.aspectRatio,
+              child: VideoPlayer(controller),
+            ),
+          ),
+          if (!controller.value.isPlaying)
+            Container(
+              width: 72,
+              height: 72,
+              decoration: const BoxDecoration(
+                color: Colors.black54,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.play_arrow,
+                color: Colors.white,
+                size: 48,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // =========================================================
+  // THUMBNAIL
+  // =========================================================
+
+  Widget _buildFullScreenThumbnail(int index) {
+    if (_isVideoIndex(index)) {
+      return Container(
+        color: Colors.black87,
+        child: const Stack(
+          alignment: Alignment.center,
+          children: [
+            Icon(
+              Icons.play_circle_outline,
+              color: Colors.white,
+              size: 32,
+            ),
+            Positioned(
+              bottom: 3,
+              child: Text(
+                'VIDEO',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 8,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final url = widget.imageUrls[index];
+
+    if (url.isEmpty) {
+      return Container(
+        color: Colors.grey.shade900,
+        child: const Icon(
+          Icons.image_outlined,
+          color: Colors.white54,
+        ),
+      );
+    }
+
+    return Image.network(
+      url,
+      fit: BoxFit.cover,
+      errorBuilder: (
+        context,
+        error,
+        stackTrace,
+      ) {
+        return Container(
+          color: Colors.grey.shade900,
+          child: const Icon(
+            Icons.broken_image_outlined,
+            color: Colors.white54,
+          ),
+        );
+      },
+    );
+  }
+
+  // =========================================================
+  // SELECT THUMBNAIL
+  // =========================================================
+
+  void _selectPage(int index) {
+    if (_pageController.hasClients) {
+      _pageController.animateToPage(
+        index,
+        duration: const Duration(
+          milliseconds: 280,
+        ),
+        curve: Curves.easeInOut,
+      );
+    }
+
+    setState(() {
+      _currentIndex = index;
+    });
+  }
+
+  // =========================================================
+  // CART
+  // =========================================================
+
+  Widget _buildFullScreenCart() {
+    return Positioned(
+      left: _cartLeft,
+      top: _cartTop,
+      child: GestureDetector(
+        onPanUpdate: (details) {
+          final width = MediaQuery.of(context).size.width;
+          final height = MediaQuery.of(context).size.height;
+
+          setState(() {
+            _cartLeft += details.delta.dx;
+            _cartTop += details.delta.dy;
+
+            _cartLeft = _cartLeft.clamp(
+              0.0,
+              width - 68,
+            );
+
+            _cartTop = _cartTop.clamp(
+              55.0,
+              height - 150,
+            );
+          });
+        },
+        onTap: widget.onCartTap,
+        child: StreamBuilder<
+            QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseAuth.instance.currentUser == null
+              ? null
+              : FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(
+                    FirebaseAuth.instance.currentUser!.uid,
+                  )
+                  .collection('cart')
+                  .snapshots(),
+          builder: (context, snapshot) {
+            int quantity = 0;
+
+            if (snapshot.hasData) {
+              for (final doc in snapshot.data!.docs) {
+                final data = doc.data();
+                final value = data['quantity'];
+
+                if (value is num) {
+                  quantity += value.toInt();
+                } else {
+                  quantity++;
+                }
+              }
+            }
+
+            return Container(
+              width: 62,
+              height: 62,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.redAccent,
+                  width: 2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(
+                      alpha: 0.35,
+                    ),
+                    blurRadius: 12,
+                    offset: const Offset(
+                      0,
+                      5,
+                    ),
+                  ),
+                ],
+              ),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Center(
+                    child: Icon(
+                      Icons.shopping_cart,
+                      color: Colors.redAccent,
+                      size: 29,
+                    ),
+                  ),
+                  if (quantity > 0)
+                    Positioned(
+                      right: -3,
+                      top: -5,
+                      child: Container(
+                        constraints: const BoxConstraints(
+                          minWidth: 23,
+                          minHeight: 23,
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                        ),
+                        decoration: const BoxDecoration(
+                          color: Colors.orange,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Text(
+                            quantity > 99
+                                ? '99+'
+                                : '$quantity',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  // =========================================================
+  // BUILD FULL-SCREEN GALLERY
+  // =========================================================
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // =================================================
+            // MEDIA
+            // =================================================
+
+            Positioned.fill(
+              child: PageView.builder(
+                controller: _pageController,
+                itemCount: totalMedia,
+                onPageChanged: (index) {
+                  setState(() {
+                    _currentIndex = index;
+                  });
+
+                  if (!_isVideoIndex(index)) {
+                    widget.videoController?.pause();
+                  }
+                },
+                itemBuilder: (context, index) {
+                  if (_isVideoIndex(index)) {
+                    return _buildFullScreenVideo();
+                  }
+
+                  return _buildFullScreenImage(
+                    widget.imageUrls[index],
+                  );
+                },
+              ),
+            ),
+
+            // =================================================
+            // TOP BACK BUTTON
+            // =================================================
+
+            Positioned(
+              left: 12,
+              top: 12,
+              child: Material(
+                color: Colors.black54,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () {
+                    Navigator.pop(context);
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.all(10),
+                    child: Icon(
+                      Icons.arrow_back,
+                      color: Colors.white,
+                      size: 27,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // =================================================
+            // MEDIA COUNTER
+            // =================================================
+
+            Positioned(
+              top: 15,
+              left: 0,
+              right: 0,
+              child: IgnorePointer(
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 13,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '${_currentIndex + 1}/$totalMedia',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // =================================================
+            // CART
+            // =================================================
+
+            _buildFullScreenCart(),
+
+            // =================================================
+            // PREVIOUS BUTTON
+            // =================================================
+
+            if (_currentIndex > 0)
+              Positioned(
+                left: 12,
+                top: MediaQuery.of(context).size.height / 2 - 30,
+                child: Material(
+                  color: Colors.black45,
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: () {
+                      _selectPage(_currentIndex - 1);
+                    },
+                    child: const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Icon(
+                        Icons.chevron_left,
+                        color: Colors.white,
+                        size: 32,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+            // =================================================
+            // NEXT BUTTON
+            // =================================================
+
+            if (_currentIndex < totalMedia - 1)
+              Positioned(
+                right: 12,
+                top: MediaQuery.of(context).size.height / 2 - 30,
+                child: Material(
+                  color: Colors.black45,
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: () {
+                      _selectPage(_currentIndex + 1);
+                    },
+                    child: const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Icon(
+                        Icons.chevron_right,
+                        color: Colors.white,
+                        size: 32,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+            // =================================================
+            // THUMBNAILS
+            // =================================================
+
+            if (totalMedia > 1)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  height: 92,
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(
+                      alpha: 0.78,
+                    ),
+                  ),
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                    ),
+                    itemCount: totalMedia,
+                    itemBuilder: (context, index) {
+                      final selected =
+                          index == _currentIndex;
+
+                      return GestureDetector(
+                        onTap: () {
+                          _selectPage(index);
+                        },
+                        child: Container(
+                          width: 68,
+                          margin: const EdgeInsets.only(
+                            right: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            borderRadius:
+                                BorderRadius.circular(8),
+                            border: Border.all(
+                              color: selected
+                                  ? Colors.redAccent
+                                  : Colors.white30,
+                              width: selected ? 3 : 1,
+                            ),
+                          ),
+                          child: ClipRRect(
+                            borderRadius:
+                                BorderRadius.circular(6),
+                            child:
+                                _buildFullScreenThumbnail(
+                              index,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
