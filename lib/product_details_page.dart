@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:video_player/video_player.dart';
@@ -74,6 +73,7 @@ class _ProductDetailsPageState
   @override
   void dispose() {
     _videoController?.dispose();
+    _mediaPageController.dispose();
     super.dispose();
   }
 
@@ -1468,6 +1468,7 @@ class _ProductDetailsPageState
               width: double.infinity,
               height: 390,
               child: PageView.builder(
+                controller: _mediaPageController,
                 itemCount: totalMedia,
                 onPageChanged: (index) {
                   setState(() {
@@ -1732,11 +1733,6 @@ class _ProductDetailsPageState
               MediaQuery.of(context)
                   .size
                   .width;
-
-          final screenHeight =
-              MediaQuery.of(context)
-                  .size
-                  .height;
 
           setState(() {
             _cartLeft +=
@@ -2851,48 +2847,3 @@ class _ProductDetailsPageState
     );
   }
 }
-
-খুব গুরুত্বপূর্ণ ২টা ছোট পরিবর্তন
-
-এই ফাইলে ভিডিও চালানোর জন্য তোমার "pubspec.yaml"-এ এটা থাকতে হবে:
-
-dependencies:
-  video_player: ^2.9.2
-
-আর "Product" Firestore document-এ ভবিষ্যতে আমরা এভাবে ছবি/ভিডিও রাখতে পারব:
-
-imageUrl: "main-image.jpg"
-
-imageUrls:
-  - "image-1.jpg"
-  - "image-2.jpg"
-  - "image-3.jpg"
-  - "image-4.jpg"
-
-videoUrl: "product-video.mp4"
-
-একটা গুরুত্বপূর্ণ বিষয়: উপরের কোডে thumbnail থেকে বড় ছবিতে যাওয়ার জন্য "PageController" ব্যবহার করেছি। তাই "PageView"-এ এই controller-টাও বসাতে হবে। "PageView.builder" অংশে:
-
-controller: _mediaPageController,
-
-অর্থাৎ "_buildMediaGallery()"-এর "PageView.builder" হবে:
-
-PageView.builder(
-  controller: _mediaPageController,
-  itemCount: totalMedia,
-  onPageChanged: (index) {
-    setState(() {
-      _selectedMediaIndex = index;
-    });
-  },
-  itemBuilder: (context, index) {
-    if (_videoUrl.isNotEmpty &&
-        index == _productImages.length) {
-      return _buildVideoViewer();
-    }
-
-    return _buildImageViewer(
-      _productImages[index],
-    );
-  },
-)
