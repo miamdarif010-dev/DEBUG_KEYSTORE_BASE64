@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
@@ -15,452 +15,250 @@ class AddProductPage extends StatefulWidget {
 }
 
 class _AddProductPageState extends State<AddProductPage> {
-  final _titleController = TextEditingController();
-  final _priceController = TextEditingController();
-  final _descriptionController = TextEditingController();
-  final _categoryController = TextEditingController();
-
-  final ImagePicker _imagePicker = ImagePicker();
-
-  // =========================================================
-  // PRODUCT MEDIA
-  // =========================================================
-
-  static const int _maxImages = 10;
-
-  final List<File> _pickedImages = [];
-  final List<String> _uploadedImageUrls = [];
-
-  File? _pickedVideo;
-  String? _uploadedVideoUrl;
-
-  bool _isUploadingPhoto = false;
-  bool _isUploadingVideo = false;
-  bool _isUploading = false;
-  bool _isCheckingSeller = true;
-  bool _isApprovedSeller = false;
-
-  String _sellerCode = '';
-
-  // =========================================================
-  // CLOUDINARY SETTINGS
-  // =========================================================
+  // ============================================================
+  // CLOUDINARY
+  // ============================================================
 
   static const String _cloudName = 'riassg6d';
-  static const String _uploadPreset = 'buynova_products';
+  static const String _imageUploadPreset = 'buynova_products';
+  static const String _videoUploadPreset = 'buynova_products';
+
+  static const int _maxImages = 10;
+  static const int _maxVideoSeconds = 60;
+
+  // ============================================================
+  // FIREBASE / PICKER
+  // ============================================================
+
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final ImagePicker _picker = ImagePicker();
+
+  // ============================================================
+  // CONTROLLERS
+  // ============================================================
+
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _priceController = TextEditingController();
+  final TextEditingController _descriptionController =
+      TextEditingController();
+
+  // ============================================================
+  // DATA
+  // ============================================================
+
+  final List<XFile> _pickedImages = <XFile>[];
+  final List<String> _uploadedImageUrls = <String>[];
+
+  XFile? _pickedVideo;
+  String? _uploadedVideoUrl;
+
+  String _selectedCategory = 'Phones';
+
+  bool _isCheckingSeller = true;
+  bool _isApprovedSeller = false;
+  bool _isUploading = false;
+  bool _isSaving = false;
+
+  String? _sellerName;
+  String? _shopName;
+
+  // ============================================================
+  // CATEGORIES
+  // ============================================================
+
+  final List<String> _categories = const [
+    'Phones',
+    'Laptops',
+    'Watches',
+    'Earbuds',
+    'Cameras',
+    'Fashion',
+    'Shoes',
+    'Bags',
+    'Beauty',
+    'Sports',
+    'Toys',
+    'Grocery',
+  ];
+
+  // ============================================================
+  // INIT
+  // ============================================================
 
   @override
   void initState() {
     super.initState();
-    _checkSellerApproval();
+    _loadSellerInformation();
   }
 
-  // =========================================================
-  // CHECK SELLER APPROVAL
-  // =========================================================
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _priceController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
 
-  Future<void> _checkSellerApproval() async {
-    final user = FirebaseAuth.instance.currentUser;
+  // ============================================================
+  // SELLER INFORMATION
+  // ============================================================
+
+  Future<void> _loadSellerInformation() async {
+    final User? user = _auth.currentUser;
 
     if (user == null) {
       if (!mounted) return;
 
       setState(() {
-        _isApprovedSeller = false;
         _isCheckingSeller = false;
+        _isApprovedSeller = false;
       });
 
       return;
     }
 
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
+      final DocumentSnapshot<Map<String, dynamic>> snapshot =
+          await _firestore.collection('users').doc(user.uid).get();
 
-      final data = snapshot.data();
+      final Map<String, dynamic> data = snapshot.data() ?? {};
 
-      final sellerStatus =
-          data?['sellerStatus']?.toString().trim();
+      final String sellerStatus =
+          (data['sellerStatus'] ?? 'none').toString().toLowerCase();
 
-      final sellerCode =
-          data?['sellerCode']?.toString().trim() ?? '';
+      final String role = (data['role'] ?? '').toString().toLowerCase();
+
+      final bool approved =
+          sellerStatus == 'approved' || role == 'admin';
 
       if (!mounted) return;
 
       setState(() {
-        _isApprovedSeller = sellerStatus == 'approved';
-        _sellerCode = sellerCode;
         _isCheckingSeller = false;
+        _isApprovedSeller = approved;
+
+        _sellerName = (data['name'] ?? data['displayName'] ?? '')
+            .toString()
+            .trim();
+
+        _shopName = (data['shopName'] ?? data['storeName'] ?? '')
+            .toString()
+            .trim();
       });
     } catch (e) {
       if (!mounted) return;
 
       setState(() {
-        _isApprovedSeller = false;
         _isCheckingSeller = false;
+        _isApprovedSeller = false;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Could not check seller status: $e',
-          ),
-        ),
+      _showSnackBar(
+        'Seller information load failed: $e',
+        isError: true,
       );
     }
   }
 
-  // =========================================================
+  // ============================================================
   // PICK MULTIPLE IMAGES
-  // =========================================================
+  // ============================================================
 
   Future<void> _pickImages() async {
-    if (!_isApprovedSeller) {
-      _showSellerMessage();
-      return;
-    }
-
-    if (_isUploadingPhoto || _isUploadingVideo || _isUploading) {
-      return;
-    }
-
-    if (_pickedImages.length >= _maxImages) {
-      _showMessage(
-        'You can add up to $_maxImages product images.',
-      );
-      return;
-    }
+    if (_isUploading || _isSaving) return;
 
     try {
-      final remaining =
-          _maxImages - _pickedImages.length;
-
-      final picked = await _imagePicker.pickMultiImage(
+      final List<XFile> images = await _picker.pickMultiImage(
         imageQuality: 85,
         maxWidth: 1400,
         maxHeight: 1400,
       );
 
-      if (picked.isEmpty) {
+      if (images.isEmpty) return;
+
+      final int remaining = _maxImages - _pickedImages.length;
+
+      if (remaining <= 0) {
+        _showSnackBar(
+          'Maximum $_maxImages images allowed.',
+          isError: true,
+        );
         return;
       }
 
-      final selected = picked.take(remaining).toList();
+      final List<XFile> selected =
+          images.take(remaining).toList(growable: false);
 
       setState(() {
-        for (final image in selected) {
-          _pickedImages.add(
-            File(image.path),
-          );
-        }
+        _pickedImages.addAll(selected);
       });
 
-      if (picked.length > remaining) {
-        _showMessage(
+      if (images.length > remaining) {
+        _showSnackBar(
           'Only $_maxImages images can be added.',
+          isError: true,
         );
       }
-
-      await _uploadSelectedImages(selected);
     } catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Could not select photos: $e',
-          ),
-        ),
+      _showSnackBar(
+        'Image selection failed: $e',
+        isError: true,
       );
     }
   }
 
-  // =========================================================
-  // UPLOAD SELECTED IMAGES
-  // =========================================================
-
-  Future<void> _uploadSelectedImages(
-    List<XFile> selected,
-  ) async {
-    if (selected.isEmpty) return;
-
-    if (!mounted) return;
-
-    setState(() {
-      _isUploadingPhoto = true;
-    });
-
-    try {
-      for (final image in selected) {
-        final url = await _uploadImageToCloudinary(
-          File(image.path),
-        );
-
-        if (url.isNotEmpty) {
-          _uploadedImageUrls.add(url);
-        }
-      }
-
-      if (!mounted) return;
-
-      setState(() {});
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '${selected.length} image(s) uploaded successfully.',
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Some image uploads failed: $e',
-          ),
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isUploadingPhoto = false;
-        });
-      }
-    }
-  }
-
-  // =========================================================
-  // CLOUDINARY IMAGE UPLOAD
-  // =========================================================
-
-  Future<String> _uploadImageToCloudinary(
-    File imageFile,
-  ) async {
-    final uri = Uri.parse(
-      'https://api.cloudinary.com/v1_1/$_cloudName/image/upload',
-    );
-
-    final request = http.MultipartRequest(
-      'POST',
-      uri,
-    );
-
-    request.fields['upload_preset'] =
-        _uploadPreset;
-
-    request.files.add(
-      await http.MultipartFile.fromPath(
-        'file',
-        imageFile.path,
-      ),
-    );
-
-    final streamedResponse =
-        await request.send();
-
-    final response =
-        await http.Response.fromStream(
-      streamedResponse,
-    );
-
-    if (response.statusCode < 200 ||
-        response.statusCode >= 300) {
-      throw Exception(
-        'Cloudinary image upload failed: '
-        '${response.statusCode}',
-      );
-    }
-
-    final Map<String, dynamic> result =
-        jsonDecode(response.body);
-
-    final secureUrl =
-        result['secure_url']?.toString();
-
-    if (secureUrl == null ||
-        secureUrl.isEmpty) {
-      throw Exception(
-        'Cloudinary did not return image URL.',
-      );
-    }
-
-    return secureUrl;
-  }
-
-  // =========================================================
+  // ============================================================
   // REMOVE IMAGE
-  // =========================================================
+  // ============================================================
 
   void _removeImage(int index) {
-    if (_isUploadingPhoto || _isUploading) {
-      return;
-    }
-
-    if (index < 0 ||
-        index >= _pickedImages.length) {
-      return;
-    }
+    if (index < 0 || index >= _pickedImages.length) return;
 
     setState(() {
       _pickedImages.removeAt(index);
 
-      if (index < _uploadedImageUrls.length) {
+      // Keep uploaded URLs aligned with the currently selected
+      // local images. Usually URLs are empty until upload time.
+      if (_uploadedImageUrls.length > index) {
         _uploadedImageUrls.removeAt(index);
       }
     });
   }
 
-  // =========================================================
+  // ============================================================
   // PICK VIDEO
-  // =========================================================
+  // ============================================================
 
   Future<void> _pickVideo() async {
-    if (!_isApprovedSeller) {
-      _showSellerMessage();
-      return;
-    }
-
-    if (_isUploadingPhoto ||
-        _isUploadingVideo ||
-        _isUploading) {
-      return;
-    }
+    if (_isUploading || _isSaving) return;
 
     try {
-      final picked =
-          await _imagePicker.pickVideo(
+      final XFile? video = await _picker.pickVideo(
         source: ImageSource.gallery,
-        maxDuration:
-            const Duration(
-          seconds: 60,
-        ),
+        maxDuration: const Duration(seconds: _maxVideoSeconds),
       );
 
-      if (picked == null) {
-        return;
-      }
-
-      final file = File(picked.path);
+      if (video == null) return;
 
       setState(() {
-        _pickedVideo = file;
+        _pickedVideo = video;
         _uploadedVideoUrl = null;
-        _isUploadingVideo = true;
       });
-
-      final videoUrl =
-          await _uploadVideoToCloudinary(
-        file,
-      );
-
-      if (!mounted) return;
-
-      setState(() {
-        _uploadedVideoUrl = videoUrl;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Product video uploaded successfully.',
-          ),
-        ),
-      );
     } catch (e) {
-      if (!mounted) return;
-
-      setState(() {
-        _pickedVideo = null;
-        _uploadedVideoUrl = null;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Video upload failed: $e',
-          ),
-        ),
+      _showSnackBar(
+        'Video selection failed: $e',
+        isError: true,
       );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isUploadingVideo = false;
-        });
-      }
     }
   }
 
-  // =========================================================
-  // CLOUDINARY VIDEO UPLOAD
-  // =========================================================
-
-  Future<String> _uploadVideoToCloudinary(
-    File videoFile,
-  ) async {
-    final uri = Uri.parse(
-      'https://api.cloudinary.com/v1_1/$_cloudName/video/upload',
-    );
-
-    final request = http.MultipartRequest(
-      'POST',
-      uri,
-    );
-
-    request.fields['upload_preset'] =
-        _uploadPreset;
-
-    request.files.add(
-      await http.MultipartFile.fromPath(
-        'file',
-        videoFile.path,
-      ),
-    );
-
-    final streamedResponse =
-        await request.send();
-
-    final response =
-        await http.Response.fromStream(
-      streamedResponse,
-    );
-
-    if (response.statusCode < 200 ||
-        response.statusCode >= 300) {
-      throw Exception(
-        'Cloudinary video upload failed: '
-        '${response.statusCode}\n'
-        '${response.body}',
-      );
-    }
-
-    final Map<String, dynamic> result =
-        jsonDecode(response.body);
-
-    final secureUrl =
-        result['secure_url']?.toString();
-
-    if (secureUrl == null ||
-        secureUrl.isEmpty) {
-      throw Exception(
-        'Cloudinary did not return video URL.',
-      );
-    }
-
-    return secureUrl;
-  }
-
-  // =========================================================
+  // ============================================================
   // REMOVE VIDEO
-  // =========================================================
+  // ============================================================
 
   void _removeVideo() {
-    if (_isUploadingVideo || _isUploading) {
-      return;
-    }
+    if (_isUploading || _isSaving) return;
 
     setState(() {
       _pickedVideo = null;
@@ -468,107 +266,123 @@ class _AddProductPageState extends State<AddProductPage> {
     });
   }
 
-  // =========================================================
-  // SELLER MESSAGE
-  // =========================================================
+  // ============================================================
+  // CLOUDINARY IMAGE UPLOAD
+  // ============================================================
 
-  void _showSellerMessage() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Only approved sellers can add products.',
+  Future<String?> _uploadImageToCloudinary(XFile image) async {
+    try {
+      final Uri url = Uri.parse(
+        'https://api.cloudinary.com/v1_1/$_cloudName/image/upload',
+      );
+
+      final http.MultipartRequest request =
+          http.MultipartRequest('POST', url);
+
+      request.fields['upload_preset'] = _imageUploadPreset;
+
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'file',
+          image.path,
         ),
-      ),
-    );
+      );
+
+      final http.StreamedResponse streamedResponse = await request.send();
+
+      final String responseBody =
+          await streamedResponse.stream.bytesToString();
+
+      if (streamedResponse.statusCode < 200 ||
+          streamedResponse.statusCode >= 300) {
+        debugPrint(
+          'Cloudinary image upload failed: '
+          '${streamedResponse.statusCode} $responseBody',
+        );
+        return null;
+      }
+
+      final dynamic decoded = jsonDecode(responseBody);
+
+      if (decoded is Map<String, dynamic>) {
+        final String? secureUrl = decoded['secure_url']?.toString();
+
+        if (secureUrl != null && secureUrl.isNotEmpty) {
+          return secureUrl;
+        }
+      }
+
+      return null;
+    } catch (e) {
+      debugPrint('Cloudinary image upload exception: $e');
+      return null;
+    }
   }
 
-  void _showMessage(String message) {
-    if (!mounted) return;
+  // ============================================================
+  // CLOUDINARY VIDEO UPLOAD
+  // ============================================================
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-      ),
-    );
+  Future<String?> _uploadVideoToCloudinary(XFile video) async {
+    try {
+      final Uri url = Uri.parse(
+        'https://api.cloudinary.com/v1_1/$_cloudName/video/upload',
+      );
+
+      final http.MultipartRequest request =
+          http.MultipartRequest('POST', url);
+
+      request.fields['upload_preset'] = _videoUploadPreset;
+
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'file',
+          video.path,
+        ),
+      );
+
+      final http.StreamedResponse streamedResponse = await request.send();
+
+      final String responseBody =
+          await streamedResponse.stream.bytesToString();
+
+      if (streamedResponse.statusCode < 200 ||
+          streamedResponse.statusCode >= 300) {
+        debugPrint(
+          'Cloudinary video upload failed: '
+          '${streamedResponse.statusCode} $responseBody',
+        );
+        return null;
+      }
+
+      final dynamic decoded = jsonDecode(responseBody);
+
+      if (decoded is Map<String, dynamic>) {
+        final String? secureUrl = decoded['secure_url']?.toString();
+
+        if (secureUrl != null && secureUrl.isNotEmpty) {
+          return secureUrl;
+        }
+      }
+
+      return null;
+    } catch (e) {
+      debugPrint('Cloudinary video upload exception: $e');
+      return null;
+    }
   }
 
-  // =========================================================
-  // UPLOAD PRODUCT
-  // =========================================================
+  // ============================================================
+  // UPLOAD ALL MEDIA
+  // ============================================================
 
-  Future<void> _uploadProduct() async {
-    if (!_isApprovedSeller) {
-      _showSellerMessage();
-      return;
-    }
-
-    final title =
-        _titleController.text.trim();
-
-    final priceText =
-        _priceController.text.trim();
-
-    final description =
-        _descriptionController.text.trim();
-
-    final category =
-        _categoryController.text.trim();
-
-    // =======================================================
-    // VALIDATE PRICE
-    // =======================================================
-
-    final price =
-        double.tryParse(priceText);
-
-    if (title.isEmpty ||
-        price == null ||
-        price <= 0 ||
-        description.isEmpty) {
-      _showMessage(
-        'Please enter product name, valid BDT price and description.',
+  Future<bool> _uploadSelectedMedia() async {
+    if (_pickedImages.isEmpty) {
+      _showSnackBar(
+        'Please select at least one product image.',
+        isError: true,
       );
-
-      return;
-    }
-
-    // =======================================================
-    // WAIT FOR MEDIA UPLOAD
-    // =======================================================
-
-    if (_isUploadingPhoto) {
-      _showMessage(
-        'Please wait until all image uploads finish.',
-      );
-
-      return;
-    }
-
-    if (_isUploadingVideo) {
-      _showMessage(
-        'Please wait until the video upload finishes.',
-      );
-
-      return;
-    }
-
-    // =======================================================
-    // CURRENT USER
-    // =======================================================
-
-    final user =
-        FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      _showMessage(
-        'Please login first.',
-      );
-
-      return;
-    }
-
-    if (_isUploading) {
-      return;
+      return false;
     }
 
     setState(() {
@@ -576,302 +390,77 @@ class _AddProductPageState extends State<AddProductPage> {
     });
 
     try {
-      // =====================================================
-      // READ CURRENT USER DATA
-      // =====================================================
+      // ----------------------------------------------------------
+      // Upload images one by one.
+      // A new list is created so URLs always match the
+      // successfully uploaded images.
+      // ----------------------------------------------------------
 
-      final userSnapshot =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .get();
+      final List<String> imageUrls = <String>[];
 
-      final userData =
-          userSnapshot.data() ?? {};
+      for (int i = 0; i < _pickedImages.length; i++) {
+        if (!mounted) return false;
 
-      final sellerStatus =
-          userData['sellerStatus']
-                  ?.toString()
-                  .trim() ??
-              '';
-
-      final sellerCode =
-          userData['sellerCode']
-                  ?.toString()
-                  .trim() ??
-              '';
-
-      if (sellerStatus != 'approved') {
-        throw Exception(
-          'Your seller account is not approved.',
+        _showUploadProgress(
+          'Uploading image ${i + 1}/${_pickedImages.length}...',
         );
+
+        final String? imageUrl =
+            await _uploadImageToCloudinary(_pickedImages[i]);
+
+        if (imageUrl == null || imageUrl.isEmpty) {
+          _showSnackBar(
+            'Image ${i + 1} upload failed. Please try again.',
+            isError: true,
+          );
+
+          return false;
+        }
+
+        imageUrls.add(imageUrl);
       }
 
-      // =====================================================
-      // SELLER NAME
-      // =====================================================
+      // ----------------------------------------------------------
+      // Upload video if selected
+      // ----------------------------------------------------------
 
-      final sellerName =
-          userData['name']
-                  ?.toString()
-                  .trim() ??
-              '';
+      String? videoUrl;
 
-      // =====================================================
-      // SELLER EMAIL
-      // =====================================================
+      if (_pickedVideo != null) {
+        if (!mounted) return false;
 
-      final sellerEmail =
-          user.email ?? '';
+        _showUploadProgress('Uploading product video...');
 
-      // =====================================================
-      // PRODUCT DOCUMENT
-      // =====================================================
+        videoUrl = await _uploadVideoToCloudinary(_pickedVideo!);
 
-      final firestore =
-          FirebaseFirestore.instance;
+        if (videoUrl == null || videoUrl.isEmpty) {
+          _showSnackBar(
+            'Video upload failed. Please check your Cloudinary video upload preset.',
+            isError: true,
+          );
 
-      final productRef =
-          firestore
-              .collection('products')
-              .doc();
-
-      // =====================================================
-      // MAIN IMAGE
-      // =====================================================
-
-      final mainImageUrl =
-          _uploadedImageUrls.isNotEmpty
-              ? _uploadedImageUrls.first
-              : '';
-
-      // =====================================================
-      // PRODUCT DATA
-      // =====================================================
-
-      final productData =
-          <String, dynamic>{
-        // ---------------------------------------------------
-        // BASIC PRODUCT INFORMATION
-        // ---------------------------------------------------
-
-        'name': title,
-
-        // ---------------------------------------------------
-        // PRICE
-        // ---------------------------------------------------
-
-        'price': price,
-        'currency': 'BDT',
-        'currencySymbol': '৳',
-
-        // ---------------------------------------------------
-        // DESCRIPTION
-        // ---------------------------------------------------
-
-        'description': description,
-
-        // ---------------------------------------------------
-        // MAIN IMAGE
-        // ---------------------------------------------------
-
-        'imageUrl': mainImageUrl,
-
-        // ---------------------------------------------------
-        // MULTIPLE IMAGES
-        // ---------------------------------------------------
-
-        'imageUrls':
-            List<String>.from(
-          _uploadedImageUrls,
-        ),
-
-        // Compatibility with Product Details Page.
-        'images':
-            List<String>.from(
-          _uploadedImageUrls,
-        ),
-
-        // ---------------------------------------------------
-        // PRODUCT VIDEO
-        // ---------------------------------------------------
-
-        'videoUrl':
-            _uploadedVideoUrl ?? '',
-
-        // ---------------------------------------------------
-        // CATEGORY
-        // ---------------------------------------------------
-
-        'category': category.isNotEmpty
-            ? category
-            : 'General',
-
-        // ---------------------------------------------------
-        // SELLER INFORMATION
-        // ---------------------------------------------------
-
-        'sellerId': user.uid,
-
-        'sellerCode': sellerCode,
-
-        'sellerEmail': sellerEmail,
-
-        'sellerName': sellerName,
-
-        'sellerApproved': true,
-
-        // ---------------------------------------------------
-        // PRODUCT STATUS
-        // ---------------------------------------------------
-
-        'active': true,
-
-        'status': 'active',
-
-        // ---------------------------------------------------
-        // PRODUCT STATS
-        // ---------------------------------------------------
-
-        'rating': 5,
-
-        'reviewCount': 0,
-
-        'stock': 10,
-
-        'views': 0,
-
-        'salesCount': 0,
-
-        // ---------------------------------------------------
-        // TIMESTAMP
-        // ---------------------------------------------------
-
-        'createdAt':
-            FieldValue.serverTimestamp(),
-      };
-
-      // =====================================================
-      // SAVE PRODUCT FIRST
-      // =====================================================
-
-      await productRef.set(
-        productData,
-      );
-
-      // =====================================================
-      // CREATE GLOBAL NOTIFICATION
-      // =====================================================
-
-      try {
-        final notificationRef =
-            firestore
-                .collection(
-                  'global_notifications',
-                )
-                .doc();
-
-        await notificationRef.set(
-          {
-            'type':
-                'new_product',
-
-            'title':
-                'New Product Added',
-
-            'message':
-                '$title is now available on BuyNova.',
-
-            'productId':
-                productRef.id,
-
-            'productName':
-                title,
-
-            'productImageUrl':
-                mainImageUrl,
-
-            'productPrice':
-                price,
-
-            'currency':
-                'BDT',
-
-            'currencySymbol':
-                '৳',
-
-            'sellerId':
-                user.uid,
-
-            'sellerCode':
-                sellerCode,
-
-            'sellerName':
-                sellerName,
-
-            'active':
-                true,
-
-            'createdAt':
-                FieldValue
-                    .serverTimestamp(),
-          },
-        );
-      } catch (notificationError) {
-        debugPrint(
-          'Global notification creation failed: '
-          '$notificationError',
-        );
+          return false;
+        }
       }
 
-      // =====================================================
-      // SUCCESS
-      // =====================================================
-
-      if (!mounted) return;
-
-      _titleController.clear();
-      _priceController.clear();
-      _descriptionController.clear();
-      _categoryController.clear();
+      if (!mounted) return false;
 
       setState(() {
-        _pickedImages.clear();
-        _uploadedImageUrls.clear();
+        _uploadedImageUrls
+          ..clear()
+          ..addAll(imageUrls);
 
-        _pickedVideo = null;
-        _uploadedVideoUrl = null;
+        _uploadedVideoUrl = videoUrl;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Product uploaded successfully!',
-          ),
-        ),
-      );
-
-      await Future<void>.delayed(
-        const Duration(
-          milliseconds: 500,
-        ),
-      );
-
-      if (!mounted) return;
-
-      Navigator.pop(context);
+      return true;
     } catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          duration:
-              const Duration(seconds: 5),
-          content: Text(
-            'Product upload failed:\n$e',
-          ),
-        ),
+      _showSnackBar(
+        'Media upload failed: $e',
+        isError: true,
       );
+
+      return false;
     } finally {
       if (mounted) {
         setState(() {
@@ -881,68 +470,788 @@ class _AddProductPageState extends State<AddProductPage> {
     }
   }
 
-  // =========================================================
-  // DISPOSE
-  // =========================================================
+  // ============================================================
+  // SAVE PRODUCT
+  // ============================================================
 
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _priceController.dispose();
-    _descriptionController.dispose();
-    _categoryController.dispose();
+  Future<void> _addProduct() async {
+    if (_isSaving || _isUploading) return;
 
-    super.dispose();
+    final User? user = _auth.currentUser;
+
+    if (user == null) {
+      _showSnackBar(
+        'Please login first.',
+        isError: true,
+      );
+      return;
+    }
+
+    if (!_isApprovedSeller) {
+      _showSnackBar(
+        'Only approved sellers can add products.',
+        isError: true,
+      );
+      return;
+    }
+
+    final String name = _nameController.text.trim();
+    final String priceText = _priceController.text.trim();
+    final String description = _descriptionController.text.trim();
+
+    if (name.isEmpty) {
+      _showSnackBar(
+        'Please enter product name.',
+        isError: true,
+      );
+      return;
+    }
+
+    final double? price = double.tryParse(
+      priceText.replaceAll(',', ''),
+    );
+
+    if (price == null || price <= 0) {
+      _showSnackBar(
+        'Please enter a valid price.',
+        isError: true,
+      );
+      return;
+    }
+
+    if (description.isEmpty) {
+      _showSnackBar(
+        'Please enter product description.',
+        isError: true,
+      );
+      return;
+    }
+
+    if (_pickedImages.isEmpty) {
+      _showSnackBar(
+        'Please select at least one product image.',
+        isError: true,
+      );
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      // ----------------------------------------------------------
+      // Upload media
+      // ----------------------------------------------------------
+
+      final bool uploaded = await _uploadSelectedMedia();
+
+      if (!uploaded) {
+        if (mounted) {
+          setState(() {
+            _isSaving = false;
+          });
+        }
+        return;
+      }
+
+      if (_uploadedImageUrls.isEmpty) {
+        throw Exception('No product image was uploaded.');
+      }
+
+      // ----------------------------------------------------------
+      // Seller data
+      // ----------------------------------------------------------
+
+      final DocumentSnapshot<Map<String, dynamic>> userSnapshot =
+          await _firestore.collection('users').doc(user.uid).get();
+
+      final Map<String, dynamic> userData =
+          userSnapshot.data() ?? <String, dynamic>{};
+
+      final String sellerName = _sellerName?.isNotEmpty == true
+          ? _sellerName!
+          : (userData['name'] ?? userData['displayName'] ?? 'Seller')
+              .toString();
+
+      final String shopName = _shopName?.isNotEmpty == true
+          ? _shopName!
+          : (userData['shopName'] ?? userData['storeName'] ?? '')
+              .toString();
+
+      // ----------------------------------------------------------
+      // Product document
+      // ----------------------------------------------------------
+
+      final DocumentReference<Map<String, dynamic>> productRef =
+          _firestore.collection('products').doc();
+
+      final Map<String, dynamic> productData =
+          <String, dynamic>{
+        'name': name,
+        'price': price,
+        'currency': 'BDT',
+        'currencySymbol': '৳',
+
+        'category': _selectedCategory,
+        'description': description,
+
+        // Main image
+        'imageUrl': _uploadedImageUrls.first,
+
+        // Multiple image fields for compatibility with
+        // ProductDetailsPage / older product documents.
+        'imageUrls': List<String>.from(_uploadedImageUrls),
+        'images': List<String>.from(_uploadedImageUrls),
+        'productImages': List<String>.from(_uploadedImageUrls),
+        'gallery': List<String>.from(_uploadedImageUrls),
+
+        // Video
+        'videoUrl': _uploadedVideoUrl ?? '',
+        'productVideoUrl': _uploadedVideoUrl ?? '',
+
+        // Seller information
+        'sellerId': user.uid,
+        'sellerUid': user.uid,
+        'sellerName': sellerName,
+        'shopName': shopName,
+
+        // Product state
+        'status': 'active',
+        'isActive': true,
+        'approved': true,
+
+        // Statistics
+        'rating': 0.0,
+        'reviewCount': 0,
+        'soldCount': 0,
+        'views': 0,
+        'favoritesCount': 0,
+
+        // Timestamps
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      await productRef.set(productData);
+
+      // ----------------------------------------------------------
+      // Global notification
+      // ----------------------------------------------------------
+
+      try {
+        await _firestore
+            .collection('global_notifications')
+            .add({
+          'type': 'new_product',
+          'title': 'New Product Added',
+          'message': '$name is now available on BuyNova.',
+          'productId': productRef.id,
+          'productName': name,
+          'productImage': _uploadedImageUrls.first,
+          'imageUrl': _uploadedImageUrls.first,
+          'price': price,
+          'currency': 'BDT',
+          'currencySymbol': '৳',
+          'sellerId': user.uid,
+          'sellerName': sellerName,
+          'shopName': shopName,
+          'isActive': true,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      } catch (e) {
+        // Notification failure should not delete the product.
+        debugPrint(
+          'Global notification creation failed: $e',
+        );
+      }
+
+      if (!mounted) return;
+
+      _showSnackBar(
+        'Product added successfully!',
+      );
+
+      // Clear form after successful save.
+      _nameController.clear();
+      _priceController.clear();
+      _descriptionController.clear();
+
+      setState(() {
+        _pickedImages.clear();
+        _uploadedImageUrls.clear();
+        _pickedVideo = null;
+        _uploadedVideoUrl = null;
+        _selectedCategory = 'Phones';
+      });
+
+      // Return to previous page.
+      await Future<void>.delayed(
+        const Duration(milliseconds: 700),
+      );
+
+      if (!mounted) return;
+
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) {
+        _showSnackBar(
+          'Product save failed: $e',
+          isError: true,
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
   }
 
-  // =========================================================
-  // SELLER NOT APPROVED VIEW
-  // =========================================================
+  // ============================================================
+  // UI HELPERS
+  // ============================================================
 
-  Widget _sellerNotApprovedView() {
-    return Center(
-      child: SingleChildScrollView(
-        padding:
-            const EdgeInsets.all(24),
+  void _showUploadProgress(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+  }
+
+  void _showSnackBar(
+    String message, {
+    bool isError = false,
+  }) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: isError ? Colors.red : null,
+        ),
+      );
+  }
+
+  // ============================================================
+  // IMAGE PICKER CARD
+  // ============================================================
+
+  Widget _buildImageSection() {
+    return Card(
+      elevation: 1,
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
         child: Column(
-          mainAxisAlignment:
-              MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(
-              Icons.storefront_rounded,
-              size: 80,
-              color: Colors.grey.shade500,
+            Row(
+              children: [
+                const Icon(
+                  Icons.photo_library_outlined,
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Product Images',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${_pickedImages.length}/$_maxImages',
+                  style: TextStyle(
+                    color: Colors.grey.shade700,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 20),
-            const Text(
-              'Seller Approval Required',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 23,
-                fontWeight:
-                    FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
+
+            const SizedBox(height: 8),
+
             Text(
-              'Only approved BuyNova sellers can add products.',
-              textAlign: TextAlign.center,
+              'Add up to $_maxImages product images.',
               style: TextStyle(
-                fontSize: 15,
-                color:
-                    Colors.grey.shade600,
-                height: 1.5,
+                color: Colors.grey.shade600,
+                fontSize: 13,
               ),
             ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed:
-                  _checkSellerApproval,
-              icon: const Icon(
-                Icons.refresh_rounded,
+
+            const SizedBox(height: 14),
+
+            if (_pickedImages.isEmpty)
+              InkWell(
+                onTap: _pickImages,
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  width: double.infinity,
+                  height: 170,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: Colors.grey.shade300,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: const Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.add_photo_alternate_outlined,
+                        size: 48,
+                      ),
+                      SizedBox(height: 10),
+                      Text(
+                        'Tap to select product images',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      SizedBox(height: 5),
+                      Text(
+                        'You can select multiple images',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              Column(
+                children: [
+                  SizedBox(
+                    height: 105,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _pickedImages.length,
+                      separatorBuilder: (_, __) =>
+                          const SizedBox(width: 10),
+                      itemBuilder: (context, index) {
+                        final XFile image = _pickedImages[index];
+
+                        return Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.file(
+                                File(image.path),
+                                width: 105,
+                                height: 105,
+                                fit: BoxFit.cover,
+                                errorBuilder:
+                                    (context, error, stackTrace) {
+                                  return Container(
+                                    width: 105,
+                                    height: 105,
+                                    color: Colors.grey.shade200,
+                                    child: const Icon(
+                                      Icons.broken_image_outlined,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+
+                            Positioned(
+                              top: 5,
+                              right: 5,
+                              child: InkWell(
+                                onTap: () => _removeImage(index),
+                                borderRadius:
+                                    BorderRadius.circular(20),
+                                child: Container(
+                                  width: 30,
+                                  height: 30,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.black54,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.close,
+                                    color: Colors.white,
+                                    size: 18,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            if (index == 0)
+                              Positioned(
+                                left: 5,
+                                bottom: 5,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 7,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black54,
+                                    borderRadius:
+                                        BorderRadius.circular(8),
+                                  ),
+                                  child: const Text(
+                                    'Main',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _pickedImages.length >= _maxImages
+                          ? null
+                          : _pickImages,
+                      icon: const Icon(
+                        Icons.add_photo_alternate_outlined,
+                      ),
+                      label: Text(
+                        _pickedImages.length >= _maxImages
+                            ? 'Maximum images reached'
+                            : 'Add More Images',
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              label: const Text(
-                'Check Again',
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // VIDEO SECTION
+  // ============================================================
+
+  Widget _buildVideoSection() {
+    return Card(
+      elevation: 1,
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(
+                  Icons.video_library_outlined,
+                ),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Product Video',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Text(
+                  'Optional',
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 8),
+
+            Text(
+              'Add one short product video. Maximum $_maxVideoSeconds seconds.',
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: 13,
+              ),
+            ),
+
+            const SizedBox(height: 14),
+
+            if (_pickedVideo == null)
+              InkWell(
+                onTap: _pickVideo,
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  width: double.infinity,
+                  height: 125,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: Colors.grey.shade300,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: const Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.video_call_outlined,
+                        size: 42,
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'Select Product Video',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'Optional',
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 58,
+                      height: 58,
+                      decoration: BoxDecoration(
+                        color: Colors.black12,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.play_circle_outline,
+                        size: 34,
+                      ),
+                    ),
+
+                    const SizedBox(width: 12),
+
+                    Expanded(
+                      child: Text(
+                        _pickedVideo!.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+
+                    IconButton(
+                      onPressed: _removeVideo,
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: Colors.red,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            if (_pickedVideo != null) ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _pickVideo,
+                  icon: const Icon(Icons.swap_horiz),
+                  label: const Text('Choose Different Video'),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // BASIC TEXT FIELD
+  // ============================================================
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    required IconData icon,
+    TextInputType? keyboardType,
+    int maxLines = 1,
+  }) {
+    return TextField(
+      controller: controller,
+      keyboardType: keyboardType,
+      maxLines: maxLines,
+      textInputAction:
+          maxLines > 1 ? TextInputAction.newline : TextInputAction.next,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        prefixIcon: Icon(icon),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(
+            width: 2,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // CATEGORY DROPDOWN
+  // ============================================================
+
+  Widget _buildCategoryDropdown() {
+    return DropdownButtonFormField<String>(
+      value: _selectedCategory,
+      decoration: InputDecoration(
+        labelText: 'Category',
+        prefixIcon: const Icon(
+          Icons.category_outlined,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+      items: _categories.map((String category) {
+        return DropdownMenuItem<String>(
+          value: category,
+          child: Text(category),
+        );
+      }).toList(),
+      onChanged: _isSaving || _isUploading
+          ? null
+          : (String? value) {
+              if (value == null) return;
+
+              setState(() {
+                _selectedCategory = value;
+              });
+            },
+    );
+  }
+
+  // ============================================================
+  // SELLER INFO
+  // ============================================================
+
+  Widget _buildSellerInfo() {
+    final User? user = _auth.currentUser;
+
+    return Card(
+      elevation: 1,
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            const CircleAvatar(
+              radius: 24,
+              child: Icon(
+                Icons.storefront_outlined,
+              ),
+            ),
+
+            const SizedBox(width: 12),
+
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Seller',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    (_sellerName?.isNotEmpty == true)
+                        ? _sellerName!
+                        : (user?.email ?? 'Seller'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  if (_shopName?.isNotEmpty == true) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      _shopName!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 9,
+                vertical: 5,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                'Approved',
+                style: TextStyle(
+                  color: Colors.green,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ],
@@ -951,771 +1260,219 @@ class _AddProductPageState extends State<AddProductPage> {
     );
   }
 
-  // =========================================================
-  // IMAGE PICKER SECTION
-  // =========================================================
-
-  Widget _buildImagePickerSection() {
-    return Column(
-      crossAxisAlignment:
-          CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Expanded(
-              child: Text(
-                'Product Images',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight:
-                      FontWeight.bold,
-                ),
-              ),
-            ),
-            Text(
-              '${_pickedImages.length}/$_maxImages',
-              style: TextStyle(
-                color:
-                    Colors.grey.shade600,
-                fontWeight:
-                    FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 8),
-
-        Text(
-          'Add up to $_maxImages photos. The first photo will be the main product image.',
-          style: TextStyle(
-            color:
-                Colors.grey.shade600,
-            fontSize: 13,
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        GestureDetector(
-          onTap: _pickImages,
-          child: Container(
-            height: 155,
-            width: double.infinity,
-            decoration:
-                BoxDecoration(
-              color:
-                  Colors.grey.shade200,
-              borderRadius:
-                  BorderRadius.circular(
-                12,
-              ),
-              border: Border.all(
-                color:
-                    Colors.grey.shade400,
-              ),
-            ),
-            child:
-                _pickedImages.isEmpty
-                    ? Column(
-                        mainAxisAlignment:
-                            MainAxisAlignment
-                                .center,
-                        children: [
-                          Icon(
-                            Icons
-                                .add_photo_alternate_outlined,
-                            size: 45,
-                            color: Colors
-                                .grey
-                                .shade600,
-                          ),
-                          const SizedBox(
-                            height: 8,
-                          ),
-                          Text(
-                            'Tap to select product photos',
-                            style:
-                                TextStyle(
-                              color: Colors
-                                  .grey
-                                  .shade600,
-                            ),
-                          ),
-                        ],
-                      )
-                    : Stack(
-                        children: [
-                          ClipRRect(
-                            borderRadius:
-                                BorderRadius
-                                    .circular(
-                              12,
-                            ),
-                            child:
-                                Image.file(
-                              _pickedImages
-                                  .first,
-                              width:
-                                  double.infinity,
-                              height: 155,
-                              fit: BoxFit
-                                  .cover,
-                            ),
-                          ),
-                          Positioned(
-                            left: 10,
-                            bottom: 10,
-                            child:
-                                Container(
-                              padding:
-                                  const EdgeInsets
-                                      .symmetric(
-                                horizontal:
-                                    10,
-                                vertical:
-                                    6,
-                              ),
-                              decoration:
-                                  BoxDecoration(
-                                color: Colors
-                                    .black54,
-                                borderRadius:
-                                    BorderRadius
-                                        .circular(
-                                  20,
-                                ),
-                              ),
-                              child:
-                                  Text(
-                                '${_pickedImages.length} photos',
-                                style:
-                                    const TextStyle(
-                                  color:
-                                      Colors.white,
-                                  fontWeight:
-                                      FontWeight
-                                          .bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            right: 10,
-                            bottom: 10,
-                            child:
-                                Container(
-                              padding:
-                                  const EdgeInsets
-                                      .symmetric(
-                                horizontal:
-                                    12,
-                                vertical:
-                                    7,
-                              ),
-                              decoration:
-                                  BoxDecoration(
-                                color: Colors
-                                    .redAccent,
-                                borderRadius:
-                                    BorderRadius
-                                        .circular(
-                                  20,
-                                ),
-                              ),
-                              child:
-                                  const Text(
-                                'Add Photos',
-                                style:
-                                    TextStyle(
-                                  color:
-                                      Colors.white,
-                                  fontWeight:
-                                      FontWeight
-                                          .bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        if (_pickedImages.isNotEmpty)
-          SizedBox(
-            height: 92,
-            child: ListView.builder(
-              scrollDirection:
-                  Axis.horizontal,
-              itemCount:
-                  _pickedImages.length,
-              itemBuilder:
-                  (context, index) {
-                return Container(
-                  width: 82,
-                  margin:
-                      const EdgeInsets.only(
-                    right: 8,
-                  ),
-                  child: Stack(
-                    children: [
-                      ClipRRect(
-                        borderRadius:
-                            BorderRadius
-                                .circular(
-                          9,
-                        ),
-                        child:
-                            Image.file(
-                          _pickedImages[
-                              index],
-                          width: 82,
-                          height: 82,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-
-                      Positioned(
-                        right: 2,
-                        top: 2,
-                        child:
-                            GestureDetector(
-                          onTap: () =>
-                              _removeImage(
-                            index,
-                          ),
-                          child:
-                              Container(
-                            width: 24,
-                            height: 24,
-                            decoration:
-                                const BoxDecoration(
-                              color:
-                                  Colors.red,
-                              shape: BoxShape
-                                  .circle,
-                            ),
-                            child:
-                                const Icon(
-                              Icons.close,
-                              color: Colors
-                                  .white,
-                              size: 16,
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      if (index == 0)
-                        Positioned(
-                          left: 4,
-                          bottom: 4,
-                          child:
-                              Container(
-                            padding:
-                                const EdgeInsets
-                                    .symmetric(
-                              horizontal:
-                                  5,
-                              vertical:
-                                  2,
-                            ),
-                            decoration:
-                                BoxDecoration(
-                              color: Colors
-                                  .redAccent,
-                              borderRadius:
-                                  BorderRadius
-                                      .circular(
-                                5,
-                              ),
-                            ),
-                            child:
-                                const Text(
-                              'MAIN',
-                              style:
-                                  TextStyle(
-                                color:
-                                    Colors.white,
-                                fontSize:
-                                    8,
-                                fontWeight:
-                                    FontWeight
-                                        .bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-
-        if (_isUploadingPhoto)
-          const Padding(
-            padding:
-                EdgeInsets.only(
-              top: 12,
-            ),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 18,
-                  height: 18,
-                  child:
-                      CircularProgressIndicator(
-                    strokeWidth: 2,
-                  ),
-                ),
-                SizedBox(width: 10),
-                Text(
-                  'Uploading images...',
-                ),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-
-  // =========================================================
-  // VIDEO PICKER SECTION
-  // =========================================================
-
-  Widget _buildVideoPickerSection() {
-    return Column(
-      crossAxisAlignment:
-          CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Product Video',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight:
-                FontWeight.bold,
-          ),
-        ),
-
-        const SizedBox(height: 8),
-
-        Text(
-          'Add one short product video. Maximum length: 60 seconds.',
-          style: TextStyle(
-            color:
-                Colors.grey.shade600,
-            fontSize: 13,
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        if (_pickedVideo == null)
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed:
-                  _pickVideo,
-              icon: const Icon(
-                Icons.video_library_outlined,
-              ),
-              label: const Text(
-                'Choose Product Video',
-              ),
-              style:
-                  OutlinedButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(
-                  vertical: 15,
-                ),
-                foregroundColor:
-                    Colors.redAccent,
-                side:
-                    const BorderSide(
-                  color:
-                      Colors.redAccent,
-                ),
-              ),
-            ),
-          )
-        else
-          Container(
-            width: double.infinity,
-            padding:
-                const EdgeInsets.all(14),
-            decoration:
-                BoxDecoration(
-              color:
-                  Colors.grey.shade100,
-              borderRadius:
-                  BorderRadius.circular(
-                12,
-              ),
-              border: Border.all(
-                color:
-                    Colors.grey.shade300,
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 58,
-                  height: 58,
-                  decoration:
-                      BoxDecoration(
-                    color: Colors.black,
-                    borderRadius:
-                        BorderRadius.circular(
-                      9,
-                    ),
-                  ),
-                  child: const Icon(
-                    Icons.play_circle_fill,
-                    color:
-                        Colors.white,
-                    size: 35,
-                  ),
-                ),
-
-                const SizedBox(width: 12),
-
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Product Video',
-                        style: TextStyle(
-                          fontWeight:
-                              FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(
-                        height: 4,
-                      ),
-                      Text(
-                        _uploadedVideoUrl != null
-                            ? 'Uploaded successfully'
-                            : 'Uploading...',
-                        style: TextStyle(
-                          color: _uploadedVideoUrl !=
-                                  null
-                              ? Colors.green
-                              : Colors.grey,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                if (_isUploadingVideo)
-                  const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child:
-                        CircularProgressIndicator(
-                      strokeWidth: 2,
-                    ),
-                  )
-                else
-                  IconButton(
-                    onPressed:
-                        _removeVideo,
-                    icon:
-                        const Icon(
-                      Icons.delete_outline,
-                      color: Colors.red,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-
-  // =========================================================
-  // BUILD
-  // =========================================================
+  // ============================================================
+  // MAIN BUILD
+  // ============================================================
 
   @override
   Widget build(BuildContext context) {
+    if (_isCheckingSeller) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Add Product'),
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (!_isApprovedSeller) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Add Product'),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.lock_outline,
+                  size: 70,
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Seller Approval Required',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 21,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Only approved BuyNova sellers can add products.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+                const SizedBox(height: 25),
+                ElevatedButton.icon(
+                  onPressed: _loadSellerInformation,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Check Again'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final bool busy = _isSaving || _isUploading;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
           'Add Product',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
-      body: _isCheckingSeller
-          ? const Center(
-              child:
-                  CircularProgressIndicator(),
-            )
-          : !_isApprovedSeller
-              ? _sellerNotApprovedView()
-              : Padding(
-                  padding:
-                      const EdgeInsets.all(
-                    16,
-                  ),
-                  child:
-                      SingleChildScrollView(
-                    child: Column(
-                      children: [
-                        // =================================================
-                        // SELLER INFO
-                        // =================================================
 
-                        Container(
-                          width:
-                              double.infinity,
-                          padding:
-                              const EdgeInsets
-                                  .all(
-                            14,
-                          ),
-                          decoration:
-                              BoxDecoration(
-                            color: Theme.of(
-                              context,
-                            )
-                                .colorScheme
-                                .surfaceContainerHighest,
-                            borderRadius:
-                                BorderRadius
-                                    .circular(
-                              14,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons
-                                    .verified_user_rounded,
-                              ),
-                              const SizedBox(
-                                width: 10,
-                              ),
-                              Expanded(
-                                child:
-                                    Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment
-                                          .start,
-                                  children: [
-                                    const Text(
-                                      'Approved Seller',
-                                      style:
-                                          TextStyle(
-                                        fontWeight:
-                                            FontWeight
-                                                .bold,
-                                      ),
-                                    ),
-                                    const SizedBox(
-                                      height: 3,
-                                    ),
-                                    Text(
-                                      _sellerCode
-                                              .isNotEmpty
-                                          ? 'Seller ID: $_sellerCode'
-                                          : 'Seller ID: ${FirebaseAuth.instance.currentUser?.uid ?? 'N/A'}',
-                                      style:
-                                          TextStyle(
-                                        fontSize:
-                                            13,
-                                        color: Colors
-                                            .grey
-                                            .shade600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Icon(
-                                Icons
-                                    .check_circle,
-                                color:
-                                    Colors.green,
-                              ),
-                            ],
-                          ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildSellerInfo(),
+
+              const SizedBox(height: 16),
+
+              _buildImageSection(),
+
+              const SizedBox(height: 16),
+
+              _buildVideoSection(),
+
+              const SizedBox(height: 16),
+
+              Card(
+                elevation: 1,
+                margin: EdgeInsets.zero,
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    children: [
+                      _buildTextField(
+                        controller: _nameController,
+                        label: 'Product Name',
+                        hint: 'Enter product name',
+                        icon: Icons.shopping_bag_outlined,
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      _buildTextField(
+                        controller: _priceController,
+                        label: 'Price (BDT)',
+                        hint: 'Enter price',
+                        icon: Icons.payments_outlined,
+                        keyboardType:
+                            const TextInputType.numberWithOptions(
+                          decimal: true,
                         ),
+                      ),
 
-                        const SizedBox(
-                          height: 18,
-                        ),
+                      const SizedBox(height: 14),
 
-                        // =================================================
-                        // MULTIPLE IMAGES
-                        // =================================================
+                      _buildCategoryDropdown(),
 
-                        _buildImagePickerSection(),
+                      const SizedBox(height: 14),
 
-                        const SizedBox(
-                          height: 22,
-                        ),
-
-                        // =================================================
-                        // PRODUCT VIDEO
-                        // =================================================
-
-                        _buildVideoPickerSection(),
-
-                        const SizedBox(
-                          height: 20,
-                        ),
-
-                        // =================================================
-                        // PRODUCT NAME
-                        // =================================================
-
-                        TextField(
-                          controller:
-                              _titleController,
-                          textInputAction:
-                              TextInputAction
-                                  .next,
-                          decoration:
-                              const InputDecoration(
-                            labelText:
-                                'Product Name',
-                            border:
-                                OutlineInputBorder(),
-                          ),
-                        ),
-
-                        const SizedBox(
-                          height: 12,
-                        ),
-
-                        // =================================================
-                        // PRICE — BDT
-                        // =================================================
-
-                        TextField(
-                          controller:
-                              _priceController,
-                          keyboardType:
-                              const TextInputType
-                                  .numberWithOptions(
-                            decimal:
-                                true,
-                          ),
-                          decoration:
-                              const InputDecoration(
-                            labelText:
-                                'Price (৳ BDT)',
-                            hintText:
-                                'Example: 1500',
-                            prefixText:
-                                '৳ ',
-                            border:
-                                OutlineInputBorder(),
-                          ),
-                        ),
-
-                        const SizedBox(
-                          height: 12,
-                        ),
-
-                        // =================================================
-                        // CATEGORY
-                        // =================================================
-
-                        TextField(
-                          controller:
-                              _categoryController,
-                          textInputAction:
-                              TextInputAction
-                                  .next,
-                          decoration:
-                              const InputDecoration(
-                            labelText:
-                                'Category',
-                            hintText:
-                                'Example: Men, Women, Electronics',
-                            border:
-                                OutlineInputBorder(),
-                          ),
-                        ),
-
-                        const SizedBox(
-                          height: 12,
-                        ),
-
-                        // =================================================
-                        // DESCRIPTION
-                        // =================================================
-
-                        TextField(
-                          controller:
-                              _descriptionController,
-                          maxLines: 3,
-                          maxLength: 1000,
-                          decoration:
-                              const InputDecoration(
-                            labelText:
-                                'Description',
-                            border:
-                                OutlineInputBorder(),
-                          ),
-                        ),
-
-                        const SizedBox(
-                          height: 20,
-                        ),
-
-                        // =================================================
-                        // UPLOAD BUTTON
-                        // =================================================
-
-                        SizedBox(
-                          width:
-                              double.infinity,
-                          height: 50,
-                          child:
-                              ElevatedButton(
-                            onPressed:
-                                (_isUploading ||
-                                        _isUploadingPhoto ||
-                                        _isUploadingVideo)
-                                    ? null
-                                    : _uploadProduct,
-                            child:
-                                _isUploading
-                                    ? const SizedBox(
-                                        height:
-                                            22,
-                                        width:
-                                            22,
-                                        child:
-                                            CircularProgressIndicator(
-                                          color:
-                                              Colors.white,
-                                          strokeWidth:
-                                              2,
-                                        ),
-                                      )
-                                    : const Text(
-                                        'Upload Product',
-                                      ),
-                          ),
-                        ),
-
-                        const SizedBox(
-                          height: 20,
-                        ),
-                      ],
-                    ),
+                      _buildTextField(
+                        controller: _descriptionController,
+                        label: 'Description',
+                        hint: 'Describe your product',
+                        icon: Icons.description_outlined,
+                        maxLines: 6,
+                      ),
+                    ],
                   ),
                 ),
+              ),
+
+              const SizedBox(height: 22),
+
+              if (_uploadedImageUrls.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.green.withOpacity(0.08),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.cloud_done_outlined,
+                        color: Colors.green,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '${_uploadedImageUrls.length} image(s) uploaded'
+                          '${_uploadedVideoUrl != null ? ' + video' : ''}',
+                          style: const TextStyle(
+                            color: Colors.green,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              const SizedBox(height: 16),
+
+              SizedBox(
+                height: 54,
+                child: ElevatedButton.icon(
+                  onPressed: busy ? null : _addProduct,
+                  icon: busy
+                      ? const SizedBox(
+                          width: 21,
+                          height: 21,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.cloud_upload_outlined,
+                        ),
+                  label: Text(
+                    _isUploading
+                        ? 'Uploading Media...'
+                        : _isSaving
+                            ? 'Saving Product...'
+                            : 'Add Product',
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              Text(
+                'Your first image will be used as the main product image. '
+                'All selected images and the optional video will be '
+                'available on the product details page.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
