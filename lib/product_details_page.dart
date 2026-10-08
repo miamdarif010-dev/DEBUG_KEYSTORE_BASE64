@@ -51,8 +51,6 @@ class _ProductDetailsPageState
   double _cartLeft = 0;
   double _cartTop = 20;
 
-  bool _cartPositionInitialized = false;
-
   // =========================================================
   // INIT
   // =========================================================
@@ -1724,10 +1722,6 @@ class _ProductDetailsPageState
       left: _cartLeft,
       top: _cartTop,
       child: GestureDetector(
-        onPanStart: (_) {
-          _cartPositionInitialized =
-              true;
-        },
         onPanUpdate: (details) {
           final screenWidth =
               MediaQuery.of(context)
