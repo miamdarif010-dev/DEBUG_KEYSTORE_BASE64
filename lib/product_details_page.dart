@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:video_player/video_player.dart';
 
 import 'cart_page.dart';
 import 'login_page.dart';
@@ -25,13 +27,54 @@ class ProductDetailsPage extends StatefulWidget {
 class _ProductDetailsPageState
     extends State<ProductDetailsPage> {
   int _quantity = 1;
+
   bool _isFavorite = false;
   bool _loadingFavorite = true;
+
+  // =========================================================
+  // PRODUCT MEDIA
+  // =========================================================
+
+  late List<String> _productImages;
+
+  String _videoUrl = '';
+
+  int _selectedMediaIndex = 0;
+
+  VideoPlayerController? _videoController;
+
+  bool _videoLoading = false;
+
+  // =========================================================
+  // DRAGGABLE CART POSITION
+  // =========================================================
+
+  double _cartLeft = 0;
+  double _cartTop = 20;
+
+  bool _cartPositionInitialized = false;
+
+  // =========================================================
+  // INIT
+  // =========================================================
 
   @override
   void initState() {
     super.initState();
+
+    _prepareMedia();
     _loadFavoriteStatus();
+    _initializeVideo();
+  }
+
+  // =========================================================
+  // DISPOSE
+  // =========================================================
+
+  @override
+  void dispose() {
+    _videoController?.dispose();
+    super.dispose();
   }
 
   // =========================================================
@@ -45,9 +88,12 @@ class _ProductDetailsPageState
   }
 
   String get imageUrl {
-    return widget.product['imageUrl']?.toString() ??
-        widget.product['productImageUrl']?.toString() ??
-        '';
+    final value =
+        widget.product['imageUrl']?.toString() ??
+            widget.product['productImageUrl']?.toString() ??
+            '';
+
+    return value.trim();
   }
 
   String get category {
@@ -62,8 +108,8 @@ class _ProductDetailsPageState
   double get rawPrice {
     final value =
         widget.product['price'] ??
-        widget.product['sellingPrice'] ??
-        0;
+            widget.product['sellingPrice'] ??
+            0;
 
     if (value is num) {
       return value.toDouble();
@@ -194,6 +240,151 @@ class _ProductDetailsPageState
 
   String get formattedSubtotal {
     return '৳${subtotal.toStringAsFixed(2)}';
+  }
+
+  // =========================================================
+  // PREPARE MULTIPLE IMAGES
+  // =========================================================
+
+  void _prepareMedia() {
+    final images = <String>[];
+
+    void addImage(dynamic value) {
+      if (value == null) return;
+
+      if (value is String) {
+        final url = value.trim();
+
+        if (url.isNotEmpty &&
+            !images.contains(url)) {
+          images.add(url);
+        }
+
+        return;
+      }
+
+      if (value is List) {
+        for (final item in value) {
+          addImage(item);
+        }
+      }
+    }
+
+    // Main image first.
+    addImage(
+      widget.product['imageUrl'],
+    );
+
+    addImage(
+      widget.product['productImageUrl'],
+    );
+
+    // Multiple image fields.
+    addImage(
+      widget.product['imageUrls'],
+    );
+
+    addImage(
+      widget.product['images'],
+    );
+
+    addImage(
+      widget.product['productImages'],
+    );
+
+    addImage(
+      widget.product['gallery'],
+    );
+
+    if (images.isEmpty) {
+      images.add('');
+    }
+
+    _productImages = images;
+
+    // -------------------------------------------------------
+    // VIDEO
+    // -------------------------------------------------------
+
+    final possibleVideoFields = [
+      widget.product['videoUrl'],
+      widget.product['productVideoUrl'],
+      widget.product['video'],
+    ];
+
+    for (final value in possibleVideoFields) {
+      if (value != null) {
+        final text =
+            value.toString().trim();
+
+        if (text.isNotEmpty) {
+          _videoUrl = text;
+          break;
+        }
+      }
+    }
+
+    // Support videoUrls list.
+    if (_videoUrl.isEmpty) {
+      final videoUrls =
+          widget.product['videoUrls'];
+
+      if (videoUrls is List &&
+          videoUrls.isNotEmpty) {
+        final first =
+            videoUrls.first
+                ?.toString()
+                .trim();
+
+        if (first != null &&
+            first.isNotEmpty) {
+          _videoUrl = first;
+        }
+      }
+    }
+  }
+
+  // =========================================================
+  // INITIALIZE VIDEO
+  // =========================================================
+
+  Future<void> _initializeVideo() async {
+    if (_videoUrl.isEmpty) {
+      return;
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _videoLoading = true;
+    });
+
+    try {
+      final controller =
+          VideoPlayerController.networkUrl(
+        Uri.parse(_videoUrl),
+      );
+
+      await controller.initialize();
+
+      controller.setLooping(true);
+
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+
+      setState(() {
+        _videoController = controller;
+        _videoLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _videoLoading = false;
+      });
+    }
   }
 
   // =========================================================
@@ -370,16 +561,70 @@ class _ProductDetailsPageState
     }
 
     try {
-      for (int i = 0;
+      await CartService.addItem(
+        id: widget.productId,
+        name: productName,
+        price: price,
+        imageUrl:
+            imageUrl.isEmpty
+                ? null
+                : imageUrl,
+        isResellerProduct:
+            isResellerProduct,
+        entrepreneurUid:
+            entrepreneurUid.isEmpty
+                ? null
+                : entrepreneurUid,
+        sellerId:
+            sellerId.isEmpty
+                ? null
+                : sellerId,
+        supplierProductId:
+            widget.product['supplierProductId']
+                ?.toString(),
+        supplierPrice:
+            _nullableDouble(
+          widget.product['supplierPrice'],
+        ),
+        resellerProfit:
+            _nullableDouble(
+          widget.product['resellerProfit'],
+        ),
+      );
+
+      // If quantity is more than one, add remaining quantity.
+      for (int i = 1;
           i < _quantity;
           i++) {
         await CartService.addItem(
           id: widget.productId,
           name: productName,
           price: price,
-          imageUrl: imageUrl.isEmpty
-              ? null
-              : imageUrl,
+          imageUrl:
+              imageUrl.isEmpty
+                  ? null
+                  : imageUrl,
+          isResellerProduct:
+              isResellerProduct,
+          entrepreneurUid:
+              entrepreneurUid.isEmpty
+                  ? null
+                  : entrepreneurUid,
+          sellerId:
+              sellerId.isEmpty
+                  ? null
+                  : sellerId,
+          supplierProductId:
+              widget.product['supplierProductId']
+                  ?.toString(),
+          supplierPrice:
+              _nullableDouble(
+            widget.product['supplierPrice'],
+          ),
+          resellerProfit:
+              _nullableDouble(
+            widget.product['resellerProfit'],
+          ),
         );
       }
 
@@ -447,6 +692,30 @@ class _ProductDetailsPageState
                       ? null
                       : imageUrl,
               quantity: _quantity,
+              isResellerProduct:
+                  isResellerProduct,
+              entrepreneurUid:
+                  entrepreneurUid.isEmpty
+                      ? null
+                      : entrepreneurUid,
+              sellerId:
+                  sellerId.isEmpty
+                      ? null
+                      : sellerId,
+              supplierProductId:
+                  widget.product[
+                          'supplierProductId']
+                      ?.toString(),
+              supplierPrice:
+                  _nullableDouble(
+                widget.product[
+                    'supplierPrice'],
+              ),
+              resellerProfit:
+                  _nullableDouble(
+                widget.product[
+                    'resellerProfit'],
+              ),
             ),
           ],
         ),
@@ -455,16 +724,26 @@ class _ProductDetailsPageState
   }
 
   // =========================================================
-  // OPEN SELLER / RESELLER CHAT
+  // OPEN CART
+  // =========================================================
+
+  void _openCart() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            const CartPage(),
+      ),
+    );
+  }
+
+  // =========================================================
+  // OPEN MESSAGE CHAT
   // =========================================================
 
   Future<void> _openMessageChat() async {
     User? user =
         FirebaseAuth.instance.currentUser;
-
-    // -------------------------------------------------------
-    // LOGIN REQUIRED
-    // -------------------------------------------------------
 
     if (user == null) {
       await Navigator.push(
@@ -500,7 +779,6 @@ class _ProductDetailsPageState
       return;
     }
 
-    // Prevent messaging yourself.
     if (targetId == user.uid) {
       if (!mounted) return;
 
@@ -514,10 +792,6 @@ class _ProductDetailsPageState
 
     String targetName =
         recipientNameFromProduct;
-
-    // -------------------------------------------------------
-    // GET NAME FROM USERS COLLECTION IF NEEDED
-    // -------------------------------------------------------
 
     final shouldLoadUserName =
         targetName == 'Seller' ||
@@ -555,14 +829,8 @@ class _ProductDetailsPageState
             targetName = displayName;
           }
         }
-      } catch (_) {
-        // Keep fallback name.
-      }
+      } catch (_) {}
     }
-
-    // -------------------------------------------------------
-    // FIND EXISTING CONVERSATION
-    // -------------------------------------------------------
 
     String conversationId = '';
 
@@ -586,13 +854,7 @@ class _ProductDetailsPageState
         conversationId =
             existing.docs.first.id;
       }
-    } catch (_) {
-      // If query fails, use deterministic ID.
-    }
-
-    // -------------------------------------------------------
-    // CREATE A STABLE CHAT ID FOR NEW CHAT
-    // -------------------------------------------------------
+    } catch (_) {}
 
     if (conversationId.isEmpty) {
       conversationId =
@@ -600,10 +862,6 @@ class _ProductDetailsPageState
     }
 
     if (!mounted) return;
-
-    // -------------------------------------------------------
-    // OPEN CHAT
-    // -------------------------------------------------------
 
     await Navigator.push(
       context,
@@ -650,7 +908,7 @@ class _ProductDetailsPageState
   }
 
   // =========================================================
-  // CHECK IF USER PURCHASED PRODUCT
+  // CHECK PURCHASE
   // =========================================================
 
   Future<bool> _hasDeliveredProduct() async {
@@ -715,7 +973,7 @@ class _ProductDetailsPageState
   }
 
   // =========================================================
-  // FIND USER'S REVIEW
+  // FIND USER REVIEW
   // =========================================================
 
   Future<QueryDocumentSnapshot<
@@ -1058,6 +1316,589 @@ class _ProductDetailsPageState
           ],
         );
       },
+    );
+  }
+
+  // =========================================================
+  // IMAGE VIEWER
+  // =========================================================
+
+  Widget _buildImageViewer(
+    String url,
+  ) {
+    if (url.trim().isEmpty) {
+      return Container(
+        color: Colors.grey.shade200,
+        child: const Center(
+          child: Icon(
+            Icons.image_outlined,
+            size: 80,
+            color: Colors.grey,
+          ),
+        ),
+      );
+    }
+
+    return Image.network(
+      url,
+      width: double.infinity,
+      height: double.infinity,
+      fit: BoxFit.contain,
+      errorBuilder:
+          (context, error, stackTrace) {
+        return Container(
+          color: Colors.grey.shade200,
+          child: const Center(
+            child: Icon(
+              Icons.broken_image_outlined,
+              size: 70,
+              color: Colors.grey,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // =========================================================
+  // VIDEO VIEWER
+  // =========================================================
+
+  Widget _buildVideoViewer() {
+    final controller =
+        _videoController;
+
+    if (_videoLoading) {
+      return Container(
+        color: Colors.black,
+        child: const Center(
+          child:
+              CircularProgressIndicator(
+            color: Colors.white,
+          ),
+        ),
+      );
+    }
+
+    if (controller == null ||
+        !controller.value.isInitialized) {
+      return Container(
+        color: Colors.black,
+        child: const Center(
+          child: Column(
+            mainAxisSize:
+                MainAxisSize.min,
+            children: [
+              Icon(
+                Icons
+                    .video_library_outlined,
+                color: Colors.white,
+                size: 50,
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Video unavailable',
+                style: TextStyle(
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: () {
+        if (controller.value.isPlaying) {
+          controller.pause();
+        } else {
+          controller.play();
+        }
+
+        setState(() {});
+      },
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Center(
+            child: AspectRatio(
+              aspectRatio:
+                  controller.value.aspectRatio,
+              child: VideoPlayer(
+                controller,
+              ),
+            ),
+          ),
+
+          if (!controller.value.isPlaying)
+            Container(
+              decoration:
+                  const BoxDecoration(
+                color: Colors.black54,
+                shape: BoxShape.circle,
+              ),
+              padding:
+                  const EdgeInsets.all(12),
+              child: const Icon(
+                Icons.play_arrow,
+                color: Colors.white,
+                size: 42,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // =========================================================
+  // MEDIA GALLERY
+  // =========================================================
+
+  Widget _buildMediaGallery() {
+    final totalMedia =
+        _productImages.length +
+            (_videoUrl.isNotEmpty ? 1 : 0);
+
+    return Column(
+      children: [
+        Stack(
+          children: [
+            SizedBox(
+              width: double.infinity,
+              height: 390,
+              child: PageView.builder(
+                itemCount: totalMedia,
+                onPageChanged: (index) {
+                  setState(() {
+                    _selectedMediaIndex =
+                        index;
+                  });
+
+                  if (_videoUrl.isNotEmpty &&
+                      index ==
+                          _productImages.length) {
+                    _videoController
+                        ?.pause();
+                  }
+                },
+                itemBuilder:
+                    (context, index) {
+                  if (_videoUrl.isNotEmpty &&
+                      index ==
+                          _productImages.length) {
+                    return _buildVideoViewer();
+                  }
+
+                  return _buildImageViewer(
+                    _productImages[index],
+                  );
+                },
+              ),
+            ),
+
+            // -------------------------------------------------
+            // MEDIA COUNTER
+            // -------------------------------------------------
+
+            Positioned(
+              right: 14,
+              bottom: 14,
+              child: Container(
+                padding:
+                    const EdgeInsets
+                        .symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration:
+                    BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius:
+                      BorderRadius.circular(
+                    20,
+                  ),
+                ),
+                child: Text(
+                  '${_selectedMediaIndex + 1}/$totalMedia',
+                  style:
+                      const TextStyle(
+                    color: Colors.white,
+                    fontWeight:
+                        FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+
+            // -------------------------------------------------
+            // DRAGGABLE CART
+            // -------------------------------------------------
+
+            _buildDraggableCart(),
+          ],
+        ),
+
+        // -----------------------------------------------------
+        // THUMBNAILS
+        // -----------------------------------------------------
+
+        if (totalMedia > 1)
+          SizedBox(
+            height: 82,
+            child: ListView.builder(
+              scrollDirection:
+                  Axis.horizontal,
+              padding:
+                  const EdgeInsets
+                      .symmetric(
+                horizontal: 12,
+                vertical: 8,
+              ),
+              itemCount: totalMedia,
+              itemBuilder:
+                  (context, index) {
+                final selected =
+                    index ==
+                        _selectedMediaIndex;
+
+                return GestureDetector(
+                  onTap: () {
+                    // The PageView is controlled
+                    // through the thumbnail area
+                    // below.
+                    _selectMediaFromThumbnail(
+                      index,
+                    );
+                  },
+                  child: Container(
+                    width: 66,
+                    margin:
+                        const EdgeInsets
+                            .only(
+                      right: 8,
+                    ),
+                    decoration:
+                        BoxDecoration(
+                      borderRadius:
+                          BorderRadius
+                              .circular(
+                        9,
+                      ),
+                      border:
+                          Border.all(
+                        color: selected
+                            ? Colors.redAccent
+                            : Colors.grey
+                                .shade300,
+                        width:
+                            selected ? 2 : 1,
+                      ),
+                    ),
+                    child:
+                        ClipRRect(
+                      borderRadius:
+                          BorderRadius
+                              .circular(
+                        8,
+                      ),
+                      child:
+                          _buildThumbnail(
+                        index,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  // =========================================================
+  // THUMBNAIL PAGE CONTROLLER
+  // =========================================================
+
+  final PageController _mediaPageController =
+      PageController();
+
+  void _selectMediaFromThumbnail(
+    int index,
+  ) {
+    if (!_mediaPageController.hasClients) {
+      return;
+    }
+
+    _mediaPageController.animateToPage(
+      index,
+      duration:
+          const Duration(
+        milliseconds: 300,
+      ),
+      curve: Curves.easeInOut,
+    );
+
+    setState(() {
+      _selectedMediaIndex =
+          index;
+    });
+  }
+
+  // =========================================================
+  // THUMBNAIL
+  // =========================================================
+
+  Widget _buildThumbnail(
+    int index,
+  ) {
+    final isVideo =
+        _videoUrl.isNotEmpty &&
+            index ==
+                _productImages.length;
+
+    if (isVideo) {
+      return Container(
+        color: Colors.black,
+        child: const Stack(
+          alignment: Alignment.center,
+          children: [
+            Icon(
+              Icons.video_library,
+              color: Colors.white,
+              size: 30,
+            ),
+            Positioned(
+              bottom: 4,
+              child: Text(
+                'VIDEO',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 8,
+                  fontWeight:
+                      FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final url =
+        _productImages[index];
+
+    if (url.isEmpty) {
+      return Container(
+        color: Colors.grey.shade200,
+        child: const Icon(
+          Icons.image_outlined,
+          color: Colors.grey,
+        ),
+      );
+    }
+
+    return Image.network(
+      url,
+      fit: BoxFit.cover,
+      errorBuilder:
+          (context, error, stackTrace) {
+        return Container(
+          color: Colors.grey.shade200,
+          child: const Icon(
+            Icons.broken_image_outlined,
+            color: Colors.grey,
+          ),
+        );
+      },
+    );
+  }
+
+  // =========================================================
+  // DRAGGABLE FLOATING CART
+  // =========================================================
+
+  Widget _buildDraggableCart() {
+    return Positioned(
+      left: _cartLeft,
+      top: _cartTop,
+      child: GestureDetector(
+        onPanStart: (_) {
+          _cartPositionInitialized =
+              true;
+        },
+        onPanUpdate: (details) {
+          final screenWidth =
+              MediaQuery.of(context)
+                  .size
+                  .width;
+
+          final screenHeight =
+              MediaQuery.of(context)
+                  .size
+                  .height;
+
+          setState(() {
+            _cartLeft +=
+                details.delta.dx;
+
+            _cartTop +=
+                details.delta.dy;
+
+            // Keep inside screen.
+            _cartLeft =
+                _cartLeft.clamp(
+              0.0,
+              screenWidth - 68,
+            );
+
+            _cartTop =
+                _cartTop.clamp(
+              5.0,
+              330.0,
+            );
+          });
+        },
+        onTap: _openCart,
+        child: StreamBuilder<
+            QuerySnapshot<
+                Map<String, dynamic>>>(
+          stream:
+              FirebaseAuth
+                          .instance
+                          .currentUser ==
+                      null
+                  ? null
+                  : FirebaseFirestore
+                      .instance
+                      .collection(
+                        'users',
+                      )
+                      .doc(
+                        FirebaseAuth
+                            .instance
+                            .currentUser!
+                            .uid,
+                      )
+                      .collection(
+                        'cart',
+                      )
+                      .snapshots(),
+          builder:
+              (context, snapshot) {
+            int quantity = 0;
+
+            if (snapshot.hasData) {
+              for (final doc
+                  in snapshot.data!.docs) {
+                final data =
+                    doc.data();
+
+                final value =
+                    data['quantity'];
+
+                if (value is num) {
+                  quantity +=
+                      value.toInt();
+                } else {
+                  quantity++;
+                }
+              }
+            }
+
+            return Container(
+              width: 62,
+              height: 62,
+              decoration:
+                  BoxDecoration(
+                color:
+                    Colors.white,
+                shape:
+                    BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black
+                        .withValues(
+                      alpha: 0.22,
+                    ),
+                    blurRadius: 10,
+                    offset:
+                        const Offset(
+                      0,
+                      4,
+                    ),
+                  ),
+                ],
+                border: Border.all(
+                  color:
+                      Colors.redAccent,
+                  width: 2,
+                ),
+              ),
+              child: Stack(
+                clipBehavior:
+                    Clip.none,
+                children: [
+                  const Center(
+                    child: Icon(
+                      Icons
+                          .shopping_cart,
+                      color:
+                          Colors.redAccent,
+                      size: 29,
+                    ),
+                  ),
+
+                  if (quantity > 0)
+                    Positioned(
+                      right: -2,
+                      top: -4,
+                      child:
+                          Container(
+                        constraints:
+                            const BoxConstraints(
+                          minWidth: 22,
+                          minHeight: 22,
+                        ),
+                        padding:
+                            const EdgeInsets
+                                .symmetric(
+                          horizontal: 5,
+                        ),
+                        decoration:
+                            const BoxDecoration(
+                          color:
+                              Colors.orange,
+                          shape:
+                              BoxShape.circle,
+                        ),
+                        child:
+                            Center(
+                          child: Text(
+                            quantity >
+                                    99
+                                ? '99+'
+                                : '$quantity',
+                            style:
+                                const TextStyle(
+                              color:
+                                  Colors.white,
+                              fontSize:
+                                  10,
+                              fontWeight:
+                                  FontWeight
+                                      .bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 
@@ -1516,18 +2357,11 @@ class _ProductDetailsPageState
               Icons
                   .shopping_cart_outlined,
             ),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) =>
-                      const CartPage(),
-                ),
-              );
-            },
+            onPressed: _openCart,
           ),
         ],
       ),
+
       body:
           SingleChildScrollView(
         padding:
@@ -1540,56 +2374,10 @@ class _ProductDetailsPageState
                   .start,
           children: [
             // =================================================
-            // IMAGE
+            // TEMU STYLE PRODUCT MEDIA
             // =================================================
 
-            SizedBox(
-              width:
-                  double.infinity,
-              height: 330,
-              child: imageUrl
-                      .isNotEmpty
-                  ? Image.network(
-                      imageUrl,
-                      fit:
-                          BoxFit.cover,
-                      errorBuilder: (
-                        context,
-                        error,
-                        stackTrace,
-                      ) {
-                        return Container(
-                          color: Colors
-                              .grey
-                              .shade200,
-                          child:
-                              const Center(
-                            child:
-                                Icon(
-                              Icons.image,
-                              size: 80,
-                              color:
-                                  Colors.grey,
-                            ),
-                          ),
-                        );
-                      },
-                    )
-                  : Container(
-                      color: Colors
-                          .grey
-                          .shade200,
-                      child:
-                          const Center(
-                        child: Icon(
-                          Icons.image,
-                          size: 80,
-                          color:
-                              Colors.grey,
-                        ),
-                      ),
-                    ),
-            ),
+            _buildMediaGallery(),
 
             // =================================================
             // PRODUCT INFORMATION
@@ -1660,7 +2448,9 @@ class _ProductDetailsPageState
                           BoxDecoration(
                         color: Colors
                             .redAccent
-                            .shade100,
+                            .withValues(
+                          alpha: 0.10,
+                        ),
                         borderRadius:
                             BorderRadius
                                 .circular(
@@ -1827,7 +2617,7 @@ class _ProductDetailsPageState
                   ),
 
                   // =================================================
-                  // SELLER / RESELLER INFORMATION
+                  // SELLER / RESELLER
                   // =================================================
 
                   if (sellerCode.isNotEmpty ||
@@ -1861,37 +2651,31 @@ class _ProductDetailsPageState
                                         .bold,
                               ),
                             ),
-
                             const SizedBox(
                               height: 10,
                             ),
-
                             if (isResellerProduct &&
                                 entrepreneurUid
                                     .isNotEmpty)
                               Text(
                                 'Reseller UID: $entrepreneurUid',
                               ),
-
                             if (isResellerProduct &&
                                 entrepreneurName
                                     .isNotEmpty)
                               Text(
                                 'Reseller Name: $entrepreneurName',
                               ),
-
                             if (sellerCode
                                 .isNotEmpty)
                               Text(
                                 'Seller ID: $sellerCode',
                               ),
-
                             if (sellerId
                                 .isNotEmpty)
                               Text(
                                 'Seller UID: $sellerId',
                               ),
-
                             if (sellerEmail
                                 .isNotEmpty)
                               Text(
@@ -1931,10 +2715,6 @@ class _ProductDetailsPageState
             mainAxisSize:
                 MainAxisSize.min,
             children: [
-              // -------------------------------------------------
-              // MESSAGE BUTTON
-              // -------------------------------------------------
-
               SizedBox(
                 width:
                     double.infinity,
@@ -1972,10 +2752,6 @@ class _ProductDetailsPageState
               const SizedBox(
                 height: 8,
               ),
-
-              // -------------------------------------------------
-              // CART + BUY NOW
-              // -------------------------------------------------
 
               Row(
                 children: [
@@ -2054,4 +2830,69 @@ class _ProductDetailsPageState
       ),
     );
   }
+
+  // =========================================================
+  // NULLABLE DOUBLE
+  // =========================================================
+
+  double? _nullableDouble(
+    dynamic value,
+  ) {
+    if (value == null) {
+      return null;
+    }
+
+    if (value is num) {
+      return value.toDouble();
+    }
+
+    return double.tryParse(
+      value.toString(),
+    );
+  }
 }
+
+খুব গুরুত্বপূর্ণ ২টা ছোট পরিবর্তন
+
+এই ফাইলে ভিডিও চালানোর জন্য তোমার "pubspec.yaml"-এ এটা থাকতে হবে:
+
+dependencies:
+  video_player: ^2.9.2
+
+আর "Product" Firestore document-এ ভবিষ্যতে আমরা এভাবে ছবি/ভিডিও রাখতে পারব:
+
+imageUrl: "main-image.jpg"
+
+imageUrls:
+  - "image-1.jpg"
+  - "image-2.jpg"
+  - "image-3.jpg"
+  - "image-4.jpg"
+
+videoUrl: "product-video.mp4"
+
+একটা গুরুত্বপূর্ণ বিষয়: উপরের কোডে thumbnail থেকে বড় ছবিতে যাওয়ার জন্য "PageController" ব্যবহার করেছি। তাই "PageView"-এ এই controller-টাও বসাতে হবে। "PageView.builder" অংশে:
+
+controller: _mediaPageController,
+
+অর্থাৎ "_buildMediaGallery()"-এর "PageView.builder" হবে:
+
+PageView.builder(
+  controller: _mediaPageController,
+  itemCount: totalMedia,
+  onPageChanged: (index) {
+    setState(() {
+      _selectedMediaIndex = index;
+    });
+  },
+  itemBuilder: (context, index) {
+    if (_videoUrl.isNotEmpty &&
+        index == _productImages.length) {
+      return _buildVideoViewer();
+    }
+
+    return _buildImageViewer(
+      _productImages[index],
+    );
+  },
+)
