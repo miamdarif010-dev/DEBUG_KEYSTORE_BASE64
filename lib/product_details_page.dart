@@ -7,6 +7,7 @@ import 'cart_page.dart';
 import 'login_page.dart';
 import 'checkout_page.dart';
 import 'buyer_chat_page.dart';
+import 'product_media_gallery.dart';
 
 class ProductDetailsPage extends StatefulWidget {
   final String productId;
@@ -24,43 +25,14 @@ class ProductDetailsPage extends StatefulWidget {
 }
 
 class _ProductDetailsPageState extends State<ProductDetailsPage> {
-  // =========================================================
-  // BASIC STATE
-  // =========================================================
-
   int _quantity = 1;
 
   bool _isFavorite = false;
   bool _loadingFavorite = true;
 
-  // =========================================================
-  // PRODUCT MEDIA
-  // =========================================================
-
   late List<String> _productImages;
 
   String _videoUrl = '';
-
-  int _selectedMediaIndex = 0;
-
-  VideoPlayerController? _videoController;
-
-  bool _videoLoading = false;
-
-  final PageController _mediaPageController = PageController();
-
-  // =========================================================
-  // FLOATING CART POSITION
-  // =========================================================
-
-  double _cartLeft = 0;
-  double _cartTop = 20;
-
-  bool _cartPositionInitialized = false;
-
-  // =========================================================
-  // INIT
-  // =========================================================
 
   @override
   void initState() {
@@ -68,32 +40,6 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
 
     _prepareMedia();
     _loadFavoriteStatus();
-    _initializeVideo();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-
-    if (!_cartPositionInitialized) {
-      final screenWidth = MediaQuery.of(context).size.width;
-
-      _cartLeft = screenWidth - 78;
-      _cartTop = 20;
-
-      _cartPositionInitialized = true;
-    }
-  }
-
-  // =========================================================
-  // DISPOSE
-  // =========================================================
-
-  @override
-  void dispose() {
-    _videoController?.dispose();
-    _mediaPageController.dispose();
-    super.dispose();
   }
 
   // =========================================================
@@ -158,16 +104,11 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
       return rawPrice;
     }
 
-    // Legacy products were stored as KRW.
     return rawPrice * 0.09;
   }
 
   String get formattedPrice {
     return '৳${price.toStringAsFixed(2)}';
-  }
-
-  String get formattedWholePrice {
-    return '৳${price.toStringAsFixed(0)}';
   }
 
   String get sellerCode {
@@ -266,11 +207,9 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
       }
     }
 
-    // Main image first.
     addImage(widget.product['imageUrl']);
     addImage(widget.product['productImageUrl']);
 
-    // Multiple image fields.
     addImage(widget.product['imageUrls']);
     addImage(widget.product['images']);
     addImage(widget.product['productImages']);
@@ -303,7 +242,6 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
       }
     }
 
-    // Support videoUrls list.
     if (_videoUrl.isEmpty) {
       final dynamic videoUrls = widget.product['videoUrls'];
 
@@ -318,71 +256,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
   }
 
   // =========================================================
-  // INITIALIZE VIDEO
-  // =========================================================
-
-  Future<void> _initializeVideo() async {
-    if (_videoUrl.isEmpty) {
-      return;
-    }
-
-    if (!mounted) return;
-
-    setState(() {
-      _videoLoading = true;
-    });
-
-    try {
-      final controller = VideoPlayerController.networkUrl(
-        Uri.parse(_videoUrl),
-      );
-
-      await controller.initialize();
-      await controller.setLooping(true);
-
-      if (!mounted) {
-        await controller.dispose();
-        return;
-      }
-
-      setState(() {
-        _videoController = controller;
-        _videoLoading = false;
-      });
-    } catch (e) {
-      debugPrint('Product video initialization failed: $e');
-
-      if (!mounted) return;
-
-      setState(() {
-        _videoLoading = false;
-      });
-    }
-  }
-
-  // =========================================================
-  // OPEN FULL-SCREEN MEDIA GALLERY
-  // =========================================================
-
-  void _openFullScreenGallery(int initialIndex) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (context) {
-          return _FullScreenMediaGallery(
-            imageUrls: _productImages,
-            videoUrl: _videoUrl,
-            initialIndex: initialIndex,
-            videoController: _videoController,
-            onCartTap: _openCart,
-          );
-        },
-      ),
-    );
-  }
-
-  // =========================================================
-  // FAVORITE REFERENCE
+  // FAVORITE
   // =========================================================
 
   DocumentReference<Map<String, dynamic>> _favoriteReference(
@@ -394,10 +268,6 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
         .collection('favorites')
         .doc(widget.productId);
   }
-
-  // =========================================================
-  // LOAD FAVORITE
-  // =========================================================
 
   Future<void> _loadFavoriteStatus() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -431,10 +301,6 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
       });
     }
   }
-
-  // =========================================================
-  // TOGGLE FAVORITE
-  // =========================================================
 
   Future<void> _toggleFavorite() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -510,7 +376,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
   }
 
   // =========================================================
-  // ADD TO CART
+  // CART
   // =========================================================
 
   Future<void> _addToCart() async {
@@ -571,10 +437,6 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
     }
   }
 
-  // =========================================================
-  // BUY NOW
-  // =========================================================
-
   Future<void> _buyNow() async {
     final user = FirebaseAuth.instance.currentUser;
 
@@ -618,10 +480,6 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
     );
   }
 
-  // =========================================================
-  // OPEN CART
-  // =========================================================
-
   void _openCart() {
     Navigator.push(
       context,
@@ -632,7 +490,49 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
   }
 
   // =========================================================
-  // OPEN MESSAGE CHAT
+  // CART COUNT
+  // =========================================================
+
+  Stream<QuerySnapshot<Map<String, dynamic>>>?
+      get _cartStream {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      return null;
+    }
+
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('cart')
+        .snapshots();
+  }
+
+  int _getCartQuantity(
+    QuerySnapshot<Map<String, dynamic>>? snapshot,
+  ) {
+    if (snapshot == null) {
+      return 0;
+    }
+
+    int quantity = 0;
+
+    for (final doc in snapshot.docs) {
+      final data = doc.data();
+      final value = data['quantity'];
+
+      if (value is num) {
+        quantity += value.toInt();
+      } else {
+        quantity++;
+      }
+    }
+
+    return quantity;
+  }
+
+  // =========================================================
+  // MESSAGE SELLER / RESELLER
   // =========================================================
 
   Future<void> _openMessageChat() async {
@@ -775,6 +675,74 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
   }
 
   // =========================================================
+  // FULL SCREEN
+  // =========================================================
+
+  void _openFullScreenGallery(int initialIndex) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (context) {
+          return _FullScreenMediaGallery(
+            imageUrls: _productImages,
+            videoUrl: _videoUrl,
+            initialIndex: initialIndex,
+            onCartTap: _openCart,
+          );
+        },
+      ),
+    );
+  }
+
+  // =========================================================
+  // PRODUCT MEDIA GALLERY
+  // =========================================================
+
+  Widget _buildProductMediaSection() {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _cartStream,
+      builder: (context, snapshot) {
+        final cartCount = _getCartQuantity(snapshot.data);
+
+        return Stack(
+          children: [
+            ProductMediaGallery(
+              imageUrls: _productImages,
+              videoUrl: _videoUrl.isEmpty ? null : _videoUrl,
+              onCartTap: _openCart,
+              cartCount: cartCount,
+            ),
+
+            // Full screen button.
+            Positioned(
+              left: 14,
+              bottom: 52,
+              child: Material(
+                color: Colors.black54,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () {
+                    _openFullScreenGallery(0);
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.all(9),
+                    child: Icon(
+                      Icons.fullscreen,
+                      color: Colors.white,
+                      size: 25,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // =========================================================
   // REVIEWS
   // =========================================================
 
@@ -788,7 +756,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
     if (user == null) return false;
 
     try {
-      final snapshot = await FirebaseFirestore.instance
+      final sellerSnapshot = await FirebaseFirestore.instance
           .collection('seller_orders')
           .where(
             'customerId',
@@ -796,35 +764,20 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
           )
           .get();
 
-      for (final doc in snapshot.docs) {
-        final data = doc.data();
+      if (_containsDeliveredProduct(sellerSnapshot)) {
+        return true;
+      }
 
-        final status = data['orderStatus']?.toString() ?? '';
+      final resellerSnapshot = await FirebaseFirestore.instance
+          .collection('reseller_orders')
+          .where(
+            'customerId',
+            isEqualTo: user.uid,
+          )
+          .get();
 
-        if (status != 'delivered') {
-          continue;
-        }
-
-        final items = data['items'];
-
-        if (items is! List) {
-          continue;
-        }
-
-        for (final item in items) {
-          if (item is! Map) {
-            continue;
-          }
-
-          final itemProductId =
-              item['productId']?.toString() ??
-              item['id']?.toString() ??
-              '';
-
-          if (itemProductId == widget.productId) {
-            return true;
-          }
-        }
+      if (_containsDeliveredProduct(resellerSnapshot)) {
+        return true;
       }
 
       return false;
@@ -832,6 +785,43 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
       debugPrint('Delivered order check failed: $e');
       return false;
     }
+  }
+
+  bool _containsDeliveredProduct(
+    QuerySnapshot<Map<String, dynamic>> snapshot,
+  ) {
+    for (final doc in snapshot.docs) {
+      final data = doc.data();
+
+      final status = data['orderStatus']?.toString() ?? '';
+
+      if (status != 'delivered') {
+        continue;
+      }
+
+      final items = data['items'];
+
+      if (items is! List) {
+        continue;
+      }
+
+      for (final item in items) {
+        if (item is! Map) {
+          continue;
+        }
+
+        final itemProductId =
+            item['productId']?.toString() ??
+            item['id']?.toString() ??
+            '';
+
+        if (itemProductId == widget.productId) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   Future<QueryDocumentSnapshot<Map<String, dynamic>>?>
@@ -1099,524 +1089,6 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
           ],
         );
       },
-    );
-  }
-
-  // =========================================================
-  // IMAGE VIEWER
-  // =========================================================
-
-  Widget _buildImageViewer(String url) {
-    if (url.trim().isEmpty) {
-      return Container(
-        color: Colors.grey.shade200,
-        child: const Center(
-          child: Icon(
-            Icons.image_outlined,
-            size: 80,
-            color: Colors.grey,
-          ),
-        ),
-      );
-    }
-
-    return Image.network(
-      url,
-      width: double.infinity,
-      height: double.infinity,
-      fit: BoxFit.contain,
-      loadingBuilder: (
-        context,
-        child,
-        loadingProgress,
-      ) {
-        if (loadingProgress == null) {
-          return child;
-        }
-
-        return const Center(
-          child: CircularProgressIndicator(),
-        );
-      },
-      errorBuilder: (
-        context,
-        error,
-        stackTrace,
-      ) {
-        return Container(
-          color: Colors.grey.shade200,
-          child: const Center(
-            child: Icon(
-              Icons.broken_image_outlined,
-              size: 70,
-              color: Colors.grey,
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  // =========================================================
-  // VIDEO VIEWER
-  // =========================================================
-
-  Widget _buildVideoViewer() {
-    final controller = _videoController;
-
-    if (_videoLoading) {
-      return Container(
-        color: Colors.black,
-        child: const Center(
-          child: CircularProgressIndicator(
-            color: Colors.white,
-          ),
-        ),
-      );
-    }
-
-    if (controller == null ||
-        !controller.value.isInitialized) {
-      return Container(
-        color: Colors.black,
-        child: const Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.video_library_outlined,
-                color: Colors.white,
-                size: 50,
-              ),
-              SizedBox(height: 8),
-              Text(
-                'Video unavailable',
-                style: TextStyle(
-                  color: Colors.white,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return GestureDetector(
-      onTap: () {
-        if (controller.value.isPlaying) {
-          controller.pause();
-        } else {
-          controller.play();
-        }
-
-        if (mounted) {
-          setState(() {});
-        }
-      },
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Center(
-            child: AspectRatio(
-              aspectRatio: controller.value.aspectRatio == 0
-                  ? 16 / 9
-                  : controller.value.aspectRatio,
-              child: VideoPlayer(controller),
-            ),
-          ),
-          if (!controller.value.isPlaying)
-            Container(
-              decoration: const BoxDecoration(
-                color: Colors.black54,
-                shape: BoxShape.circle,
-              ),
-              padding: const EdgeInsets.all(12),
-              child: const Icon(
-                Icons.play_arrow,
-                color: Colors.white,
-                size: 42,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  // =========================================================
-  // MEDIA GALLERY
-  // =========================================================
-
-  Widget _buildMediaGallery() {
-    final int totalMedia =
-        _productImages.length +
-        (_videoUrl.isNotEmpty ? 1 : 0);
-
-    return Column(
-      children: [
-        Stack(
-          children: [
-            SizedBox(
-              width: double.infinity,
-              height: 390,
-              child: PageView.builder(
-                controller: _mediaPageController,
-                itemCount: totalMedia,
-                onPageChanged: (index) {
-                  setState(() {
-                    _selectedMediaIndex = index;
-                  });
-
-                  if (_videoUrl.isNotEmpty &&
-                      index != _productImages.length) {
-                    _videoController?.pause();
-                  }
-                },
-                itemBuilder: (context, index) {
-                  final bool isVideo =
-                      _videoUrl.isNotEmpty &&
-                      index == _productImages.length;
-
-                  return GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: isVideo
-                        ? null
-                        : () {
-                            _openFullScreenGallery(index);
-                          },
-                    child: isVideo
-                        ? _buildVideoViewer()
-                        : _buildImageViewer(
-                            _productImages[index],
-                          ),
-                  );
-                },
-              ),
-            ),
-
-            // =================================================
-            // FULL-SCREEN BUTTON
-            // =================================================
-
-            Positioned(
-              left: 14,
-              bottom: 14,
-              child: Material(
-                color: Colors.black54,
-                shape: const CircleBorder(),
-                child: InkWell(
-                  customBorder: const CircleBorder(),
-                  onTap: () {
-                    _openFullScreenGallery(
-                      _selectedMediaIndex,
-                    );
-                  },
-                  child: const Padding(
-                    padding: EdgeInsets.all(9),
-                    child: Icon(
-                      Icons.fullscreen,
-                      color: Colors.white,
-                      size: 25,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // =================================================
-            // MEDIA COUNTER
-            // =================================================
-
-            Positioned(
-              right: 14,
-              bottom: 14,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  '${_selectedMediaIndex + 1}/$totalMedia',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-
-            // =================================================
-            // DRAGGABLE CART
-            // =================================================
-
-            _buildDraggableCart(),
-          ],
-        ),
-
-        // =====================================================
-        // THUMBNAILS
-        // =====================================================
-
-        if (totalMedia > 1)
-          SizedBox(
-            height: 88,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 8,
-              ),
-              itemCount: totalMedia,
-              itemBuilder: (context, index) {
-                final bool selected =
-                    index == _selectedMediaIndex;
-
-                return GestureDetector(
-                  onTap: () {
-                    _selectMediaFromThumbnail(index);
-                  },
-                  child: Container(
-                    width: 68,
-                    margin: const EdgeInsets.only(
-                      right: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(9),
-                      border: Border.all(
-                        color: selected
-                            ? Colors.redAccent
-                            : Colors.grey.shade300,
-                        width: selected ? 2 : 1,
-                      ),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: _buildThumbnail(index),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-      ],
-    );
-  }
-
-  // =========================================================
-  // THUMBNAIL PAGE SELECTION
-  // =========================================================
-
-  void _selectMediaFromThumbnail(int index) {
-    if (_mediaPageController.hasClients) {
-      _mediaPageController.animateToPage(
-        index,
-        duration: const Duration(
-          milliseconds: 300,
-        ),
-        curve: Curves.easeInOut,
-      );
-    }
-
-    setState(() {
-      _selectedMediaIndex = index;
-    });
-  }
-
-  // =========================================================
-  // THUMBNAIL
-  // =========================================================
-
-  Widget _buildThumbnail(int index) {
-    final bool isVideo =
-        _videoUrl.isNotEmpty &&
-        index == _productImages.length;
-
-    if (isVideo) {
-      return Container(
-        color: Colors.black,
-        child: const Stack(
-          alignment: Alignment.center,
-          children: [
-            Icon(
-              Icons.play_circle_outline,
-              color: Colors.white,
-              size: 34,
-            ),
-            Positioned(
-              bottom: 3,
-              child: Text(
-                'VIDEO',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 8,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final url = _productImages[index];
-
-    if (url.isEmpty) {
-      return Container(
-        color: Colors.grey.shade200,
-        child: const Icon(
-          Icons.image_outlined,
-          color: Colors.grey,
-        ),
-      );
-    }
-
-    return Image.network(
-      url,
-      fit: BoxFit.cover,
-      errorBuilder: (
-        context,
-        error,
-        stackTrace,
-      ) {
-        return Container(
-          color: Colors.grey.shade200,
-          child: const Icon(
-            Icons.broken_image_outlined,
-            color: Colors.grey,
-          ),
-        );
-      },
-    );
-  }
-
-  // =========================================================
-  // DRAGGABLE FLOATING CART
-  // =========================================================
-
-  Widget _buildDraggableCart() {
-    return Positioned(
-      left: _cartLeft,
-      top: _cartTop,
-      child: GestureDetector(
-        onPanUpdate: (details) {
-          final screenWidth =
-              MediaQuery.of(context).size.width;
-
-          setState(() {
-            _cartLeft += details.delta.dx;
-            _cartTop += details.delta.dy;
-
-            _cartLeft = _cartLeft.clamp(
-              0.0,
-              screenWidth - 68,
-            );
-
-            _cartTop = _cartTop.clamp(
-              5.0,
-              320.0,
-            );
-          });
-        },
-        onTap: _openCart,
-        child: StreamBuilder<
-            QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseAuth.instance.currentUser == null
-              ? null
-              : FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(
-                    FirebaseAuth.instance.currentUser!.uid,
-                  )
-                  .collection('cart')
-                  .snapshots(),
-          builder: (context, snapshot) {
-            int quantity = 0;
-
-            if (snapshot.hasData) {
-              for (final doc in snapshot.data!.docs) {
-                final data = doc.data();
-                final value = data['quantity'];
-
-                if (value is num) {
-                  quantity += value.toInt();
-                } else {
-                  quantity++;
-                }
-              }
-            }
-
-            return Container(
-              width: 62,
-              height: 62,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(
-                      alpha: 0.22,
-                    ),
-                    blurRadius: 10,
-                    offset: const Offset(
-                      0,
-                      4,
-                    ),
-                  ),
-                ],
-                border: Border.all(
-                  color: Colors.redAccent,
-                  width: 2,
-                ),
-              ),
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  const Center(
-                    child: Icon(
-                      Icons.shopping_cart,
-                      color: Colors.redAccent,
-                      size: 29,
-                    ),
-                  ),
-                  if (quantity > 0)
-                    Positioned(
-                      right: -2,
-                      top: -4,
-                      child: Container(
-                        constraints: const BoxConstraints(
-                          minWidth: 22,
-                          minHeight: 22,
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                        ),
-                        decoration: const BoxDecoration(
-                          color: Colors.orange,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: Text(
-                            quantity > 99
-                                ? '99+'
-                                : '$quantity',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            );
-          },
-        ),
-      ),
     );
   }
 
@@ -1971,10 +1443,10 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
               CrossAxisAlignment.start,
           children: [
             // =================================================
-            // PRODUCT MEDIA
+            // PRODUCT MEDIA GALLERY
             // =================================================
 
-            _buildMediaGallery(),
+            _buildProductMediaSection(),
 
             // =================================================
             // PRODUCT INFORMATION
@@ -2341,14 +1813,12 @@ class _FullScreenMediaGallery extends StatefulWidget {
   final List<String> imageUrls;
   final String videoUrl;
   final int initialIndex;
-  final VideoPlayerController? videoController;
   final VoidCallback onCartTap;
 
   const _FullScreenMediaGallery({
     required this.imageUrls,
     required this.videoUrl,
     required this.initialIndex,
-    required this.videoController,
     required this.onCartTap,
   });
 
@@ -2360,6 +1830,10 @@ class _FullScreenMediaGallery extends StatefulWidget {
 class _FullScreenMediaGalleryState
     extends State<_FullScreenMediaGallery> {
   late final PageController _pageController;
+
+  VideoPlayerController? _videoController;
+
+  bool _videoLoading = false;
 
   int _currentIndex = 0;
 
@@ -2388,6 +1862,8 @@ class _FullScreenMediaGalleryState
     _pageController = PageController(
       initialPage: _currentIndex,
     );
+
+    _initializeVideo();
   }
 
   @override
@@ -2406,13 +1882,55 @@ class _FullScreenMediaGalleryState
 
   @override
   void dispose() {
+    _videoController?.dispose();
     _pageController.dispose();
     super.dispose();
   }
 
   // =========================================================
-  // IMAGE
+  // VIDEO
   // =========================================================
+
+  Future<void> _initializeVideo() async {
+    if (widget.videoUrl.trim().isEmpty) {
+      return;
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _videoLoading = true;
+    });
+
+    try {
+      final controller = VideoPlayerController.networkUrl(
+        Uri.parse(widget.videoUrl),
+      );
+
+      await controller.initialize();
+      await controller.setLooping(true);
+
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+
+      setState(() {
+        _videoController = controller;
+        _videoLoading = false;
+      });
+    } catch (e) {
+      debugPrint(
+        'Full screen video initialization failed: $e',
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _videoLoading = false;
+      });
+    }
+  }
 
   Widget _buildFullScreenImage(String url) {
     if (url.trim().isEmpty) {
@@ -2468,12 +1986,19 @@ class _FullScreenMediaGalleryState
     );
   }
 
-  // =========================================================
-  // VIDEO
-  // =========================================================
-
   Widget _buildFullScreenVideo() {
-    final controller = widget.videoController;
+    final controller = _videoController;
+
+    if (_videoLoading) {
+      return const ColoredBox(
+        color: Colors.black,
+        child: Center(
+          child: CircularProgressIndicator(
+            color: Colors.white,
+          ),
+        ),
+      );
+    }
 
     if (controller == null ||
         !controller.value.isInitialized) {
@@ -2483,12 +2008,14 @@ class _FullScreenMediaGalleryState
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircularProgressIndicator(
+              Icon(
+                Icons.video_library_outlined,
                 color: Colors.white,
+                size: 50,
               ),
-              SizedBox(height: 14),
+              SizedBox(height: 8),
               Text(
-                'Loading video...',
+                'Video unavailable',
                 style: TextStyle(
                   color: Colors.white,
                 ),
@@ -2507,7 +2034,9 @@ class _FullScreenMediaGalleryState
           controller.play();
         }
 
-        setState(() {});
+        if (mounted) {
+          setState(() {});
+        }
       },
       child: Stack(
         alignment: Alignment.center,
@@ -2538,10 +2067,6 @@ class _FullScreenMediaGalleryState
       ),
     );
   }
-
-  // =========================================================
-  // THUMBNAIL
-  // =========================================================
 
   Widget _buildFullScreenThumbnail(int index) {
     if (_isVideoIndex(index)) {
@@ -2602,10 +2127,6 @@ class _FullScreenMediaGalleryState
     );
   }
 
-  // =========================================================
-  // SELECT THUMBNAIL
-  // =========================================================
-
   void _selectPage(int index) {
     if (_pageController.hasClients) {
       _pageController.animateToPage(
@@ -2623,7 +2144,7 @@ class _FullScreenMediaGalleryState
   }
 
   // =========================================================
-  // CART
+  // FULL SCREEN CART
   // =========================================================
 
   Widget _buildFullScreenCart() {
@@ -2751,7 +2272,7 @@ class _FullScreenMediaGalleryState
   }
 
   // =========================================================
-  // BUILD FULL-SCREEN GALLERY
+  // BUILD
   // =========================================================
 
   @override
@@ -2761,10 +2282,6 @@ class _FullScreenMediaGalleryState
       body: SafeArea(
         child: Stack(
           children: [
-            // =================================================
-            // MEDIA
-            // =================================================
-
             Positioned.fill(
               child: PageView.builder(
                 controller: _pageController,
@@ -2775,7 +2292,7 @@ class _FullScreenMediaGalleryState
                   });
 
                   if (!_isVideoIndex(index)) {
-                    widget.videoController?.pause();
+                    _videoController?.pause();
                   }
                 },
                 itemBuilder: (context, index) {
@@ -2790,10 +2307,7 @@ class _FullScreenMediaGalleryState
               ),
             ),
 
-            // =================================================
-            // TOP BACK BUTTON
-            // =================================================
-
+            // BACK
             Positioned(
               left: 12,
               top: 12,
@@ -2817,10 +2331,7 @@ class _FullScreenMediaGalleryState
               ),
             ),
 
-            // =================================================
-            // MEDIA COUNTER
-            // =================================================
-
+            // COUNTER
             Positioned(
               top: 15,
               left: 0,
@@ -2849,27 +2360,25 @@ class _FullScreenMediaGalleryState
               ),
             ),
 
-            // =================================================
             // CART
-            // =================================================
-
             _buildFullScreenCart(),
 
-            // =================================================
-            // PREVIOUS BUTTON
-            // =================================================
-
+            // PREVIOUS
             if (_currentIndex > 0)
               Positioned(
                 left: 12,
-                top: MediaQuery.of(context).size.height / 2 - 30,
+                top:
+                    MediaQuery.of(context).size.height / 2 -
+                    30,
                 child: Material(
                   color: Colors.black45,
                   shape: const CircleBorder(),
                   child: InkWell(
                     customBorder: const CircleBorder(),
                     onTap: () {
-                      _selectPage(_currentIndex - 1);
+                      _selectPage(
+                        _currentIndex - 1,
+                      );
                     },
                     child: const Padding(
                       padding: EdgeInsets.all(8),
@@ -2883,21 +2392,22 @@ class _FullScreenMediaGalleryState
                 ),
               ),
 
-            // =================================================
-            // NEXT BUTTON
-            // =================================================
-
+            // NEXT
             if (_currentIndex < totalMedia - 1)
               Positioned(
                 right: 12,
-                top: MediaQuery.of(context).size.height / 2 - 30,
+                top:
+                    MediaQuery.of(context).size.height / 2 -
+                    30,
                 child: Material(
                   color: Colors.black45,
                   shape: const CircleBorder(),
                   child: InkWell(
                     customBorder: const CircleBorder(),
                     onTap: () {
-                      _selectPage(_currentIndex + 1);
+                      _selectPage(
+                        _currentIndex + 1,
+                      );
                     },
                     child: const Padding(
                       padding: EdgeInsets.all(8),
@@ -2911,10 +2421,7 @@ class _FullScreenMediaGalleryState
                 ),
               ),
 
-            // =================================================
             // THUMBNAILS
-            // =================================================
-
             if (totalMedia > 1)
               Positioned(
                 left: 0,
