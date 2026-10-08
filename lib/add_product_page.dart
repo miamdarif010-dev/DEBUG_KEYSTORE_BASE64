@@ -218,8 +218,6 @@ class _AddProductPageState extends State<AddProductPage> {
     setState(() {
       _pickedImages.removeAt(index);
 
-      // Keep uploaded URLs aligned with the currently selected
-      // local images. Usually URLs are empty until upload time.
       if (_uploadedImageUrls.length > index) {
         _uploadedImageUrls.removeAt(index);
       }
@@ -390,12 +388,6 @@ class _AddProductPageState extends State<AddProductPage> {
     });
 
     try {
-      // ----------------------------------------------------------
-      // Upload images one by one.
-      // A new list is created so URLs always match the
-      // successfully uploaded images.
-      // ----------------------------------------------------------
-
       final List<String> imageUrls = <String>[];
 
       for (int i = 0; i < _pickedImages.length; i++) {
@@ -419,10 +411,6 @@ class _AddProductPageState extends State<AddProductPage> {
 
         imageUrls.add(imageUrl);
       }
-
-      // ----------------------------------------------------------
-      // Upload video if selected
-      // ----------------------------------------------------------
 
       String? videoUrl;
 
@@ -540,10 +528,6 @@ class _AddProductPageState extends State<AddProductPage> {
     });
 
     try {
-      // ----------------------------------------------------------
-      // Upload media
-      // ----------------------------------------------------------
-
       final bool uploaded = await _uploadSelectedMedia();
 
       if (!uploaded) {
@@ -558,10 +542,6 @@ class _AddProductPageState extends State<AddProductPage> {
       if (_uploadedImageUrls.isEmpty) {
         throw Exception('No product image was uploaded.');
       }
-
-      // ----------------------------------------------------------
-      // Seller data
-      // ----------------------------------------------------------
 
       final DocumentSnapshot<Map<String, dynamic>> userSnapshot =
           await _firestore.collection('users').doc(user.uid).get();
@@ -579,10 +559,6 @@ class _AddProductPageState extends State<AddProductPage> {
           : (userData['shopName'] ?? userData['storeName'] ?? '')
               .toString();
 
-      // ----------------------------------------------------------
-      // Product document
-      // ----------------------------------------------------------
-
       final DocumentReference<Map<String, dynamic>> productRef =
           _firestore.collection('products').doc();
 
@@ -596,48 +572,36 @@ class _AddProductPageState extends State<AddProductPage> {
         'category': _selectedCategory,
         'description': description,
 
-        // Main image
         'imageUrl': _uploadedImageUrls.first,
 
-        // Multiple image fields for compatibility with
-        // ProductDetailsPage / older product documents.
         'imageUrls': List<String>.from(_uploadedImageUrls),
         'images': List<String>.from(_uploadedImageUrls),
         'productImages': List<String>.from(_uploadedImageUrls),
         'gallery': List<String>.from(_uploadedImageUrls),
 
-        // Video
         'videoUrl': _uploadedVideoUrl ?? '',
         'productVideoUrl': _uploadedVideoUrl ?? '',
 
-        // Seller information
         'sellerId': user.uid,
         'sellerUid': user.uid,
         'sellerName': sellerName,
         'shopName': shopName,
 
-        // Product state
         'status': 'active',
         'isActive': true,
         'approved': true,
 
-        // Statistics
         'rating': 0.0,
         'reviewCount': 0,
         'soldCount': 0,
         'views': 0,
         'favoritesCount': 0,
 
-        // Timestamps
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
       await productRef.set(productData);
-
-      // ----------------------------------------------------------
-      // Global notification
-      // ----------------------------------------------------------
 
       try {
         await _firestore
@@ -660,7 +624,6 @@ class _AddProductPageState extends State<AddProductPage> {
           'createdAt': FieldValue.serverTimestamp(),
         });
       } catch (e) {
-        // Notification failure should not delete the product.
         debugPrint(
           'Global notification creation failed: $e',
         );
@@ -672,7 +635,6 @@ class _AddProductPageState extends State<AddProductPage> {
         'Product added successfully!',
       );
 
-      // Clear form after successful save.
       _nameController.clear();
       _priceController.clear();
       _descriptionController.clear();
@@ -685,7 +647,6 @@ class _AddProductPageState extends State<AddProductPage> {
         _selectedCategory = 'Phones';
       });
 
-      // Return to previous page.
       await Future<void>.delayed(
         const Duration(milliseconds: 700),
       );
@@ -779,9 +740,7 @@ class _AddProductPageState extends State<AddProductPage> {
                 ),
               ],
             ),
-
             const SizedBox(height: 8),
-
             Text(
               'Add up to $_maxImages product images.',
               style: TextStyle(
@@ -789,9 +748,7 @@ class _AddProductPageState extends State<AddProductPage> {
                 fontSize: 13,
               ),
             ),
-
             const SizedBox(height: 14),
-
             if (_pickedImages.isEmpty)
               InkWell(
                 onTap: _pickImages,
@@ -867,7 +824,6 @@ class _AddProductPageState extends State<AddProductPage> {
                                 },
                               ),
                             ),
-
                             Positioned(
                               top: 5,
                               right: 5,
@@ -890,7 +846,6 @@ class _AddProductPageState extends State<AddProductPage> {
                                 ),
                               ),
                             ),
-
                             if (index == 0)
                               Positioned(
                                 left: 5,
@@ -920,9 +875,7 @@ class _AddProductPageState extends State<AddProductPage> {
                       },
                     ),
                   ),
-
                   const SizedBox(height: 12),
-
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
@@ -984,9 +937,7 @@ class _AddProductPageState extends State<AddProductPage> {
                 ),
               ],
             ),
-
             const SizedBox(height: 8),
-
             Text(
               'Add one short product video. Maximum $_maxVideoSeconds seconds.',
               style: TextStyle(
@@ -994,9 +945,7 @@ class _AddProductPageState extends State<AddProductPage> {
                 fontSize: 13,
               ),
             ),
-
             const SizedBox(height: 14),
-
             if (_pickedVideo == null)
               InkWell(
                 onTap: _pickVideo,
@@ -1058,9 +1007,7 @@ class _AddProductPageState extends State<AddProductPage> {
                         size: 34,
                       ),
                     ),
-
                     const SizedBox(width: 12),
-
                     Expanded(
                       child: Text(
                         _pickedVideo!.name,
@@ -1071,7 +1018,6 @@ class _AddProductPageState extends State<AddProductPage> {
                         ),
                       ),
                     ),
-
                     IconButton(
                       onPressed: _removeVideo,
                       icon: const Icon(
@@ -1082,7 +1028,6 @@ class _AddProductPageState extends State<AddProductPage> {
                   ],
                 ),
               ),
-
             if (_pickedVideo != null) ...[
               const SizedBox(height: 10),
               SizedBox(
@@ -1144,7 +1089,7 @@ class _AddProductPageState extends State<AddProductPage> {
 
   Widget _buildCategoryDropdown() {
     return DropdownButtonFormField<String>(
-      value: _selectedCategory,
+      initialValue: _selectedCategory,
       decoration: InputDecoration(
         labelText: 'Category',
         prefixIcon: const Icon(
@@ -1195,9 +1140,7 @@ class _AddProductPageState extends State<AddProductPage> {
                 Icons.storefront_outlined,
               ),
             ),
-
             const SizedBox(width: 12),
-
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1235,14 +1178,13 @@ class _AddProductPageState extends State<AddProductPage> {
                 ],
               ),
             ),
-
             Container(
               padding: const EdgeInsets.symmetric(
                 horizontal: 9,
                 vertical: 5,
               ),
               decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.1),
+                color: Colors.green.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: const Text(
@@ -1333,7 +1275,6 @@ class _AddProductPageState extends State<AddProductPage> {
           ),
         ),
       ),
-
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -1404,7 +1345,7 @@ class _AddProductPageState extends State<AddProductPage> {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
-                    color: Colors.green.withOpacity(0.08),
+                    color: Colors.green.withValues(alpha: 0.08),
                   ),
                   child: Row(
                     children: [
