@@ -264,8 +264,9 @@ class _ProductMediaGalleryState
     final maxX =
         screenSize.width - 70;
 
-    final maxY =
-        screenSize.height - 210;
+    // The gallery is 380 high and the cart is 58 high, so keep the
+    // cart inside that box. Otherwise it gets clipped and disappears.
+    final maxY = 380.0 - 58.0 - 8.0;
 
     final x = _cartPosition.dx
         .clamp(8.0, maxX);
