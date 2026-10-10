@@ -7,6 +7,10 @@ import 'login_page.dart';
 
 class CartItem {
   final String id;
+
+  /// Real product id. The cart document id can contain the selected
+  /// color/size, so checkout must use this.
+  final String? productId;
   final String name;
   final double price;
   final String? imageUrl;
@@ -33,6 +37,7 @@ class CartItem {
 
   CartItem({
     required this.id,
+    this.productId,
     required this.name,
     required this.price,
     this.imageUrl,
@@ -47,6 +52,8 @@ class CartItem {
     this.supplierPrice,
     this.resellerProfit,
   });
+
+  String get checkoutProductId => productId ?? id;
 
   double get total => price * quantity;
 
@@ -113,7 +120,15 @@ class CartService {
     }
 
     final cartRef = _cartReference(user.uid);
-    final itemRef = cartRef.doc(id);
+    // Same product with a different color/size is a separate cart line.
+    final String colorKey = (color ?? '').trim();
+    final String sizeKey = (size ?? '').trim();
+
+    final String docId = (colorKey.isEmpty && sizeKey.isEmpty)
+        ? id
+        : '${id}__${colorKey}__$sizeKey'.replaceAll('/', '-');
+
+    final itemRef = cartRef.doc(docId);
 
     final existing = await itemRef.get();
 
@@ -124,6 +139,7 @@ class CartService {
           (data['quantity'] as num?)?.toInt() ?? 1;
 
       await itemRef.update({
+        'productId': id,
         'name': name,
         'price': price,
         'imageUrl': imageUrl ?? '',
@@ -405,11 +421,13 @@ class _CartPageState extends State<CartPage> {
     final checkoutItems =
         selectedItems.map((item) {
       return CheckoutItem(
-        id: item.id,
+        id: item.checkoutProductId,
         name: item.name,
         price: item.price,
         imageUrl: item.imageUrl,
         quantity: item.quantity,
+        color: item.color,
+        size: item.size,
 
         // Reseller
         isResellerProduct:
@@ -1246,6 +1264,8 @@ class _CartPageState extends State<CartPage> {
             cartItems.add(
               CartItem(
                 id: doc.id,
+                productId:
+                    _nullableString(data['productId']),
                 name: name,
                 price: price,
                 imageUrl:
