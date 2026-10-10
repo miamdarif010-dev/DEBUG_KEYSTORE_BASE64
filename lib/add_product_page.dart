@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
+import 'product_variants.dart';
+
 class AddProductPage extends StatefulWidget {
   const AddProductPage({super.key});
 
@@ -55,6 +57,31 @@ class _AddProductPageState extends State<AddProductPage> {
 
   String _selectedCategory = 'Phones';
 
+  // Variants: sizes and colors (each color has its own images)
+  static const int _maxColorImages = 6;
+
+  static const List<String> _sizePresets = <String>[
+    'S', 'M', 'L', 'XL', 'XXL', 'XXXL',
+  ];
+
+  static const Map<String, Color> _colorPalette = <String, Color>{
+    'Black': Color(0xFF111111),
+    'White': Color(0xFFFFFFFF),
+    'Brown': Color(0xFF6B4226),
+    'Grey': Color(0xFFB0AEAE),
+    'Olive': Color(0xFF5F6B55),
+    'Red': Color(0xFFD32F2F),
+    'Blue': Color(0xFF1E5BB8),
+    'Navy': Color(0xFF1B2A49),
+    'Green': Color(0xFF2E7D32),
+    'Yellow': Color(0xFFF2C230),
+    'Pink': Color(0xFFE88DB4),
+    'Beige': Color(0xFFD9C7A3),
+  };
+
+  final Set<String> _selectedSizes = <String>{};
+  final List<_ColorDraft> _colorDrafts = <_ColorDraft>[];
+
   bool _isCheckingSeller = true;
   bool _isApprovedSeller = false;
   bool _isUploading = false;
@@ -97,6 +124,9 @@ class _AddProductPageState extends State<AddProductPage> {
     _nameController.dispose();
     _priceController.dispose();
     _descriptionController.dispose();
+    for (final draft in _colorDrafts) {
+      draft.name.dispose();
+    }
     super.dispose();
   }
 
@@ -543,6 +573,9 @@ class _AddProductPageState extends State<AddProductPage> {
         throw Exception('No product image was uploaded.');
       }
 
+      final List<Map<String, dynamic>> colorsData =
+          await _uploadColorVariants();
+
       final DocumentSnapshot<Map<String, dynamic>> userSnapshot =
           await _firestore.collection('users').doc(user.uid).get();
 
@@ -580,6 +613,11 @@ class _AddProductPageState extends State<AddProductPage> {
         'gallery': List<String>.from(_uploadedImageUrls),
 
         'videoUrl': _uploadedVideoUrl ?? '',
+
+        'sizes': _sizePresets
+            .where(_selectedSizes.contains)
+            .toList(growable: false),
+        'colors': colorsData,
         'productVideoUrl': _uploadedVideoUrl ?? '',
 
         'sellerId': user.uid,
@@ -701,6 +739,318 @@ class _AddProductPageState extends State<AddProductPage> {
           backgroundColor: isError ? Colors.red : null,
         ),
       );
+  }
+
+  // ============================================================
+  // COLOR VARIANTS
+  // ============================================================
+
+  void _addColorDraft() {
+    if (_isUploading || _isSaving) return;
+
+    setState(() {
+      _colorDrafts.add(_ColorDraft());
+    });
+  }
+
+  void _removeColorDraft(int index) {
+    if (_isUploading || _isSaving) return;
+
+    setState(() {
+      _colorDrafts.removeAt(index).name.dispose();
+    });
+  }
+
+  Future<void> _pickColorImages(_ColorDraft draft) async {
+    if (_isUploading || _isSaving) return;
+
+    try {
+      final List<XFile> images = await _picker.pickMultiImage(
+        imageQuality: 85,
+        maxWidth: 1400,
+        maxHeight: 1400,
+      );
+
+      if (images.isEmpty) return;
+
+      final int remaining = _maxColorImages - draft.images.length;
+
+      if (remaining <= 0) {
+        _showSnackBar(
+          'Maximum $_maxColorImages images per color.',
+          isError: true,
+        );
+        return;
+      }
+
+      setState(() {
+        draft.images.addAll(images.take(remaining));
+      });
+    } catch (e) {
+      _showSnackBar('Image selection failed: $e', isError: true);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _uploadColorVariants() async {
+    final List<Map<String, dynamic>> result = <Map<String, dynamic>>[];
+
+    for (int i = 0; i < _colorDrafts.length; i++) {
+      final _ColorDraft draft = _colorDrafts[i];
+      final String name = draft.name.text.trim();
+
+      if (name.isEmpty && draft.images.isEmpty) continue;
+
+      final String label = name.isEmpty ? 'Color ${i + 1}' : name;
+      final List<String> urls = <String>[];
+
+      for (int j = 0; j < draft.images.length; j++) {
+        _showUploadProgress(
+          'Uploading $label image ${j + 1}/${draft.images.length}...',
+        );
+
+        final String? url = await _uploadImageToCloudinary(draft.images[j]);
+
+        if (url == null || url.isEmpty) {
+          throw Exception('$label image ${j + 1} upload failed.');
+        }
+
+        urls.add(url);
+      }
+
+      result.add(<String, dynamic>{
+        'name': label,
+        'hex': colorToHex(draft.color),
+        'images': urls,
+      });
+    }
+
+    return result;
+  }
+
+  Widget _buildVariantSection() {
+    return Card(
+      elevation: 1,
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.tune),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Sizes & Colors',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Text(
+                  'Optional',
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'Sizes',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: _sizePresets.map((size) {
+                final bool selected = _selectedSizes.contains(size);
+
+                return FilterChip(
+                  label: Text(size),
+                  selected: selected,
+                  selectedColor: kAccent.withValues(alpha: 0.2),
+                  checkmarkColor: kAccent,
+                  onSelected: _isSaving || _isUploading
+                      ? null
+                      : (bool value) {
+                          setState(() {
+                            if (value) {
+                              _selectedSizes.add(size);
+                            } else {
+                              _selectedSizes.remove(size);
+                            }
+                          });
+                        },
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Colors',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Each color has its own photos. Buyers see these photos when they pick the color.',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            ),
+            const SizedBox(height: 10),
+            for (int i = 0; i < _colorDrafts.length; i++)
+              _buildColorDraftCard(i),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _addColorDraft,
+                icon: const Icon(Icons.add),
+                label: const Text('Add Color'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildColorDraftCard(int index) {
+    final _ColorDraft draft = _colorDrafts[index];
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: draft.color,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.black26),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: draft.name,
+                  decoration: const InputDecoration(
+                    hintText: 'Color name (e.g. Brown)',
+                    isDense: true,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: () => _removeColorDraft(index),
+                icon: const Icon(Icons.delete_outline, color: Colors.red),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _colorPalette.entries.map((entry) {
+              final bool selected = draft.color == entry.value;
+
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    draft.color = entry.value;
+
+                    if (draft.name.text.trim().isEmpty) {
+                      draft.name.text = entry.key;
+                    }
+                  });
+                },
+                child: Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: entry.value,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: selected ? kAccent : Colors.black26,
+                      width: selected ? 3 : 1,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 78,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                for (int j = 0; j < draft.images.length; j++)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Stack(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.file(
+                            File(draft.images[j].path),
+                            width: 78,
+                            height: 78,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        Positioned(
+                          top: 2,
+                          right: 2,
+                          child: InkWell(
+                            onTap: () {
+                              setState(() {
+                                draft.images.removeAt(j);
+                              });
+                            },
+                            child: Container(
+                              decoration: const BoxDecoration(
+                                color: Colors.black54,
+                                shape: BoxShape.circle,
+                              ),
+                              padding: const EdgeInsets.all(3),
+                              child: const Icon(
+                                Icons.close,
+                                color: Colors.white,
+                                size: 14,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (draft.images.length < _maxColorImages)
+                  InkWell(
+                    onTap: () => _pickColorImages(draft),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      width: 78,
+                      height: 78,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.add_photo_alternate_outlined),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ============================================================
@@ -1338,6 +1688,10 @@ class _AddProductPageState extends State<AddProductPage> {
                 ),
               ),
 
+              const SizedBox(height: 16),
+
+              _buildVariantSection(),
+
               const SizedBox(height: 22),
 
               if (_uploadedImageUrls.isNotEmpty)
@@ -1416,4 +1770,10 @@ class _AddProductPageState extends State<AddProductPage> {
       ),
     );
   }
+}
+
+class _ColorDraft {
+  final TextEditingController name = TextEditingController();
+  Color color = const Color(0xFF111111);
+  final List<XFile> images = <XFile>[];
 }
