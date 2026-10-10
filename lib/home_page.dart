@@ -17,7 +17,6 @@ import 'news_feed_page.dart';
 import 'product_details_page.dart';
 import 'global_notifications_page.dart';
 import 'coupon_page.dart';
-import 'seller_information_page.dart';
 
 part 'home_page_image_search.dart';
 
@@ -381,73 +380,6 @@ class _HomePageState extends State<HomePage>
         ),
       );
     }
-  }
-
-  // =========================================================
-  // SELLER PROFILE
-  // =========================================================
-
-  String? _getProductSellerId(
-    Map<String, dynamic> product,
-  ) {
-    // Reseller/Entrepreneur product:
-    final entrepreneurUid =
-        product['entrepreneurUid']
-                ?.toString()
-                .trim() ??
-            '';
-
-    if (entrepreneurUid.isNotEmpty) {
-      return entrepreneurUid;
-    }
-
-    // Normal seller product:
-    final sellerId =
-        product['sellerId']
-                ?.toString()
-                .trim() ??
-            '';
-
-    if (sellerId.isNotEmpty) {
-      return sellerId;
-    }
-
-    return null;
-  }
-
-  Future<void> _openSellerProfile({
-    required Map<String, dynamic> product,
-  }) async {
-    final sellerId =
-        _getProductSellerId(product);
-
-    if (sellerId == null ||
-        sellerId.isEmpty) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Seller information is not available.',
-          ),
-          behavior:
-              SnackBarBehavior.floating,
-        ),
-      );
-
-      return;
-    }
-
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) =>
-            SellerInformationPage(
-          sellerId: sellerId,
-        ),
-      ),
-    );
   }
 
   // =========================================================
