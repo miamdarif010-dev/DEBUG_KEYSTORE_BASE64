@@ -628,6 +628,7 @@ class _AddProductPageState extends State<AddProductPage> {
         'status': 'active',
         'isActive': true,
         'approved': true,
+        'sellerApproved': true,
 
         'rating': 0.0,
         'reviewCount': 0,
