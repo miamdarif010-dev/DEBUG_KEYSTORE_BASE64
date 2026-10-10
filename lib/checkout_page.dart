@@ -13,6 +13,8 @@ class CheckoutItem {
   final double price;
   final int quantity;
   final String? imageUrl;
+  final String? color;
+  final String? size;
 
   final bool isResellerProduct;
   final String? entrepreneurUid;
@@ -27,6 +29,8 @@ class CheckoutItem {
     required this.price,
     required this.quantity,
     this.imageUrl,
+    this.color,
+    this.size,
     this.isResellerProduct = false,
     this.entrepreneurUid,
     this.sellerId,
@@ -786,6 +790,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
           'productId': item.id,
           'quantity': item.quantity,
           'isResellerProduct': item.isResellerProduct,
+          'color': item.color ?? '',
+          'size': item.size ?? '',
         };
       }).toList();
 
@@ -1438,6 +1444,20 @@ class _CheckoutPageState extends State<CheckoutPage> {
   // ORDER ITEMS
   // ============================================================
 
+  String _variantText(CheckoutItem item) {
+    final parts = <String>[];
+
+    if (item.color != null && item.color!.trim().isNotEmpty) {
+      parts.add('Color: ${item.color}');
+    }
+
+    if (item.size != null && item.size!.trim().isNotEmpty) {
+      parts.add('Size: ${item.size}');
+    }
+
+    return parts.isEmpty ? '' : '  •  ${parts.join('  •  ')}';
+  }
+
   Widget _buildOrderItems() {
     return Card(
       child: Padding(
@@ -1527,7 +1547,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Qty: ${item.quantity}',
+                              'Qty: ${item.quantity}${_variantText(item)}',
                               style:
                                   const TextStyle(
                                 color: Colors.grey,
