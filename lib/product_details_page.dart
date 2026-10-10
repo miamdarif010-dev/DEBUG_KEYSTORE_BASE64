@@ -8,6 +8,7 @@ import 'login_page.dart';
 import 'checkout_page.dart';
 import 'buyer_chat_page.dart';
 import 'product_media_gallery.dart';
+import 'product_variants.dart';
 
 class ProductDetailsPage extends StatefulWidget {
 final String productId;
@@ -39,6 +40,45 @@ String _videoUrl = '';
 // =========================================================
 
 String? _selectedSize;
+
+// =========================================================
+// COLOR SELECTION
+// =========================================================
+
+int? _selectedColorIndex;
+late List<ColorVariant> _colorVariants;
+
+/// Images shown in the gallery: the selected color's images,
+/// or the product's general images when no color is selected.
+List<String> get _displayImages {
+  final index = _selectedColorIndex;
+
+  if (index != null &&
+      index < _colorVariants.length &&
+      _colorVariants[index].images.isNotEmpty) {
+    return _colorVariants[index].images;
+  }
+
+  return _productImages;
+}
+
+String get _selectedImageUrl {
+  final list = _displayImages;
+
+  if (list.isNotEmpty && list.first.trim().isNotEmpty) {
+    return list.first.trim();
+  }
+
+  return imageUrl;
+}
+
+String? get _selectedColorName {
+  final index = _selectedColorIndex;
+
+  if (index == null || index >= _colorVariants.length) return null;
+
+  return _colorVariants[index].name;
+}
 
 /// Sizes the seller offers for this product, read from the product's
 /// sizes field (a list like ["S", "M", "L"] or "S, M, L").
@@ -72,107 +112,60 @@ return result;
 }
 
 bool _requireSize() {
-if (availableSizes.isEmpty || _selectedSize != null) {
-return true;
+if (_colorVariants.isNotEmpty && _selectedColorIndex == null) {
+  _showSelectSnack('Please select a color');
+  return false;
 }
 
-ScaffoldMessenger.of(context).showSnackBar(  
-  const SnackBar(  
-    content: Text('Please select a size'),  
-    behavior: SnackBarBehavior.floating,  
-    duration: Duration(seconds: 2),  
-  ),  
-);  
+if (availableSizes.isEmpty || _selectedSize != null) {
+  return true;
+}
 
+_showSelectSnack('Please select a size');
 return false;
 
 }
 
-Widget _buildSizeSelector() {
-final sizes = availableSizes;
-
-if (sizes.isEmpty) {  
-  return const SizedBox.shrink();  
-}  
-
-return Column(  
-  crossAxisAlignment: CrossAxisAlignment.start,  
-  children: [  
-    const SizedBox(height: 18),  
-    Row(  
-      children: [  
-        const Text(  
-          'Size',  
-          style: TextStyle(  
-            fontSize: 18,  
-            fontWeight: FontWeight.bold,  
-          ),  
-        ),  
-        const SizedBox(width: 10),  
-        if (_selectedSize != null)  
-          Text(  
-            _selectedSize!,  
-            style: const TextStyle(  
-              fontSize: 15,  
-              color: Colors.redAccent,  
-              fontWeight: FontWeight.w600,  
-            ),  
-          ),  
-      ],  
-    ),  
-    const SizedBox(height: 10),  
-    Wrap(  
-      spacing: 10,  
-      runSpacing: 10,  
-      children: sizes.map((size) {  
-        final selected = size == _selectedSize;  
-
-        return GestureDetector(  
-          onTap: () {  
-            setState(() {  
-              _selectedSize = size;  
-            });  
-          },  
-          child: Container(  
-            constraints: const BoxConstraints(  
-              minWidth: 54,  
-            ),  
-            padding: const EdgeInsets.symmetric(  
-              horizontal: 16,  
-              vertical: 10,  
-            ),  
-            decoration: BoxDecoration(  
-              color: selected ? Colors.black : Colors.white,  
-              borderRadius: BorderRadius.circular(22),  
-              border: Border.all(  
-                color: selected  
-                    ? Colors.black  
-                    : Colors.grey.shade400,  
-              ),  
-            ),  
-            child: Text(  
-              size,  
-              textAlign: TextAlign.center,  
-              style: TextStyle(  
-                fontSize: 15,  
-                fontWeight: FontWeight.w600,  
-                color: selected ? Colors.white : Colors.black87,  
-              ),  
-            ),  
-          ),  
-        );  
-      }).toList(),  
-    ),  
-  ],  
+void _showSelectSnack(String message) {
+ScaffoldMessenger.of(context).showSnackBar(
+  SnackBar(
+    content: Text(message),
+    behavior: SnackBarBehavior.floating,
+    duration: const Duration(seconds: 2),
+  ),
 );
+}
 
+Widget _buildColorSelector() {
+return ColorSelector(
+  colors: _colorVariants,
+  selectedIndex: _selectedColorIndex,
+  onSelected: (index) {
+    setState(() {
+      _selectedColorIndex = index;
+    });
+  },
+);
+}
+
+Widget _buildSizeSelector() {
+return SizeSelector(
+  sizes: availableSizes,
+  selected: _selectedSize,
+  onSelected: (size) {
+    setState(() {
+      _selectedSize = size;
+    });
+  },
+);
 }
 
 @override
 void initState() {
 super.initState();
 
-_prepareMedia();  
+_colorVariants = parseColorVariants(widget.product['colors']);
+_prepareMedia();
 _loadFavoriteStatus();
 
 }
@@ -543,8 +536,9 @@ try {
       id: widget.productId,  
       name: productName,  
       price: price,  
-      size: _selectedSize,  
-      imageUrl: imageUrl.isEmpty ? null : imageUrl,  
+      size: _selectedSize,
+      color: _selectedColorName,  
+      imageUrl: _selectedImageUrl.isEmpty ? null : _selectedImageUrl,  
       isResellerProduct: isResellerProduct,  
       entrepreneurUid:  
           entrepreneurUid.isEmpty ? null : entrepreneurUid,  
@@ -608,8 +602,10 @@ await Navigator.push(
           id: widget.productId,  
           name: productName,  
           price: price,  
-          imageUrl: imageUrl.isEmpty ? null : imageUrl,  
-          quantity: _quantity,  
+          imageUrl: _selectedImageUrl.isEmpty ? null : _selectedImageUrl,  
+          quantity: _quantity,
+          color: _selectedColorName,
+          size: _selectedSize,  
           isResellerProduct: isResellerProduct,  
           entrepreneurUid:  
               entrepreneurUid.isEmpty ? null : entrepreneurUid,  
@@ -838,7 +834,7 @@ MaterialPageRoute(
 fullscreenDialog: true,
 builder: (context) {
 return _FullScreenMediaGallery(
-imageUrls: _productImages,
+imageUrls: _displayImages,
 videoUrl: _videoUrl,
 initialIndex: initialIndex,
 onCartTap: _openCart,
@@ -860,8 +856,9 @@ final cartCount = _getCartQuantity(snapshot.data);
 
 return Stack(  
       children: [  
-        ProductMediaGallery(  
-          imageUrls: _productImages,  
+        ProductMediaGallery(
+          key: ValueKey('gallery_${_selectedColorIndex ?? -1}'),
+          imageUrls: _displayImages,  
           videoUrl: _videoUrl.isEmpty ? null : _videoUrl,  
           onCartTap: _openCart,  
           cartCount: cartCount,  
@@ -1683,6 +1680,7 @@ return Scaffold(
               ),  
 
               // Size selector (only when the product has sizes).  
+              _buildColorSelector(),
               _buildSizeSelector(),  
 
               const SizedBox(height: 20),  
