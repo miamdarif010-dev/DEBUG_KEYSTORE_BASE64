@@ -102,6 +102,7 @@ class CartService {
     String? color,
     String? size,
     String? variant,
+    int quantity = 1,
 
     // Reseller
     bool isResellerProduct = false,
@@ -143,7 +144,7 @@ class CartService {
         'name': name,
         'price': price,
         'imageUrl': imageUrl ?? '',
-        'quantity': oldQuantity + 1,
+        'quantity': oldQuantity + (quantity < 1 ? 1 : quantity),
 
         // Optional selections
         'color': color ?? data['color'] ?? '',
@@ -165,7 +166,7 @@ class CartService {
         'name': name,
         'price': price,
         'imageUrl': imageUrl ?? '',
-        'quantity': 1,
+        'quantity': quantity < 1 ? 1 : quantity,
         'addedAt': FieldValue.serverTimestamp(),
 
         // Optional selections
@@ -422,6 +423,7 @@ class _CartPageState extends State<CartPage> {
         selectedItems.map((item) {
       return CheckoutItem(
         id: item.checkoutProductId,
+        cartItemId: item.id,
         name: item.name,
         price: item.price,
         imageUrl: item.imageUrl,
@@ -795,18 +797,16 @@ class _CartPageState extends State<CartPage> {
                           .local_shipping_outlined,
                       size: 14,
                       color:
-                          Colors.green
-                              .shade700,
+                          Colors.grey.shade600,
                     ),
                     const SizedBox(
                       width: 4,
                     ),
                     Text(
-                      'Free shipping',
+                      'Delivery fee added at checkout',
                       style: TextStyle(
                         color:
-                            Colors.green
-                                .shade700,
+                            Colors.grey.shade600,
                         fontSize: 10,
                         fontWeight:
                             FontWeight.w600,
@@ -979,7 +979,7 @@ class _CartPageState extends State<CartPage> {
           ),
           Expanded(
             child: Text(
-              'Free shipping special for you',
+              'Delivery fee is added at checkout',
               style: TextStyle(
                 color:
                     Colors.grey.shade800,
@@ -990,7 +990,7 @@ class _CartPageState extends State<CartPage> {
             ),
           ),
           Text(
-            'Exclusive offer',
+            '৳60 / ৳120',
             style: TextStyle(
               color:
                   Colors.grey.shade600,
@@ -1332,14 +1332,8 @@ class _CartPageState extends State<CartPage> {
                 item.quantity;
           }
 
-          final deliveryFee =
-              selectedItems.isEmpty
-                  ? 0
-                  : CartService
-                      .deliveryFeeAmount;
-
-          final total =
-              subtotal + deliveryFee;
+          // Delivery fee (৳60 inside Dhaka / ৳120 outside) is added at checkout.
+          final total = subtotal;
 
           // =====================================================
           // PAGE
