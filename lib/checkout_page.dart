@@ -15,6 +15,7 @@ class CheckoutItem {
   final String? imageUrl;
   final String? color;
   final String? size;
+  final String? cartItemId;
 
   final bool isResellerProduct;
   final String? entrepreneurUid;
@@ -31,6 +32,7 @@ class CheckoutItem {
     this.imageUrl,
     this.color,
     this.size,
+    this.cartItemId,
     this.isResellerProduct = false,
     this.entrepreneurUid,
     this.sellerId,
@@ -1019,24 +1021,28 @@ class _CheckoutPageState extends State<CheckoutPage> {
     String uid,
   ) async {
     try {
-      final cartSnapshot =
-          await _firestore
-              .collection('users')
-              .doc(uid)
-              .collection('cart')
-              .get();
+      // Remove only the cart lines that were actually bought.
+      // (Before, the whole cart was wiped, even unselected items
+      // and even after a direct "Buy Now".)
+      final ids = widget.items
+          .map((item) => item.cartItemId)
+          .whereType<String>()
+          .where((id) => id.isNotEmpty)
+          .toSet();
 
-      if (cartSnapshot.docs.isEmpty) {
+      if (ids.isEmpty) {
         return;
       }
 
-      final batch =
-          _firestore.batch();
+      final batch = _firestore.batch();
 
-      for (final doc
-          in cartSnapshot.docs) {
+      for (final id in ids) {
         batch.delete(
-          doc.reference,
+          _firestore
+              .collection('users')
+              .doc(uid)
+              .collection('cart')
+              .doc(id),
         );
       }
 
