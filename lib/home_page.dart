@@ -2336,62 +2336,13 @@ class _HomePageState extends State<HomePage>
                                                   20,
                                                 ),
                                                 onTap:
-                                                    () async {
-                                                  final currentUser =
-                                                      user;
-
-                                                  if (currentUser ==
-                                                      null) {
-                                                    await Navigator.push(
-                                                      context,
-                                                      MaterialPageRoute(
-                                                        builder:
-                                                            (context) =>
-                                                                const LoginPage(),
-                                                      ),
-                                                    );
-                                                    return;
-                                                  }
-
-                                                  final bdtPrice =
-                                                      _displayBdtPrice(
-                                                    data,
-                                                  );
-
-                                                  await CartService
-                                                      .addItem(
-                                                    id:
+                                                    () {
+                                                  // Cart icon now opens Product Details
+                                                  _openProductDetails(
+                                                    productId:
                                                         productId,
-                                                    name:
-                                                        name,
-                                                    price:
-                                                        bdtPrice,
-                                                    imageUrl:
-                                                        imageUrl,
-                                                  );
-
-                                                  if (!context
-                                                      .mounted) {
-                                                    return;
-                                                  }
-
-                                                  ScaffoldMessenger
-                                                      .of(
-                                                    context,
-                                                  ).showSnackBar(
-                                                    SnackBar(
-                                                      content:
-                                                          Text(
-                                                        '$name added to cart',
-                                                      ),
-                                                      behavior:
-                                                          SnackBarBehavior.floating,
-                                                      duration:
-                                                          const Duration(
-                                                        seconds:
-                                                            1,
-                                                      ),
-                                                    ),
+                                                    product:
+                                                        data,
                                                   );
                                                 },
                                                 child:
