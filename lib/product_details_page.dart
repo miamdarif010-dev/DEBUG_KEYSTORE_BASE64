@@ -889,80 +889,114 @@ CollectionReference<Map<String, dynamic>> get _reviewsReference {
 return FirebaseFirestore.instance.collection('product_reviews');
 }
 
+String? _reviewCheckError;
+
+/// All product ids that may identify this product inside an order item.
+Set<String> get _matchingProductIds {
+  final ids = <String>{widget.productId};
+
+  for (final key in const [
+    'sourceProductId',
+    'supplierProductId',
+    'productId',
+    'originalProductId',
+  ]) {
+    final value = widget.product[key]?.toString().trim() ?? '';
+
+    if (value.isNotEmpty) {
+      ids.add(value);
+    }
+  }
+
+  return ids;
+}
+
 Future<bool> _hasDeliveredProduct() async {
 final user = FirebaseAuth.instance.currentUser;
 
-if (user == null) return false;  
+if (user == null) return false;
 
-try {  
-  final sellerSnapshot = await FirebaseFirestore.instance  
-      .collection('seller_orders')  
-      .where(  
-        'customerId',  
-        isEqualTo: user.uid,  
-      )  
-      .get();  
+_reviewCheckError = null;
+bool found = false;
 
-  if (_containsDeliveredProduct(sellerSnapshot)) {  
-    return true;  
-  }  
+for (final collection in const [
+  'seller_orders',
+  'reseller_orders',
+]) {
+  try {
+    final snapshot = await FirebaseFirestore.instance
+        .collection(collection)
+        .where(
+          'customerId',
+          isEqualTo: user.uid,
+        )
+        .get();
 
-  final resellerSnapshot = await FirebaseFirestore.instance  
-      .collection('reseller_orders')  
-      .where(  
-        'customerId',  
-        isEqualTo: user.uid,  
-      )  
-      .get();  
-
-  if (_containsDeliveredProduct(resellerSnapshot)) {  
-    return true;  
-  }  
-
-  return false;  
-} catch (e) {  
-  debugPrint('Delivered order check failed: $e');  
-  return false;  
+    if (_containsDeliveredProduct(snapshot)) {
+      found = true;
+      break;
+    }
+  } catch (e) {
+    debugPrint('Delivered order check failed ($collection): $e');
+    _reviewCheckError = '$collection: $e';
+  }
 }
 
+return found;
 }
 
 bool _containsDeliveredProduct(
 QuerySnapshot<Map<String, dynamic>> snapshot,
 ) {
+final ids = _matchingProductIds;
+
 for (final doc in snapshot.docs) {
-final data = doc.data();
+  final data = doc.data();
 
-final status = data['orderStatus']?.toString() ?? '';  
+  final status =
+      (data['orderStatus'] ?? data['status'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
 
-  if (status != 'delivered') {  
-    continue;  
-  }  
+  if (status != 'delivered') {
+    continue;
+  }
 
-  final items = data['items'];  
+  // Order-level product id (some orders store it outside items).
+  final orderProductId = data['productId']?.toString() ?? '';
 
-  if (items is! List) {  
-    continue;  
-  }  
+  if (orderProductId.isNotEmpty && ids.contains(orderProductId)) {
+    return true;
+  }
 
-  for (final item in items) {  
-    if (item is! Map) {  
-      continue;  
-    }  
+  final items = data['items'];
 
-    final itemProductId =  
-        item['productId']?.toString() ??  
-        item['id']?.toString() ??  
-        '';  
+  if (items is! List) {
+    continue;
+  }
 
-    if (itemProductId == widget.productId) {  
-      return true;  
-    }  
-  }  
-}  
+  for (final item in items) {
+    if (item is! Map) {
+      continue;
+    }
+
+    for (final key in const [
+      'productId',
+      'id',
+      'sourceProductId',
+      'supplierProductId',
+    ]) {
+      final value = item[key]?.toString() ?? '';
+
+      if (value.isNotEmpty && ids.contains(value)) {
+        return true;
+      }
+    }
+  }
+}
 
 return false;
-
 }
 
 Future<QueryDocumentSnapshot<Map<String, dynamic>>?>
@@ -1023,7 +1057,9 @@ if (existingReview == null) {
 
     _showInfoDialog(  
       'Review Not Available',  
-      'You can review this product after your order has been delivered.',  
+      _reviewCheckError == null
+          ? 'You can review this product after your order has been delivered.'
+          : 'Could not verify your orders.\n\n$_reviewCheckError',  
     );  
 
     return;  
