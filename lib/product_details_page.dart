@@ -146,7 +146,8 @@ return ColorSelector(
     setState(() {
       _selectedColorIndex = index;
       _mainIndex = 0;
-      _videoController?.pause();
+      _videoController?.setVolume(0);
+      _videoController?.play();
     });
   },
 );
@@ -180,6 +181,8 @@ try {
 
   await controller.initialize();
   await controller.setLooping(true);
+  await controller.setVolume(0);
+  await controller.play();
 
   if (!mounted) {
     await controller.dispose();
@@ -1748,13 +1751,94 @@ return GestureDetector(
 }
 
 void _selectMedia(int i) {
-if (i != _displayImages.length) {
-  _videoController?.pause();
+final controller = _videoController;
+final isVideo = _videoUrl.isNotEmpty && i == _displayImages.length;
+
+if (controller != null && _videoReady) {
+  // Video as main view: with sound. Otherwise it keeps playing
+  // muted in the small corner player.
+  controller.setVolume(isVideo ? 1 : 0);
+  controller.play();
 }
 
 setState(() {
   _mainIndex = i;
 });
+}
+
+Widget _buildMiniVideo(int videoIndex) {
+final controller = _videoController;
+final ready = controller != null &&
+    _videoReady &&
+    controller.value.size.width > 0 &&
+    controller.value.size.height > 0;
+
+return Positioned(
+  right: 12,
+  bottom: 12,
+  child: GestureDetector(
+    onTap: () => _selectMedia(videoIndex),
+    child: Container(
+      width: 92,
+      height: 124,
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white, width: 2),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black38,
+            blurRadius: 8,
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (ready)
+              FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: controller.value.size.width,
+                  height: controller.value.size.height,
+                  child: VideoPlayer(controller),
+                ),
+              )
+            else
+              const Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            Positioned(
+              right: 4,
+              bottom: 4,
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: const BoxDecoration(
+                  color: Colors.black54,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.volume_off,
+                  color: Colors.white,
+                  size: 12,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  ),
+);
 }
 
 Widget _buildMainImage() {
@@ -1809,6 +1893,8 @@ return GestureDetector(
         fit: StackFit.expand,
         children: [
           videoSelected ? _buildVideoView() : imageContent,
+          if (hasVideo && !videoSelected)
+            _buildMiniVideo(images.length),
           Positioned(
             left: 14,
             top: 14,
