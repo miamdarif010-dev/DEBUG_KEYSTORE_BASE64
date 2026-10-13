@@ -287,6 +287,10 @@ class _CartPageState extends State<CartPage> {
 
   final Set<String> _selectedItems = {};
 
+  /// Cart lines already seen. A line that appears for the first time
+  /// (just added) is selected automatically.
+  final Set<String> _knownItemIds = {};
+
   // ===========================================================
   // QUANTITY
   // ===========================================================
@@ -1171,6 +1175,7 @@ class _CartPageState extends State<CartPage> {
 
           if (documents.isEmpty) {
             _selectedItems.clear();
+            _knownItemIds.clear();
             return _emptyCart();
           }
 
@@ -1295,6 +1300,20 @@ class _CartPageState extends State<CartPage> {
               ),
             );
           }
+
+          // Newly added products are selected automatically.
+          for (final item in cartItems) {
+            if (_knownItemIds.add(item.id)) {
+              _selectedItems.add(item.id);
+            }
+          }
+
+          // Forget removed lines so they are selected again if re-added.
+          _knownItemIds.removeWhere(
+            (id) => !cartItems.any(
+              (item) => item.id == id,
+            ),
+          );
 
           // Remove deleted products from selection.
           _selectedItems.removeWhere(
