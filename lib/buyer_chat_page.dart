@@ -38,6 +38,7 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
 
   bool _sending = false;
   bool _conversationReady = false;
+  String? _openError;
 
   String _buyerName = 'Buyer';
 
@@ -130,6 +131,12 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
       return;
     }
 
+    if (mounted) {
+      setState(() {
+        _openError = null;
+      });
+    }
+
     try {
       final buyerName =
           await _getBuyerName();
@@ -197,6 +204,7 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
 
       setState(() {
         _conversationReady = false;
+        _openError = e.toString();
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -603,6 +611,36 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
   // =========================================================
 
   Widget _messageList() {
+    // Messages can be read only after the conversation exists
+    // (Firestore rules check the conversation document).
+    if (!_conversationReady) {
+      if (_openError != null) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Unable to open chat.\n\n$_openError',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: _ensureConversation,
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
     return StreamBuilder<
         QuerySnapshot<
             Map<String, dynamic>>>(
