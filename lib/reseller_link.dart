@@ -14,9 +14,8 @@ const String kLinkHost = 'YOUR_PROJECT_ID.web.app';
 const String _kFunctionsRegion = 'asia-northeast3';
 
 class ResellerLink {
-  /// Link for one reseller listing (reseller_products document id).
-  /// The reseller is identified on the server from this listing,
-  /// so nobody can fake another reseller's identity in the link.
+  /// Web link for one reseller listing (reseller_products document id).
+  /// It opens the web page in the browser; the page has an "Open app" button.
   static String build(String listingId) {
     return 'https://$kLinkHost/r/${Uri.encodeComponent(listingId)}';
   }
@@ -29,10 +28,19 @@ class ResellerLink {
     await Share.share('$productName\n${build(listingId)}');
   }
 
+  /// Accepts buynova://r/<listingId> (from the web page's "Open app" button)
+  /// and https://<kLinkHost>/r/<listingId>.
   static String? parseListingId(Uri uri) {
-    if (uri.host != kLinkHost) return null;
-
     final segments = uri.pathSegments;
+
+    if (uri.scheme == 'buynova') {
+      if (uri.host == 'r' && segments.isNotEmpty && segments[0].isNotEmpty) {
+        return segments[0];
+      }
+      return null;
+    }
+
+    if (uri.host != kLinkHost) return null;
 
     if (segments.length >= 2 && segments[0] == 'r' && segments[1].isNotEmpty) {
       return segments[1];
