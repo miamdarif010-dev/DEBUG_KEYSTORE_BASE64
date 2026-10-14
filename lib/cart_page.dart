@@ -16,18 +16,12 @@ class CartItem {
   final String? imageUrl;
   int quantity;
 
-  // =========================================================
   // OPTIONAL PRODUCT SELECTION
-  // =========================================================
-
   final String? color;
   final String? size;
   final String? variant;
 
-  // =========================================================
   // RESELLER / ENTREPRENEUR DATA
-  // =========================================================
-
   final bool isResellerProduct;
   final String? entrepreneurUid;
   final String? sellerId;
@@ -57,8 +51,7 @@ class CartItem {
 
   double get total => price * quantity;
 
-  double get supplierTotal =>
-      (supplierPrice ?? 0) * quantity;
+  double get supplierTotal => (supplierPrice ?? 0) * quantity;
 
   double get profitTotal {
     if (resellerProfit != null) {
@@ -80,18 +73,16 @@ class CartItem {
 class CartService {
   static const double deliveryFeeAmount = 60;
 
-  static CollectionReference<Map<String, dynamic>>
-      _cartReference(String uid) {
+  static CollectionReference<Map<String, dynamic>> _cartReference(
+    String uid,
+  ) {
     return FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
         .collection('cart');
   }
 
-  // ===========================================================
   // ADD ITEM
-  // ===========================================================
-
   static Future<void> addItem({
     required String id,
     required String name,
@@ -115,12 +106,11 @@ class CartService {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      throw Exception(
-        'User is not logged in.',
-      );
+      throw Exception('User is not logged in.');
     }
 
     final cartRef = _cartReference(user.uid);
+
     // Same product with a different color/size is a separate cart line.
     final String colorKey = (color ?? '').trim();
     final String sizeKey = (size ?? '').trim();
@@ -136,8 +126,7 @@ class CartService {
     if (existing.exists) {
       final data = existing.data() ?? {};
 
-      final oldQuantity =
-          (data['quantity'] as num?)?.toInt() ?? 1;
+      final oldQuantity = (data['quantity'] as num?)?.toInt() ?? 1;
 
       await itemRef.update({
         'productId': id,
@@ -155,8 +144,7 @@ class CartService {
         'isResellerProduct': isResellerProduct,
         'entrepreneurUid': entrepreneurUid ?? '',
         'sellerId': sellerId ?? '',
-        'supplierProductId':
-            supplierProductId ?? id,
+        'supplierProductId': supplierProductId ?? id,
         'supplierPrice': supplierPrice,
         'resellerProfit': resellerProfit,
       });
@@ -178,85 +166,57 @@ class CartService {
         'isResellerProduct': isResellerProduct,
         'entrepreneurUid': entrepreneurUid ?? '',
         'sellerId': sellerId ?? '',
-        'supplierProductId':
-            supplierProductId ?? id,
+        'supplierProductId': supplierProductId ?? id,
         'supplierPrice': supplierPrice,
         'resellerProfit': resellerProfit,
       });
     }
   }
 
-  // ===========================================================
   // REMOVE ITEM
-  // ===========================================================
-
-  static Future<void> removeItem(
-    String id,
-  ) async {
+  static Future<void> removeItem(String id) async {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      throw Exception(
-        'User is not logged in.',
-      );
+      throw Exception('User is not logged in.');
     }
 
-    await _cartReference(user.uid)
-        .doc(id)
-        .delete();
+    await _cartReference(user.uid).doc(id).delete();
   }
 
-  // ===========================================================
   // UPDATE QUANTITY
-  // ===========================================================
-
-  static Future<void> updateQuantity(
-    String id,
-    int quantity,
-  ) async {
+  static Future<void> updateQuantity(String id, int quantity) async {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      throw Exception(
-        'User is not logged in.',
-      );
+      throw Exception('User is not logged in.');
     }
 
-    final itemRef =
-        _cartReference(user.uid).doc(id);
+    final itemRef = _cartReference(user.uid).doc(id);
 
     if (quantity <= 0) {
       await itemRef.delete();
       return;
     }
 
-    await itemRef.update({
-      'quantity': quantity,
-    });
+    await itemRef.update({'quantity': quantity});
   }
 
-  // ===========================================================
   // CLEAR CART
-  // ===========================================================
-
   static Future<void> clearCart() async {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      throw Exception(
-        'User is not logged in.',
-      );
+      throw Exception('User is not logged in.');
     }
 
-    final snapshot =
-        await _cartReference(user.uid).get();
+    final snapshot = await _cartReference(user.uid).get();
 
     if (snapshot.docs.isEmpty) {
       return;
     }
 
-    final batch =
-        FirebaseFirestore.instance.batch();
+    final batch = FirebaseFirestore.instance.batch();
 
     for (final doc in snapshot.docs) {
       batch.delete(doc.reference);
@@ -271,56 +231,42 @@ class CartService {
 // =============================================================
 
 class CartPage extends StatefulWidget {
-  const CartPage({
-    super.key,
-  });
+  const CartPage({super.key});
 
   @override
-  State<CartPage> createState() =>
-      _CartPageState();
+  State<CartPage> createState() => _CartPageState();
 }
 
 class _CartPageState extends State<CartPage> {
-  // ===========================================================
   // SELECTED PRODUCTS
-  // ===========================================================
-
   final Set<String> _selectedItems = {};
 
   /// Cart lines already seen. A line that appears for the first time
   /// (just added) is selected automatically.
   final Set<String> _knownItemIds = {};
 
-  // ===========================================================
-  // QUANTITY
-  // ===========================================================
+  /// Own-product lines that were already deleted from the cart, so they
+  /// are not deleted twice.
+  final Set<String> _purgedOwnItemIds = {};
 
+  // QUANTITY
   Future<void> _changeQuantity(
     String id,
     int currentQuantity,
     int change,
   ) async {
-    final newQuantity =
-        currentQuantity + change;
+    final newQuantity = currentQuantity + change;
 
     try {
-      await CartService.updateQuantity(
-        id,
-        newQuantity,
-      );
+      await CartService.updateQuantity(id, newQuantity);
     } catch (e) {
       if (!mounted) return;
 
-      _showMessage(
-        'Could not update cart: $e',
-      );
+      _showMessage('Could not update cart: $e');
     }
   }
 
-  // ===========================================================
   // SELECT / UNSELECT
-  // ===========================================================
-
   void _toggleItem(String id) {
     setState(() {
       if (_selectedItems.contains(id)) {
@@ -331,42 +277,24 @@ class _CartPageState extends State<CartPage> {
     });
   }
 
-  // ===========================================================
   // SELECT ALL
-  // ===========================================================
-
-  void _toggleAll(
-    List<CartItem> cartItems,
-  ) {
+  void _toggleAll(List<CartItem> cartItems) {
     setState(() {
-      final allSelected =
-          cartItems.isNotEmpty &&
-          cartItems.every(
-            (item) =>
-                _selectedItems.contains(item.id),
-          );
+      final allSelected = cartItems.isNotEmpty &&
+          cartItems.every((item) => _selectedItems.contains(item.id));
 
       if (allSelected) {
         _selectedItems.clear();
       } else {
         _selectedItems
           ..clear()
-          ..addAll(
-            cartItems.map(
-              (item) => item.id,
-            ),
-          );
+          ..addAll(cartItems.map((item) => item.id));
       }
     });
   }
 
-  // ===========================================================
   // REMOVE
-  // ===========================================================
-
-  Future<void> _removeItem(
-    String id,
-  ) async {
+  Future<void> _removeItem(String id) async {
     try {
       await CartService.removeItem(id);
 
@@ -376,55 +304,54 @@ class _CartPageState extends State<CartPage> {
         _selectedItems.remove(id);
       });
 
-      _showMessage(
-        'Product removed from cart.',
-      );
+      _showMessage('Product removed from cart.');
     } catch (e) {
       if (!mounted) return;
 
-      _showMessage(
-        'Could not remove product: $e',
-      );
+      _showMessage('Could not remove product: $e');
     }
   }
 
-  // ===========================================================
-  // CHECKOUT
-  // ===========================================================
+  // OWN PRODUCT HELPERS
+  bool _isOwnItem(CartItem item, String uid) {
+    return item.sellerId == uid || item.entrepreneurUid == uid;
+  }
 
-  Future<void> _checkout(
-    List<CartItem> cartItems,
-  ) async {
-    final user =
-        FirebaseAuth.instance.currentUser;
+  /// Deletes own products that were already in the cart before the
+  /// "no buying your own product" rule existed.
+  void _purgeOwnItems(List<CartItem> ownItems) {
+    for (final item in ownItems) {
+      if (_purgedOwnItemIds.add(item.id)) {
+        CartService.removeItem(item.id).catchError((Object e) {
+          debugPrint('Could not remove own product from cart: $e');
+        });
+      }
+    }
+  }
+
+  // CHECKOUT
+  Future<void> _checkout(List<CartItem> cartItems) async {
+    final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
       await Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) =>
-              const LoginPage(),
-        ),
+        MaterialPageRoute(builder: (context) => const LoginPage()),
       );
 
       return;
     }
 
-    final selectedItems =
-        cartItems.where(
-      (item) =>
-          _selectedItems.contains(item.id),
-    ).toList();
+    final selectedItems = cartItems
+        .where((item) => _selectedItems.contains(item.id))
+        .toList();
 
     if (selectedItems.isEmpty) {
-      _showMessage(
-        'Please select at least one product.',
-      );
+      _showMessage('Please select at least one product.');
       return;
     }
 
-    final checkoutItems =
-        selectedItems.map((item) {
+    final checkoutItems = selectedItems.map((item) {
       return CheckoutItem(
         id: item.checkoutProductId,
         cartItemId: item.id,
@@ -436,26 +363,19 @@ class _CartPageState extends State<CartPage> {
         size: item.size,
 
         // Reseller
-        isResellerProduct:
-            item.isResellerProduct,
-        entrepreneurUid:
-            item.entrepreneurUid,
-        sellerId:
-            item.sellerId,
-        supplierProductId:
-            item.supplierProductId,
-        supplierPrice:
-            item.supplierPrice,
-        resellerProfit:
-            item.resellerProfit,
+        isResellerProduct: item.isResellerProduct,
+        entrepreneurUid: item.entrepreneurUid,
+        sellerId: item.sellerId,
+        supplierProductId: item.supplierProductId,
+        supplierPrice: item.supplierPrice,
+        resellerProfit: item.resellerProfit,
       );
     }).toList();
 
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) =>
-            CheckoutPage(
+        builder: (context) => CheckoutPage(
           items: checkoutItems,
           clearCartOnSuccess: true,
         ),
@@ -463,41 +383,27 @@ class _CartPageState extends State<CartPage> {
     );
   }
 
-  // ===========================================================
   // MESSAGE
-  // ===========================================================
-
-  void _showMessage(
-    String message,
-  ) {
+  void _showMessage(String message) {
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        behavior:
-            SnackBarBehavior.floating,
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
 
-  // ===========================================================
   // PRODUCT IMAGE
-  // ===========================================================
-
-  Widget _productImage(
-    String? imageUrl,
-  ) {
-    if (imageUrl == null ||
-        imageUrl.trim().isEmpty) {
+  Widget _productImage(String? imageUrl) {
+    if (imageUrl == null || imageUrl.trim().isEmpty) {
       return Container(
         width: 112,
         height: 112,
         decoration: BoxDecoration(
           color: Colors.grey.shade100,
-          borderRadius:
-              BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(12),
         ),
         child: const Icon(
           Icons.image_outlined,
@@ -508,15 +414,13 @@ class _CartPageState extends State<CartPage> {
     }
 
     return ClipRRect(
-      borderRadius:
-          BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(12),
       child: Image.network(
         imageUrl,
         width: 112,
         height: 112,
         fit: BoxFit.cover,
-        errorBuilder:
-            (context, error, stackTrace) {
+        errorBuilder: (context, error, stackTrace) {
           return Container(
             width: 112,
             height: 112,
@@ -532,34 +436,20 @@ class _CartPageState extends State<CartPage> {
     );
   }
 
-  // ===========================================================
   // SELECTION INFORMATION
-  // ===========================================================
-
-  Widget _selectionInfo(
-    CartItem item,
-  ) {
+  Widget _selectionInfo(CartItem item) {
     final parts = <String>[];
 
-    if (item.color != null &&
-        item.color!.trim().isNotEmpty) {
-      parts.add(
-        'Color: ${item.color}',
-      );
+    if (item.color != null && item.color!.trim().isNotEmpty) {
+      parts.add('Color: ${item.color}');
     }
 
-    if (item.size != null &&
-        item.size!.trim().isNotEmpty) {
-      parts.add(
-        'Size: ${item.size}',
-      );
+    if (item.size != null && item.size!.trim().isNotEmpty) {
+      parts.add('Size: ${item.size}');
     }
 
-    if (item.variant != null &&
-        item.variant!.trim().isNotEmpty) {
-      parts.add(
-        item.variant!,
-      );
+    if (item.variant != null && item.variant!.trim().isNotEmpty) {
+      parts.add(item.variant!);
     }
 
     if (parts.isEmpty) {
@@ -567,15 +457,11 @@ class _CartPageState extends State<CartPage> {
     }
 
     return Padding(
-      padding:
-          const EdgeInsets.only(
-        top: 5,
-      ),
+      padding: const EdgeInsets.only(top: 5),
       child: Text(
         parts.join('  •  '),
         maxLines: 1,
-        overflow:
-            TextOverflow.ellipsis,
+        overflow: TextOverflow.ellipsis,
         style: TextStyle(
           color: Colors.grey.shade700,
           fontSize: 12,
@@ -584,146 +470,86 @@ class _CartPageState extends State<CartPage> {
     );
   }
 
-  // ===========================================================
   // CART ITEM CARD
-  // ===========================================================
-
-  Widget _cartItemCard(
-    CartItem item,
-  ) {
-    final selected =
-        _selectedItems.contains(
-      item.id,
-    );
+  Widget _cartItemCard(CartItem item) {
+    final selected = _selectedItems.contains(item.id);
 
     return Container(
-      margin:
-          const EdgeInsets.only(
-        bottom: 10,
-      ),
-      padding:
-          const EdgeInsets.all(10),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius:
-            BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: selected
-              ? Colors.redAccent
-                  .withValues(
-                  alpha: 0.45,
-                )
+              ? Colors.redAccent.withValues(alpha: 0.45)
               : Colors.grey.shade200,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black
-                .withValues(
-              alpha: 0.035,
-            ),
+            color: Colors.black.withValues(alpha: 0.035),
             blurRadius: 5,
-            offset:
-                const Offset(0, 2),
+            offset: const Offset(0, 2),
           ),
         ],
       ),
       child: Row(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // =====================================================
           // CHECKBOX
-          // =====================================================
-
           Padding(
-            padding:
-                const EdgeInsets.only(
-              top: 40,
-            ),
+            padding: const EdgeInsets.only(top: 40),
             child: SizedBox(
               width: 32,
               height: 32,
               child: Checkbox(
                 value: selected,
-                activeColor:
-                    Colors.redAccent,
-                shape:
-                    RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.circular(
-                    50,
-                  ),
+                activeColor: Colors.redAccent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(50),
                 ),
                 onChanged: (_) {
-                  _toggleItem(
-                    item.id,
-                  );
+                  _toggleItem(item.id);
                 },
               ),
             ),
           ),
 
-          const SizedBox(
-            width: 5,
-          ),
+          const SizedBox(width: 5),
 
-          // =====================================================
           // IMAGE
-          // =====================================================
+          _productImage(item.imageUrl),
 
-          _productImage(
-            item.imageUrl,
-          ),
+          const SizedBox(width: 10),
 
-          const SizedBox(
-            width: 10,
-          ),
-
-          // =====================================================
           // DETAILS
-          // =====================================================
-
           Expanded(
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       child: Text(
                         item.name,
                         maxLines: 2,
-                        overflow:
-                            TextOverflow.ellipsis,
-                        style:
-                            const TextStyle(
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
                           fontSize: 14,
-                          fontWeight:
-                              FontWeight.w600,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
-
                     IconButton(
-                      onPressed: () =>
-                          _removeItem(
-                        item.id,
-                      ),
-                      icon:
-                          const Icon(
-                        Icons
-                            .delete_outline,
+                      onPressed: () => _removeItem(item.id),
+                      icon: const Icon(
+                        Icons.delete_outline,
                         size: 21,
-                        color:
-                            Colors.grey,
+                        color: Colors.grey,
                       ),
-                      padding:
-                          EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
                         minWidth: 30,
                         minHeight: 30,
                       ),
@@ -733,212 +559,131 @@ class _CartPageState extends State<CartPage> {
 
                 _selectionInfo(item),
 
-                const SizedBox(
-                  height: 5,
-                ),
+                const SizedBox(height: 5),
 
-                if (item
-                    .isResellerProduct)
+                if (item.isResellerProduct)
                   Container(
-                    padding:
-                        const EdgeInsets
-                            .symmetric(
+                    padding: const EdgeInsets.symmetric(
                       horizontal: 6,
                       vertical: 3,
                     ),
-                    decoration:
-                        BoxDecoration(
-                      color: Colors.blue
-                          .withValues(
-                        alpha: 0.08,
-                      ),
-                      borderRadius:
-                          BorderRadius
-                              .circular(
-                        12,
-                      ),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    child:
-                        const Text(
+                    child: const Text(
                       'Reseller',
-                      style:
-                          TextStyle(
-                        color:
-                            Colors.blue,
+                      style: TextStyle(
+                        color: Colors.blue,
                         fontSize: 9,
-                        fontWeight:
-                            FontWeight.bold,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
 
-                const SizedBox(
-                  height: 5,
-                ),
+                const SizedBox(height: 5),
 
                 // PRICE
                 Text(
                   '৳${item.price.toStringAsFixed(0)}',
-                  style:
-                      const TextStyle(
-                    color:
-                        Colors.redAccent,
+                  style: const TextStyle(
+                    color: Colors.redAccent,
                     fontSize: 17,
-                    fontWeight:
-                        FontWeight.bold,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
 
-                const SizedBox(
-                  height: 4,
-                ),
+                const SizedBox(height: 4),
 
-                // FREE SHIPPING
+                // DELIVERY NOTE
                 Row(
                   children: [
                     Icon(
-                      Icons
-                          .local_shipping_outlined,
+                      Icons.local_shipping_outlined,
                       size: 14,
-                      color:
-                          Colors.grey.shade600,
+                      color: Colors.grey.shade600,
                     ),
-                    const SizedBox(
-                      width: 4,
-                    ),
+                    const SizedBox(width: 4),
                     Text(
                       'Delivery fee added at checkout',
                       style: TextStyle(
-                        color:
-                            Colors.grey.shade600,
+                        color: Colors.grey.shade600,
                         fontSize: 10,
-                        fontWeight:
-                            FontWeight.w600,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
                 ),
 
-                const SizedBox(
-                  height: 7,
-                ),
+                const SizedBox(height: 7),
 
                 // QUANTITY
                 Row(
                   children: [
                     Container(
                       height: 32,
-                      decoration:
-                          BoxDecoration(
-                        border: Border.all(
-                          color: Colors
-                              .grey
-                              .shade300,
-                        ),
-                        borderRadius:
-                            BorderRadius
-                                .circular(
-                          7,
-                        ),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(7),
                       ),
                       child: Row(
                         children: [
                           IconButton(
-                            onPressed:
-                                item.quantity >
-                                        1
-                                    ? () =>
-                                        _changeQuantity(
-                                          item.id,
-                                          item.quantity,
-                                          -1,
-                                        )
-                                    : null,
-                            icon:
-                                const Icon(
-                              Icons.remove,
-                              size: 16,
-                            ),
-                            padding:
-                                EdgeInsets.zero,
-                            constraints:
-                                const BoxConstraints(
-                              minWidth: 30,
-                            ),
+                            onPressed: item.quantity > 1
+                                ? () => _changeQuantity(
+                                      item.id,
+                                      item.quantity,
+                                      -1,
+                                    )
+                                : null,
+                            icon: const Icon(Icons.remove, size: 16),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 30),
                           ),
-
                           SizedBox(
                             width: 26,
                             child: Text(
                               '${item.quantity}',
-                              textAlign:
-                                  TextAlign
-                                      .center,
-                              style:
-                                  const TextStyle(
-                                fontSize:
-                                    13,
-                                fontWeight:
-                                    FontWeight
-                                        .bold,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
                           ),
-
                           IconButton(
-                            onPressed:
-                                () =>
-                                    _changeQuantity(
+                            onPressed: () => _changeQuantity(
                               item.id,
                               item.quantity,
                               1,
                             ),
-                            icon:
-                                const Icon(
-                              Icons.add,
-                              size: 16,
-                            ),
-                            padding:
-                                EdgeInsets.zero,
-                            constraints:
-                                const BoxConstraints(
-                              minWidth: 30,
-                            ),
+                            icon: const Icon(Icons.add, size: 16),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 30),
                           ),
                         ],
                       ),
                     ),
-
                     const Spacer(),
-
                     Text(
                       '৳${item.total.toStringAsFixed(0)}',
-                      style:
-                          const TextStyle(
+                      style: const TextStyle(
                         fontSize: 14,
-                        fontWeight:
-                            FontWeight.bold,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ],
                 ),
 
-                if (item
-                    .isResellerProduct)
+                if (item.isResellerProduct)
                   Padding(
-                    padding:
-                        const EdgeInsets.only(
-                      top: 4,
-                    ),
+                    padding: const EdgeInsets.only(top: 4),
                     child: Text(
                       'Profit: ৳${item.profitTotal.toStringAsFixed(0)}',
-                      style:
-                          const TextStyle(
-                        color:
-                            Colors.green,
+                      style: const TextStyle(
+                        color: Colors.green,
                         fontSize: 11,
-                        fontWeight:
-                            FontWeight.w600,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -950,54 +695,37 @@ class _CartPageState extends State<CartPage> {
     );
   }
 
-  // ===========================================================
-  // FREE SHIPPING HEADER
-  // ===========================================================
-
+  // SHIPPING HEADER
   Widget _shippingBanner() {
     return Container(
-      margin:
-          const EdgeInsets.only(
-        bottom: 10,
-      ),
-      padding:
-          const EdgeInsets.symmetric(
-        horizontal: 14,
-        vertical: 11,
-      ),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius:
-            BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         children: [
           Icon(
             Icons.check_circle,
-            color:
-                Colors.green.shade600,
+            color: Colors.green.shade600,
             size: 19,
           ),
-          const SizedBox(
-            width: 8,
-          ),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               'Delivery fee is added at checkout',
               style: TextStyle(
-                color:
-                    Colors.grey.shade800,
+                color: Colors.grey.shade800,
                 fontSize: 13,
-                fontWeight:
-                    FontWeight.w600,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
           Text(
             '৳60 / ৳120',
             style: TextStyle(
-              color:
-                  Colors.grey.shade600,
+              color: Colors.grey.shade600,
               fontSize: 11,
             ),
           ),
@@ -1006,94 +734,57 @@ class _CartPageState extends State<CartPage> {
     );
   }
 
-  // ===========================================================
   // BUILD
-  // ===========================================================
-
   @override
-  Widget build(
-    BuildContext context,
-  ) {
-    final user =
-        FirebaseAuth.instance.currentUser;
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
 
-    // =========================================================
     // LOGIN REQUIRED
-    // =========================================================
-
     if (user == null) {
       return Scaffold(
         appBar: AppBar(
-          backgroundColor:
-              Colors.redAccent,
-          foregroundColor:
-              Colors.white,
+          backgroundColor: Colors.redAccent,
+          foregroundColor: Colors.white,
           title: const Text(
             'Cart',
-            style:
-                TextStyle(
-              fontWeight:
-                  FontWeight.bold,
-            ),
+            style: TextStyle(fontWeight: FontWeight.bold),
           ),
         ),
         body: Center(
           child: Padding(
-            padding:
-                const EdgeInsets.all(
-              24,
-            ),
+            padding: const EdgeInsets.all(24),
             child: Column(
-              mainAxisAlignment:
-                  MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  Icons
-                      .shopping_cart_outlined,
+                  Icons.shopping_cart_outlined,
                   size: 80,
-                  color:
-                      Colors.grey.shade400,
+                  color: Colors.grey.shade400,
                 ),
-                const SizedBox(
-                  height: 16,
-                ),
+                const SizedBox(height: 16),
                 const Text(
                   'Please login to view your cart.',
-                  textAlign:
-                      TextAlign.center,
-                  style:
-                      TextStyle(
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
                     fontSize: 18,
-                    fontWeight:
-                        FontWeight.bold,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(
-                  height: 20,
-                ),
+                const SizedBox(height: 20),
                 ElevatedButton(
                   onPressed: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder:
-                            (context) =>
-                                const LoginPage(),
+                        builder: (context) => const LoginPage(),
                       ),
                     );
                   },
-                  style:
-                      ElevatedButton
-                          .styleFrom(
-                    backgroundColor:
-                        Colors.redAccent,
-                    foregroundColor:
-                        Colors.white,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.redAccent,
+                    foregroundColor: Colors.white,
                   ),
-                  child:
-                      const Text(
-                    'Login',
-                  ),
+                  child: const Text('Login'),
                 ),
               ],
             ),
@@ -1102,76 +793,45 @@ class _CartPageState extends State<CartPage> {
       );
     }
 
-    // =========================================================
+    final String uid = user.uid;
+
     // CART STREAM
-    // =========================================================
-
     return Scaffold(
-      backgroundColor:
-          const Color(0xFFF7F7F7),
-
+      backgroundColor: const Color(0xFFF7F7F7),
       appBar: AppBar(
-        backgroundColor:
-            Colors.white,
-        foregroundColor:
-            Colors.black,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
         elevation: 0,
         centerTitle: true,
         title: const Text(
           'Cart',
-          style:
-              TextStyle(
-            fontWeight:
-                FontWeight.bold,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
-
-      body: StreamBuilder<
-          QuerySnapshot<
-              Map<String, dynamic>>>(
-        stream:
-            FirebaseFirestore
-                .instance
-                .collection(
-                  'users',
-                )
-                .doc(user.uid)
-                .collection(
-                  'cart',
-                )
-                .snapshots(),
-
-        builder:
-            (context, snapshot) {
-          if (snapshot
-                  .connectionState ==
-              ConnectionState.waiting) {
-            return const Center(
-              child:
-                  CircularProgressIndicator(),
-            );
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .collection('cart')
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
           }
 
           if (snapshot.hasError) {
             return Center(
               child: Padding(
-                padding:
-                    const EdgeInsets.all(
-                  20,
-                ),
+                padding: const EdgeInsets.all(20),
                 child: Text(
                   'Could not load cart.\n${snapshot.error}',
-                  textAlign:
-                      TextAlign.center,
+                  textAlign: TextAlign.center,
                 ),
               ),
             );
           }
 
-          final documents =
-              snapshot.data?.docs ??
-                  [];
+          final documents = snapshot.data?.docs ?? [];
 
           if (documents.isEmpty) {
             _selectedItems.clear();
@@ -1179,126 +839,87 @@ class _CartPageState extends State<CartPage> {
             return _emptyCart();
           }
 
-          final cartItems =
-              <CartItem>[];
+          final allCartItems = <CartItem>[];
 
-          for (final doc
-              in documents) {
-            final data =
-                doc.data();
+          for (final doc in documents) {
+            final data = doc.data();
 
-            final name =
-                data['name']
-                        ?.toString() ??
-                    data['productName']
-                        ?.toString() ??
-                    'Unnamed Product';
+            final name = data['name']?.toString() ??
+                data['productName']?.toString() ??
+                'Unnamed Product';
 
-            final priceValue =
-                data['price'] ??
-                    data['sellingPrice'] ??
-                    0;
+            final priceValue = data['price'] ?? data['sellingPrice'] ?? 0;
 
-            final double price =
-                priceValue is num
-                    ? priceValue.toDouble()
-                    : double.tryParse(
-                          priceValue
-                              .toString(),
-                        ) ??
-                        0;
+            final double price = priceValue is num
+                ? priceValue.toDouble()
+                : double.tryParse(priceValue.toString()) ?? 0;
 
-            final quantity =
-                (data['quantity']
-                            as num?)
-                        ?.toInt() ??
-                    1;
+            final quantity = (data['quantity'] as num?)?.toInt() ?? 1;
 
-            final image =
-                data['imageUrl']
-                    ?.toString();
+            final image = data['imageUrl']?.toString();
 
             // Optional selections
-            final color =
-                _nullableString(
-              data['color'] ??
-                  data['selectedColor'],
+            final color = _nullableString(
+              data['color'] ?? data['selectedColor'],
             );
 
-            final size =
-                _nullableString(
-              data['size'] ??
-                  data['selectedSize'],
+            final size = _nullableString(
+              data['size'] ?? data['selectedSize'],
             );
 
-            final variant =
-                _nullableString(
-              data['variant'],
-            );
+            final variant = _nullableString(data['variant']);
 
             // Reseller
-            final isResellerProduct =
-                data['isResellerProduct'] ==
-                    true;
+            final isResellerProduct = data['isResellerProduct'] == true;
 
-            final entrepreneurUid =
-                _nullableString(
-              data['entrepreneurUid'],
-            );
+            final entrepreneurUid = _nullableString(data['entrepreneurUid']);
 
-            final sellerId =
-                _nullableString(
-              data['sellerId'],
-            );
+            final sellerId = _nullableString(data['sellerId']);
 
             final supplierProductId =
-                _nullableString(
-              data['supplierProductId'],
-            );
+                _nullableString(data['supplierProductId']);
 
-            final supplierPrice =
-                _nullableDouble(
-              data['supplierPrice'],
-            );
+            final supplierPrice = _nullableDouble(data['supplierPrice']);
 
-            final resellerProfit =
-                _nullableDouble(
-              data['resellerProfit'],
-            );
+            final resellerProfit = _nullableDouble(data['resellerProfit']);
 
-            cartItems.add(
+            allCartItems.add(
               CartItem(
                 id: doc.id,
-                productId:
-                    _nullableString(data['productId']),
+                productId: _nullableString(data['productId']),
                 name: name,
                 price: price,
-                imageUrl:
-                    image == null ||
-                            image.isEmpty
-                        ? null
-                        : image,
-                quantity:
-                    quantity < 1
-                        ? 1
-                        : quantity,
+                imageUrl: image == null || image.isEmpty ? null : image,
+                quantity: quantity < 1 ? 1 : quantity,
                 color: color,
                 size: size,
                 variant: variant,
-                isResellerProduct:
-                    isResellerProduct,
-                entrepreneurUid:
-                    entrepreneurUid,
-                sellerId:
-                    sellerId,
-                supplierProductId:
-                    supplierProductId,
-                supplierPrice:
-                    supplierPrice,
-                resellerProfit:
-                    resellerProfit,
+                isResellerProduct: isResellerProduct,
+                entrepreneurUid: entrepreneurUid,
+                sellerId: sellerId,
+                supplierProductId: supplierProductId,
+                supplierPrice: supplierPrice,
+                resellerProfit: resellerProfit,
               ),
             );
+          }
+
+          // Own products can never be bought: hide them and delete them
+          // from the cart.
+          final ownItems =
+              allCartItems.where((item) => _isOwnItem(item, uid)).toList();
+
+          if (ownItems.isNotEmpty) {
+            _purgeOwnItems(ownItems);
+          }
+
+          final cartItems =
+              allCartItems.where((item) => !_isOwnItem(item, uid)).toList();
+
+          if (cartItems.isEmpty) {
+            _selectedItems.clear();
+            _knownItemIds.clear();
+            return _emptyCart();
           }
 
           // Newly added products are selected automatically.
@@ -1310,293 +931,156 @@ class _CartPageState extends State<CartPage> {
 
           // Forget removed lines so they are selected again if re-added.
           _knownItemIds.removeWhere(
-            (id) => !cartItems.any(
-              (item) => item.id == id,
-            ),
+            (id) => !cartItems.any((item) => item.id == id),
           );
 
           // Remove deleted products from selection.
           _selectedItems.removeWhere(
-            (id) => !cartItems.any(
-              (item) => item.id == id,
-            ),
+            (id) => !cartItems.any((item) => item.id == id),
           );
 
-          final allSelected =
-              cartItems.isNotEmpty &&
-              cartItems.every(
-                (item) =>
-                    _selectedItems
-                        .contains(item.id),
-              );
+          final allSelected = cartItems.isNotEmpty &&
+              cartItems.every((item) => _selectedItems.contains(item.id));
 
-          final selectedItems =
-              cartItems.where(
-            (item) =>
-                _selectedItems
-                    .contains(item.id),
-          ).toList();
+          final selectedItems = cartItems
+              .where((item) => _selectedItems.contains(item.id))
+              .toList();
 
-          // =====================================================
           // SELECTED TOTALS
-          // =====================================================
-
           double subtotal = 0;
           int totalQuantity = 0;
 
-          for (final item
-              in selectedItems) {
+          for (final item in selectedItems) {
             subtotal += item.total;
-            totalQuantity +=
-                item.quantity;
+            totalQuantity += item.quantity;
           }
 
           // Delivery fee (৳60 inside Dhaka / ৳120 outside) is added at checkout.
           final total = subtotal;
 
-          // =====================================================
           // PAGE
-          // =====================================================
-
           return Column(
             children: [
               Expanded(
                 child: ListView(
-                  padding:
-                      const EdgeInsets
-                          .fromLTRB(
-                    10,
-                    10,
-                    10,
-                    20,
-                  ),
+                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 20),
                   children: [
-                    // =================================================
                     // SELECT ALL BAR
-                    // =================================================
-
                     Container(
-                      padding:
-                          const EdgeInsets
-                              .symmetric(
+                      padding: const EdgeInsets.symmetric(
                         horizontal: 8,
                         vertical: 5,
                       ),
-                      decoration:
-                          BoxDecoration(
-                        color:
-                            Colors.white,
-                        borderRadius:
-                            BorderRadius
-                                .circular(
-                          10,
-                        ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
                       ),
                       child: Row(
                         children: [
                           Checkbox(
-                            value:
-                                allSelected,
-                            activeColor:
-                                Colors
-                                    .redAccent,
-                            shape:
-                                RoundedRectangleBorder(
-                              borderRadius:
-                                  BorderRadius
-                                      .circular(
-                                50,
-                              ),
+                            value: allSelected,
+                            activeColor: Colors.redAccent,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(50),
                             ),
-                            onChanged: (_) =>
-                                _toggleAll(
-                              cartItems,
-                            ),
+                            onChanged: (_) => _toggleAll(cartItems),
                           ),
                           const Text(
                             'All',
-                            style:
-                                TextStyle(
-                              fontWeight:
-                                  FontWeight
-                                      .w600,
-                            ),
+                            style: TextStyle(fontWeight: FontWeight.w600),
                           ),
                           const Spacer(),
                           Text(
                             '${cartItems.length} item${cartItems.length == 1 ? '' : 's'}',
-                            style:
-                                TextStyle(
-                              color: Colors
-                                  .grey
-                                  .shade600,
-                              fontSize:
-                                  12,
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 12,
                             ),
                           ),
                         ],
                       ),
                     ),
 
-                    const SizedBox(
-                      height: 8,
-                    ),
+                    const SizedBox(height: 8),
 
-                    // =================================================
                     // SHIPPING
-                    // =================================================
-
                     _shippingBanner(),
 
-                    // =================================================
                     // CART PRODUCTS
-                    // =================================================
-
-                    ...cartItems.map(
-                      (item) =>
-                          _cartItemCard(
-                        item,
-                      ),
-                    ),
+                    ...cartItems.map((item) => _cartItemCard(item)),
                   ],
                 ),
               ),
 
-              // =====================================================
               // BOTTOM CHECKOUT AREA
-              // =====================================================
-
               SafeArea(
                 top: false,
                 child: Container(
-                  padding:
-                      const EdgeInsets
-                          .fromLTRB(
-                    12,
-                    10,
-                    12,
-                    12,
-                  ),
-                  decoration:
-                      const BoxDecoration(
-                    color:
-                        Colors.white,
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
                     boxShadow: [
                       BoxShadow(
-                        color:
-                            Colors.black12,
-                        blurRadius:
-                            10,
-                        offset:
-                            Offset(
-                          0,
-                          -3,
-                        ),
+                        color: Colors.black12,
+                        blurRadius: 10,
+                        offset: Offset(0, -3),
                       ),
                     ],
                   ),
-                  child: Column(
+                  child: Row(
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment
-                                      .start,
-                              children: [
-                                Text(
-                                  selectedItems
-                                      .isEmpty
-                                      ? 'No items selected'
-                                      : '$totalQuantity item${totalQuantity == 1 ? '' : 's'} selected',
-                                  style:
-                                      TextStyle(
-                                    color: Colors
-                                        .grey
-                                        .shade700,
-                                    fontSize:
-                                        12,
-                                  ),
-                                ),
-                                const SizedBox(
-                                  height: 3,
-                                ),
-                                Text(
-                                  '৳${total.toStringAsFixed(0)}',
-                                  style:
-                                      const TextStyle(
-                                    color: Colors
-                                        .redAccent,
-                                    fontSize:
-                                        21,
-                                    fontWeight:
-                                        FontWeight
-                                            .bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          SizedBox(
-                            height: 50,
-                            child:
-                                ElevatedButton(
-                              onPressed:
-                                  selectedItems
-                                          .isEmpty
-                                      ? null
-                                      : () =>
-                                          _checkout(
-                                            cartItems,
-                                          ),
-                              style:
-                                  ElevatedButton
-                                      .styleFrom(
-                                backgroundColor:
-                                    Colors
-                                        .redAccent,
-                                disabledBackgroundColor:
-                                    Colors
-                                        .grey
-                                        .shade300,
-                                foregroundColor:
-                                    Colors
-                                        .white,
-                                padding:
-                                    const EdgeInsets
-                                        .symmetric(
-                                  horizontal:
-                                      28,
-                                ),
-                                shape:
-                                    RoundedRectangleBorder(
-                                  borderRadius:
-                                      BorderRadius
-                                          .circular(
-                                    25,
-                                  ),
-                                ),
-                              ),
-                              child:
-                                  Text(
-                                selectedItems
-                                        .isEmpty
-                                    ? 'Checkout'
-                                    : 'Checkout (${selectedItems.length})',
-                                style:
-                                    const TextStyle(
-                                  fontSize:
-                                      15,
-                                  fontWeight:
-                                      FontWeight
-                                          .bold,
-                                ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              selectedItems.isEmpty
+                                  ? 'No items selected'
+                                  : '$totalQuantity item${totalQuantity == 1 ? '' : 's'} selected',
+                              style: TextStyle(
+                                color: Colors.grey.shade700,
+                                fontSize: 12,
                               ),
                             ),
+                            const SizedBox(height: 3),
+                            Text(
+                              '৳${total.toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                color: Colors.redAccent,
+                                fontSize: 21,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(
+                        height: 50,
+                        child: ElevatedButton(
+                          onPressed: selectedItems.isEmpty
+                              ? null
+                              : () => _checkout(cartItems),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.redAccent,
+                            disabledBackgroundColor: Colors.grey.shade300,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 28,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(25),
+                            ),
                           ),
-                        ],
+                          child: Text(
+                            selectedItems.isEmpty
+                                ? 'Checkout'
+                                : 'Checkout (${selectedItems.length})',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -1609,15 +1093,9 @@ class _CartPageState extends State<CartPage> {
     );
   }
 
-  // ===========================================================
   // NULLABLE STRING
-  // ===========================================================
-
-  String? _nullableString(
-    dynamic value,
-  ) {
-    final text =
-        value?.toString().trim() ?? '';
+  String? _nullableString(dynamic value) {
+    final text = value?.toString().trim() ?? '';
 
     if (text.isEmpty) {
       return null;
@@ -1626,13 +1104,8 @@ class _CartPageState extends State<CartPage> {
     return text;
   }
 
-  // ===========================================================
   // NULLABLE DOUBLE
-  // ===========================================================
-
-  double? _nullableDouble(
-    dynamic value,
-  ) {
+  double? _nullableDouble(dynamic value) {
     if (value == null) {
       return null;
     }
@@ -1641,60 +1114,36 @@ class _CartPageState extends State<CartPage> {
       return value.toDouble();
     }
 
-    return double.tryParse(
-      value.toString(),
-    );
+    return double.tryParse(value.toString());
   }
 
-  // ===========================================================
   // EMPTY CART
-  // ===========================================================
-
   Widget _emptyCart() {
     return Center(
       child: Padding(
-        padding:
-            const EdgeInsets.all(
-          24,
-        ),
+        padding: const EdgeInsets.all(24),
         child: Column(
-          mainAxisAlignment:
-              MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons
-                  .shopping_cart_outlined,
+              Icons.shopping_cart_outlined,
               size: 90,
-              color:
-                  Colors.grey.shade400,
+              color: Colors.grey.shade400,
             ),
-
-            const SizedBox(
-              height: 18,
-            ),
-
+            const SizedBox(height: 18),
             const Text(
               'Your Cart is Empty',
-              style:
-                  TextStyle(
+              style: TextStyle(
                 fontSize: 21,
-                fontWeight:
-                    FontWeight.bold,
+                fontWeight: FontWeight.bold,
               ),
             ),
-
-            const SizedBox(
-              height: 8,
-            ),
-
+            const SizedBox(height: 8),
             Text(
               'Add products to your cart and they will appear here.',
-              textAlign:
-                  TextAlign.center,
-              style:
-                  TextStyle(
-                color:
-                    Colors.grey.shade600,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.grey.shade600,
                 fontSize: 15,
               ),
             ),
