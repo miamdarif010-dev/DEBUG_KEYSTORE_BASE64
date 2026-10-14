@@ -674,19 +674,6 @@ class _CartPageState extends State<CartPage> {
                     ),
                   ],
                 ),
-
-                if (item.isResellerProduct)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      'Profit: ৳${item.profitTotal.toStringAsFixed(0)}',
-                      style: const TextStyle(
-                        color: Colors.green,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
               ],
             ),
           ),
