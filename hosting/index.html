@@ -1,18 +1,106 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="bn">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BuyNova</title>
 <style>
-  body{font-family:sans-serif;text-align:center;padding:48px 20px;color:#222}
-  h1{color:#ff5252}
-  a.btn{display:inline-block;margin-top:20px;padding:14px 26px;background:#ff5252;color:#fff;border-radius:26px;text-decoration:none;font-weight:bold}
+  :root { --brand:#ff5252; --bg:#f6f5fb; --text:#1c1b22; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Noto Sans Bengali",sans-serif; background:var(--bg); color:var(--text); }
+  .wrap { max-width:480px; margin:0 auto; padding:16px; }
+  .card { background:#fff; border-radius:16px; overflow:hidden; box-shadow:0 2px 12px rgba(0,0,0,.08); }
+  .img { width:100%; aspect-ratio:1/1; object-fit:cover; background:#e8e6f2; display:block; }
+  .body { padding:16px; }
+  h1 { font-size:20px; margin:0 0 8px; }
+  .price { font-size:22px; font-weight:700; color:var(--brand); margin:0 0 8px; }
+  .desc { font-size:14px; line-height:1.5; color:#555; white-space:pre-line; }
+  .btn { display:block; width:100%; text-align:center; padding:14px; border-radius:12px; font-size:16px; font-weight:600; text-decoration:none; margin-top:12px; }
+  .primary { background:var(--brand); color:#fff; }
+  .secondary { background:#fff; color:var(--brand); border:2px solid var(--brand); }
+  .msg { text-align:center; padding:40px 16px; color:#666; }
 </style>
 </head>
 <body>
-  <h1>BuyNova</h1>
-  <p>Open this product in the BuyNova app.</p>
-  <a class="btn" href="https://play.google.com/store/apps/details?id=YOUR.PACKAGE.NAME">Get the BuyNova app</a>
+<div class="wrap">
+  <div id="state" class="msg">লোড হচ্ছে...</div>
+  <div id="card" class="card" hidden>
+    <img id="img" class="img" alt="">
+    <div class="body">
+      <h1 id="name"></h1>
+      <p id="price" class="price"></p>
+      <p id="desc" class="desc"></p>
+    </div>
+  </div>
+  <a id="openApp" class="btn primary" href="#" hidden>অ্যাপে খুলুন</a>
+  <a id="website" class="btn secondary" href="#" hidden>ওয়েবসাইট</a>
+  <a id="download" class="btn secondary" href="#" hidden>অ্যাপ ডাউনলোড করুন</a>
+</div>
+
+<script>
+// ===== CHANGE THESE =====
+var PROJECT_ID  = 'YOUR_PROJECT_ID';             // Firebase project id
+var REGION      = 'asia-northeast3';             // same as _kFunctionsRegion in Dart
+var PACKAGE     = 'com.example.buynova';         // android applicationId
+var DOWNLOAD_URL = 'https://play.google.com/store/apps/details?id=' + PACKAGE; // or your APK link
+var CURRENCY    = '৳';
+var WEBSITE_URL = 'https://' + PROJECT_ID + '.web.app/'; // your website home page
+
+// ========================
+
+var parts = location.pathname.split('/').filter(Boolean);
+var listingId = (parts[0] === 'r' && parts[1]) ? decodeURIComponent(parts[1]) : null;
+
+function $(id) { return document.getElementById(id); }
+function fail(text) { $('state').textContent = text; }
+
+$('website').href = WEBSITE_URL;
+$('website').hidden = false;
+
+if (!listingId) {
+  // No product link: show no error, only the download button.
+  $('state').hidden = true;
+  $('download').href = DOWNLOAD_URL;
+  $('download').hidden = false;
+} else {
+  var appLink = 'intent://r/' + encodeURIComponent(listingId) +
+    '#Intent;scheme=buynova;package=' + PACKAGE +
+    ';S.browser_fallback_url=' + encodeURIComponent(DOWNLOAD_URL) + ';end';
+  $('openApp').href = appLink;
+  $('download').href = DOWNLOAD_URL;
+  $('openApp').hidden = false;
+  $('download').hidden = false;
+
+  var url = 'https://' + REGION + '-' + PROJECT_ID + '.cloudfunctions.net/getResellerListing';
+  fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: { listingId: listingId } })
+  })
+  .then(function (r) { return r.json(); })
+  .then(function (j) {
+    var l = j && j.result && j.result.listing;
+    if (!l) { fail('পণ্যটি পাওয়া যায়নি।'); return; }
+
+    // Field names are guesses: adjust to your reseller_products fields.
+    var name  = l.name || l.title || l.productName || 'BuyNova';
+    var price = l.resellerPrice != null ? l.resellerPrice : (l.price != null ? l.price : '');
+    var img   = (Array.isArray(l.images) && l.images[0]) || l.imageUrl || l.image || '';
+
+    $('name').textContent = name;
+    $('price').textContent = price !== '' ? CURRENCY + price : '';
+    $('desc').textContent = l.description || '';
+    if (typeof img === 'string' && img.indexOf('https://') === 0) {
+      $('img').src = img;
+    } else {
+      $('img').hidden = true;
+    }
+    document.title = name + ' | BuyNova';
+    $('state').hidden = true;
+    $('card').hidden = false;
+  })
+  .catch(function () { fail('পণ্যটি লোড করা যায়নি।'); });
+}
+</script>
 </body>
 </html>
