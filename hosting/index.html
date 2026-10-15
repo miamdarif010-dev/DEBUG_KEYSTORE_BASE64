@@ -5,17 +5,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#ff3045">
-<title>BuyNova | অনলাইন শপিং</title>
+<title>BuyNova</title>
 
 <style>
-:root {
+:root{
   --brand:#ff3045;
   --dark:#e91d35;
   --bg:#fff5f8;
   --text:#202027;
   --muted:#686873;
   --pink:#ffe8ee;
-  --border:#ffd0da;
+  --shadow:0 10px 35px rgba(125,35,55,.10);
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
@@ -26,93 +26,177 @@ body{
   background:var(--bg);
   color:var(--text);
 }
-.wrap{max-width:760px;margin:auto;padding:18px}
-.brand-header{display:flex;align-items:center;gap:12px;margin:5px 0 24px}
-.brand-logo{
-  width:54px;height:54px;display:grid;place-items:center;
-  border-radius:17px;color:#fff;font-size:28px;
-  background:linear-gradient(145deg,#ff596b,#ed1731);
-  box-shadow:0 7px 18px #ff304533
+a{-webkit-tap-highlight-color:transparent}
+.wrap{width:100%;max-width:760px;margin:auto;padding:17px}
+.brand-header{
+  display:flex;align-items:center;gap:12px;
+  margin:5px 0 24px;
 }
-.brand-name{margin:0;font-size:30px;font-weight:900;letter-spacing:-1px}
+.brand-logo{
+  width:56px;height:56px;flex-shrink:0;
+  display:grid;place-items:center;border-radius:18px;
+  color:#fff;font-size:29px;
+  background:linear-gradient(145deg,#ff596b,#ed1731);
+  box-shadow:0 7px 18px rgba(255,48,69,.22);
+}
+.brand-name{
+  margin:0;font-size:30px;font-weight:900;
+  line-height:1.15;letter-spacing:-1px;
+}
 .brand-name span,.hero span{color:var(--brand)}
-.brand-caption{margin:4px 0 0;color:var(--muted);font-size:12px}
+.brand-caption{margin:5px 0 0;color:var(--muted);font-size:12px}
+
 .home{
-  padding:27px 21px;margin-bottom:22px;border-radius:26px;
-  background:radial-gradient(circle at 100% 0%,#ffdce5,transparent 45%),
-  linear-gradient(145deg,#fff,#fff0f5);
-  box-shadow:0 10px 35px #7d23351a
+  position:relative;overflow:hidden;
+  padding:27px 21px 24px;margin-bottom:22px;
+  border:1px solid #fff;border-radius:28px;
+  background:
+    radial-gradient(circle at 100% 0%,#ffdce5 0,transparent 42%),
+    linear-gradient(145deg,#fff,#fff0f5);
+  box-shadow:var(--shadow);
 }
 .hero-badge{
-  display:inline-block;background:#ffe0e8;color:#d91e37;
-  padding:9px 13px;border-radius:30px;font-size:12px;font-weight:750
+  display:inline-flex;align-items:center;gap:7px;
+  padding:9px 13px;border-radius:30px;
+  background:#ffe0e8;color:#d91e37;
+  font-size:12px;font-weight:800;
 }
-.hero{font-size:clamp(36px,8vw,54px);line-height:1.15;margin:16px 0 10px;font-weight:900}
-.tag{font-size:15px;line-height:1.9;color:#4d4b54;margin:0}
-.hero-benefits{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:23px}
-.benefit{text-align:center;font-size:11px;font-weight:650}
+.hero{
+  margin:15px 0 10px;
+  font-size:clamp(38px,9vw,57px);
+  line-height:1.12;font-weight:950;letter-spacing:-1.5px;
+}
+.tag{margin:0;color:#4d4b54;font-size:15px;line-height:1.9}
+.hero-benefits{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:8px;margin-top:24px;
+}
+.benefit{
+  min-width:0;text-align:center;padding:12px 3px;
+  background:rgba(255,255,255,.86);border-radius:19px;
+  font-size:11px;font-weight:700;line-height:1.5;
+}
 .benefit-icon{
-  width:46px;height:46px;display:grid;place-items:center;
-  margin:0 auto 7px;border-radius:15px;background:#ffe4eb;
-  font-size:22px
+  width:45px;height:45px;display:grid;place-items:center;
+  margin:0 auto 7px;border-radius:16px;
+  background:#ffe4eb;color:var(--brand);font-size:23px;
 }
 .card{
-  overflow:hidden;background:#fff;border:1px solid #fff;
-  border-radius:25px;box-shadow:0 10px 35px #7d23351a
+  overflow:hidden;background:#fff;
+  border:1px solid rgba(255,255,255,.95);
+  border-radius:26px;box-shadow:var(--shadow);
 }
 .product-layout{display:block}
 .product-top{padding:15px}
-.img-frame{position:relative;overflow:hidden;border-radius:19px;background:#f3edf3}
-.img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block}
+.img-frame{
+  position:relative;overflow:hidden;
+  width:100%;border-radius:21px;
+  background:linear-gradient(135deg,#f5eaf0,#eeeaf5);
+}
+.img{
+  display:block;width:100%;aspect-ratio:1/1;
+  object-fit:cover;background:#f2edf2;
+}
 .product-badge{
-  position:absolute;top:12px;left:12px;background:var(--brand);
-  color:white;border-radius:30px;padding:8px 12px;font-size:12px;font-weight:750
+  position:absolute;top:12px;left:12px;
+  padding:8px 12px;border-radius:30px;
+  background:var(--brand);color:#fff;
+  font-size:12px;font-weight:800;
+  box-shadow:0 4px 12px rgba(255,48,69,.2);
 }
-.product-content{padding:4px 19px 20px}
+.product-content{padding:5px 19px 21px}
 .product-label{
-  display:inline-block;background:#fff0f4;color:#dc243c;
-  border-radius:8px;padding:6px 10px;font-size:11px;font-weight:750
+  display:inline-block;margin-bottom:9px;
+  padding:7px 11px;border-radius:30px;
+  background:#fff0f4;color:#dc243c;
+  font-size:12px;font-weight:800;
 }
-h1.product-name{font-size:23px;line-height:1.5;margin:10px 0;overflow-wrap:anywhere}
-.price{font-size:30px;color:var(--brand);font-weight:900;margin:0 0 15px;overflow-wrap:anywhere}
-.feature-list{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:22px}
-.feature{background:#fff0f4;padding:8px 10px;border-radius:25px;font-size:11px}
-.description-heading{font-weight:850;margin-bottom:8px}
-.desc{white-space:pre-line;overflow-wrap:anywhere;color:#5b5962;font-size:14px;line-height:1.9;margin:0}
-.actions{
-  padding:0 16px 18px;display:grid;gap:11px
+.product-name{
+  font-size:23px;line-height:1.45;
+  margin:0 0 10px;overflow-wrap:anywhere;
 }
-.actions-title{font-size:15px;font-weight:850;margin:0 0 2px}
+.price{
+  margin:0 0 15px;color:var(--brand);
+  font-size:31px;line-height:1.3;
+  font-weight:900;letter-spacing:-.5px;
+  overflow-wrap:anywhere;
+}
+.feature-list{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:23px}
+.feature{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:8px 11px;border-radius:30px;
+  background:#fff0f4;color:#4c4146;
+  font-size:11px;font-weight:700;
+}
+.feature span{color:var(--brand)}
+.description-heading{
+  display:flex;align-items:center;gap:9px;
+  margin-bottom:9px;font-size:17px;font-weight:850;
+}
+.description-heading:before{
+  content:"";width:4px;height:22px;flex-shrink:0;
+  border-radius:5px;background:var(--brand);
+}
+.desc{
+  margin:0;color:#5b5962;font-size:14px;
+  line-height:1.9;overflow-wrap:anywhere;white-space:pre-line;
+}
+.actions-card{
+  margin-top:17px;padding:17px 15px 19px;
+  border:1px solid var(--pink);border-radius:25px;
+  background:linear-gradient(145deg,#fff,#fff0f5);
+  box-shadow:var(--shadow);
+}
+.actions-title{
+  text-align:center;font-size:17px;
+  font-weight:850;margin:0 0 14px;
+}
 .btn{
-  display:flex;align-items:center;justify-content:center;gap:9px;
-  width:100%;min-height:53px;padding:12px 14px;
-  border:1.5px solid transparent;border-radius:15px;
-  text-align:center;font-family:inherit;font-size:14px;
-  font-weight:800;line-height:1.5;text-decoration:none;
-  cursor:pointer;overflow-wrap:anywhere
+  display:flex;align-items:center;justify-content:center;
+  gap:10px;width:100%;min-height:54px;
+  padding:13px 14px;border:1.5px solid transparent;
+  border-radius:16px;text-align:center;
+  font-family:inherit;font-size:15px;font-weight:800;
+  line-height:1.5;text-decoration:none;
+  cursor:pointer;transition:transform .18s ease;
+  overflow-wrap:anywhere;
 }
 .btn:active{transform:scale(.985)}
-.primary{color:white;background:linear-gradient(110deg,#ff3449,#ed1935);box-shadow:0 7px 18px #ff304533}
-.secondary{color:var(--brand);border-color:#ff5367;background:#fff}
-.btn-icon{font-size:20px}
-.actions-bottom{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.msg{
-  padding:20px 16px;margin:12px 0 18px;text-align:center;
-  border-radius:18px;background:#fff;color:var(--muted);
-  font-size:14px;line-height:1.8
+.primary{
+  color:#fff;
+  background:linear-gradient(110deg,#ff3449,#ed1935);
+  box-shadow:0 7px 18px rgba(255,48,69,.20);
 }
-.msg[hidden]{display:none}
-.footer{text-align:center;color:#77717a;font-size:12px;line-height:1.8;padding:25px 8px}
+.secondary{color:var(--brand);border-color:#ff5367;background:#fff}
+.btn-icon{font-size:21px;line-height:1}
+.actions-bottom{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:11px}
+.status-note{
+  text-align:center;color:#77717a;
+  font-size:12px;line-height:1.8;margin:13px 2px 0;
+}
+.msg{
+  text-align:center;padding:28px 18px;margin:12px 0 20px;
+  border-radius:20px;background:#fff;color:var(--muted);
+  font-size:14px;line-height:1.8;box-shadow:0 4px 18px rgba(50,20,40,.05);
+}
+.msg[hidden],.home[hidden],.card[hidden]{display:none}
+.footer{
+  padding:28px 8px 18px;text-align:center;
+  color:#77717a;font-size:12px;line-height:1.8;
+}
+.footer-heart{color:var(--brand);font-size:18px;margin-right:5px}
 .footer strong{color:#29252c}
-.status-note{font-size:12px;color:#777;line-height:1.7;margin:0}
 @media(min-width:560px){
   .wrap{padding:25px}
   .home{padding:35px 30px}
-  .product-layout{display:grid;grid-template-columns:.88fr 1.12fr;gap:10px;align-items:start}
+  .product-layout{
+    display:grid;grid-template-columns:.88fr 1.12fr;
+    align-items:start;gap:10px;
+  }
   .product-top{padding:18px 0 18px 18px}
-  .product-content{padding:24px 20px 18px 5px}
-  .actions{padding:0 18px 20px}
-  h1.product-name{font-size:25px}
+  .product-content{padding:23px 20px 18px 5px}
+  .product-name{font-size:25px}
+  .actions-card{padding:20px}
 }
 @media(max-width:360px){
   .wrap{padding:12px}
@@ -120,7 +204,9 @@ h1.product-name{font-size:23px;line-height:1.5;margin:10px 0;overflow-wrap:anywh
   .home{padding:22px 15px}
   .hero-benefits{gap:4px}
   .benefit{font-size:10px}
+  .product-content{padding-right:14px;padding-left:14px}
   .actions-bottom{grid-template-columns:1fr}
+  .btn{font-size:14px}
 }
 </style>
 </head>
@@ -151,7 +237,7 @@ h1.product-name{font-size:23px;line-height:1.5;margin:10px 0;overflow-wrap:anywh
     </div>
   </section>
 
-  <div id="state" class="msg">পণ্যের তথ্য লোড হচ্ছে...</div>
+  <div id="state" class="msg" hidden>পণ্যের তথ্য লোড হচ্ছে...</div>
 
   <section id="card" class="card" hidden>
     <div class="product-layout">
@@ -166,172 +252,152 @@ h1.product-name{font-size:23px;line-height:1.5;margin:10px 0;overflow-wrap:anywh
       </div>
       <div class="product-content">
         <div class="product-label">✨ আপনার পছন্দের পণ্য</div>
-        <h1 id="name" class="product-name">পণ্যের নাম</h1>
+        <h1 id="name" class="product-name"></h1>
         <p id="price" class="price"></p>
         <div class="feature-list">
-          <div class="feature">✓ মানসম্মত পণ্য</div>
-          <div class="feature">♡ পছন্দের কালেকশন</div>
-          <div class="feature">✦ BuyNova</div>
+          <div class="feature"><span>✓</span> মানসম্মত পণ্য</div>
+          <div class="feature"><span>♡</span> পছন্দের কালেকশন</div>
+          <div class="feature"><span>✦</span> BuyNova</div>
         </div>
         <div class="description-heading">পণ্যের বিবরণ</div>
-        <p id="desc" class="desc">পণ্যের বিবরণ লোড হচ্ছে...</p>
+        <p id="desc" class="desc"></p>
       </div>
     </div>
   </section>
 
-  <!-- তিনটি অপশন সবসময় দৃশ্যমান -->
-  <section class="card" style="margin-top:18px">
-    <div class="actions">
-      <p class="actions-title">BuyNova-তে কেনাকাটা করুন</p>
+  <!-- তিনটি বাটন সবসময় দৃশ্যমান -->
+  <section class="actions-card">
+    <h2 class="actions-title">🚀 BuyNova-তে কেনাকাটা করুন</h2>
 
-      <a id="openApp" class="btn primary" href="#"
-         aria-label="BuyNova অ্যাপে খুলুন">
-        <span class="btn-icon">🛒</span>
-        অ্যাপে খুলুন <span aria-hidden="true">›</span>
+    <a id="openApp" class="btn primary" href="/">
+      <span class="btn-icon">🛒</span>
+      অ্যাপে খুলুন <span aria-hidden="true">›</span>
+    </a>
+
+    <div class="actions-bottom">
+      <a id="website" class="btn secondary" href="/">
+        <span class="btn-icon">🌐</span> ওয়েবসাইট দেখুন
       </a>
-
-      <div class="actions-bottom">
-        <a id="website" class="btn secondary" href="/">
-          <span class="btn-icon">🌐</span> ওয়েবসাইট
-        </a>
-        <a id="download" class="btn secondary" href="/downloads/BuyNova.apk">
-          <span class="btn-icon">📥</span> অ্যাপ ডাউনলোড
-        </a>
-      </div>
-      <p class="status-note">
-        অ্যাপ ইনস্টল না থাকলে ওয়েবসাইট ব্যবহার করুন।
-        অ্যাপ ডাউনলোডের জন্য APK ফাইলটি উপলভ্য থাকতে হবে।
-      </p>
+      <a id="download" class="btn secondary" href="/downloads/BuyNova.apk">
+        <span class="btn-icon">📥</span> অ্যাপ ডাউনলোড
+      </a>
     </div>
+
+    <p class="status-note">
+      অ্যাপ ইনস্টল না থাকলে ওয়েবসাইট ব্যবহার করুন।
+      অ্যাপ ডাউনলোডের জন্য APK ফাইলটি সার্ভারে থাকতে হবে।
+    </p>
   </section>
 
   <footer class="footer">
-    <span style="color:#ff3045">♥</span>
+    <span class="footer-heart">♥</span>
     <strong>BuyNova</strong> — আপনার অনলাইন শপিং পার্টনার
   </footer>
 </div>
 
 <script>
-const PROJECT_ID = 'buynova-cc5dd';
-const REGION = 'asia-northeast3';
-const PACKAGE = 'com.buynova.app';
-const FUNCTION_URL =
-  'https://' + REGION + '-' + PROJECT_ID +
-  '.cloudfunctions.net/getResellerListing';
+(function(){
+  var PROJECT_ID = 'buynova-cc5dd';
+  var REGION = 'asia-northeast3';
+  var PACKAGE = 'com.buynova.app';
+  var WEBSITE_URL = location.origin + '/';
+  var DOWNLOAD_URL = location.origin + '/downloads/BuyNova.apk';
+  var FUNCTION_URL = 'https://' + REGION + '-' + PROJECT_ID +
+    '.cloudfunctions.net/getResellerListing';
 
-const WEBSITE_URL = location.origin + '/';
-const DOWNLOAD_URL = location.origin + '/downloads/BuyNova.apk';
+  function $(id){ return document.getElementById(id); }
 
-const $ = id => document.getElementById(id);
+  var parts = location.pathname.split('/').filter(Boolean);
+  var listingId = null;
 
-function showMessage(message) {
-  $('state').textContent = message;
-  $('state').hidden = false;
-}
-
-function getListingId() {
-  const parts = location.pathname.split('/').filter(Boolean);
-  if (parts[0] !== 'r' || !parts[1]) return null;
-
-  try {
-    return decodeURIComponent(parts[1]);
-  } catch (_) {
-    return null;
+  if(parts[0] === 'r' && parts[1]){
+    try { listingId = decodeURIComponent(parts[1]); }
+    catch(e){ listingId = null; }
   }
-}
 
-function setupButtons(listingId) {
-  const productUrl = listingId
+  // Three buttons stay visible even when product loading fails.
+  $('website').href = listingId
     ? location.origin + '/r/' + encodeURIComponent(listingId)
     : WEBSITE_URL;
 
-  $('website').href = productUrl;
-  $('download').href = DOWNLOAD_URL;
-
-  // Android intent: অ্যাপটি এই লিংক সমর্থন করলে সেটি খুলবে।
-  // না হলে একই পণ্যের ওয়েব পেজে ফিরে আসবে।
-  const fallback = encodeURIComponent(productUrl);
   $('openApp').href = listingId
     ? 'intent://r/' + encodeURIComponent(listingId) +
       '#Intent;scheme=buynova;package=' + PACKAGE +
-      ';S.browser_fallback_url=' + fallback + ';end'
-    : productUrl;
-}
+      ';S.browser_fallback_url=' +
+      encodeURIComponent(location.origin + '/r/' + encodeURIComponent(listingId)) +
+      ';end'
+    : 'intent:#Intent;package=' + PACKAGE +
+      ';S.browser_fallback_url=' + encodeURIComponent(WEBSITE_URL) + ';end';
 
-function displayListing(listing) {
-  const name = listing.name || listing.title || 'BuyNova Product';
-  const price = listing.price ?? listing.sellingPrice ?? '';
-  const images = Array.isArray(listing.images) ? listing.images : [];
-  const image = images[0] || listing.imageUrl || listing.image || '';
+  $('download').href = DOWNLOAD_URL;
 
-  $('name').textContent = name;
-  $('price').textContent = price !== ''
-    ? '৳' + Number(price).toLocaleString('en-BD')
-    : 'দাম জানতে যোগাযোগ করুন';
-  $('desc').textContent = listing.description || 'এই পণ্যের বিবরণ এখনো যোগ করা হয়নি।';
-
-  const img = $('img');
-  const fallback = $('imageFallback');
-
-  if (typeof image === 'string' && /^https:\/\/\S+/i.test(image)) {
-    img.onload = () => {
-      img.hidden = false;
-      fallback.hidden = true;
-    };
-    img.onerror = () => {
-      img.hidden = true;
-      fallback.hidden = false;
-    };
-    img.src = image;
+  function showError(message){
+    $('state').textContent = message;
+    $('state').hidden = false;
   }
 
-  document.title = name + ' | BuyNova';
-  $('card').hidden = false;
-  $('state').hidden = true;
-}
+  function showListing(l){
+    var name = l.name || l.title || 'BuyNova Product';
+    var price = l.price != null ? l.price : '';
+    var image = (Array.isArray(l.images) && l.images[0]) || l.imageUrl || '';
+    $('name').textContent = name;
+    $('price').textContent = price !== ''
+      ? '৳' + Number(price).toLocaleString('en-BD')
+      : 'দাম জানতে যোগাযোগ করুন';
+    $('desc').textContent = l.description || 'পণ্যের বিবরণ পাওয়া যায়নি।';
 
-async function loadProduct(listingId) {
-  try {
-    const response = await fetch(FUNCTION_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data: { listingId } })
+    if(typeof image === 'string' && /^https:\/\/\S+/i.test(image)){
+      $('img').onload = function(){
+        $('img').hidden = false;
+        $('imageFallback').hidden = true;
+      };
+      $('img').onerror = function(){
+        $('img').hidden = true;
+        $('imageFallback').hidden = false;
+      };
+      $('img').src = image;
+    }
+
+    document.title = name + ' | BuyNova';
+    $('card').hidden = false;
+    $('state').hidden = true;
+  }
+
+  if(!listingId){
+    $('home').hidden = false;
+    return;
+  }
+
+  $('state').textContent = 'পণ্যের তথ্য লোড হচ্ছে...';
+  $('state').hidden = false;
+
+  fetch(FUNCTION_URL,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({data:{listingId:listingId}})
+  })
+  .then(function(response){
+    return response.json().then(function(data){
+      if(!response.ok || data.error) {
+        throw new Error(data.error && data.error.message
+          ? data.error.message : 'পণ্য লোড করা যায়নি।');
+      }
+      return data;
     });
-
-    const result = await response.json();
-
-    if (!response.ok || result.error) {
-      const message = result.error?.message || '';
-      throw new Error(message || 'পণ্যের তথ্য পাওয়া যায়নি।');
+  })
+  .then(function(data){
+    var listing = data && data.result && data.result.listing;
+    if(!listing){
+      showError('পণ্যটি পাওয়া যায়নি অথবা লিংকটি সঠিক নয়।');
+      return;
     }
-
-    // Firebase Callable Function returns { result: { listing: ... } }
-    const listing = result.result?.listing;
-
-    if (!listing) {
-      throw new Error('পণ্যের তথ্য পাওয়া যায়নি।');
-    }
-
-    displayListing(listing);
-  } catch (error) {
-    console.error('BuyNova product loading error:', error);
-    showMessage(
-      'পণ্যের তথ্য এখন লোড করা যাচ্ছে না। লিংকটি সঠিক কি না এবং Firebase Function কাজ করছে কি না যাচাই করুন।'
-    );
-  }
-}
-
-const listingId = getListingId();
-setupButtons(listingId);
-
-if (listingId) {
-  $('home').hidden = true;
-  loadProduct(listingId);
-} else {
-  $('home').hidden = false;
-  $('card').hidden = true;
-  $('state').hidden = true;
-}
+    showListing(listing);
+  })
+  .catch(function(error){
+    console.error('BuyNova listing error:',error);
+    showError('পণ্য লোড করা যায়নি। Firebase Function ও প্রোডাক্ট লিংক যাচাই করুন।');
+  });
+})();
 </script>
 </body>
 </html>
