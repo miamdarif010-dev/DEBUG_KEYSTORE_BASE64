@@ -19,10 +19,17 @@
   .primary { background:var(--brand); color:#fff; }
   .secondary { background:#fff; color:var(--brand); border:2px solid var(--brand); }
   .msg { text-align:center; padding:40px 16px; color:#666; }
+  .home { text-align:center; padding:48px 16px 16px; }
+  .hero { font-size:40px; color:var(--brand); margin:0 0 8px; }
+  .tag { font-size:16px; color:#555; margin:0; }
 </style>
 </head>
 <body>
 <div class="wrap">
+  <div id="home" class="home" hidden>
+    <h1 class="hero">BuyNova</h1>
+    <p class="tag">BuyNova অ্যাপে সহজে কেনাকাটা করুন</p>
+  </div>
   <div id="state" class="msg">লোড হচ্ছে...</div>
   <div id="card" class="card" hidden>
     <img id="img" class="img" alt="">
@@ -54,15 +61,19 @@ var listingId = (parts[0] === 'r' && parts[1]) ? decodeURIComponent(parts[1]) : 
 function $(id) { return document.getElementById(id); }
 function fail(text) { $('state').textContent = text; }
 
-$('website').href = WEBSITE_URL;
-$('website').hidden = false;
-
 if (!listingId) {
-  // No product link: show no error, only the download button.
+  // Home page (no product link): intro + open app + download.
   $('state').hidden = true;
+  $('home').hidden = false;
+  $('openApp').href = 'intent:#Intent;package=' + PACKAGE +
+    ';S.browser_fallback_url=' + encodeURIComponent(DOWNLOAD_URL) + ';end';
+  $('openApp').hidden = false;
   $('download').href = DOWNLOAD_URL;
   $('download').hidden = false;
 } else {
+  // Product page: also show a link to the website home page.
+  $('website').href = WEBSITE_URL;
+  $('website').hidden = false;
   var appLink = 'intent://r/' + encodeURIComponent(listingId) +
     '#Intent;scheme=buynova;package=' + PACKAGE +
     ';S.browser_fallback_url=' + encodeURIComponent(DOWNLOAD_URL) + ';end';
