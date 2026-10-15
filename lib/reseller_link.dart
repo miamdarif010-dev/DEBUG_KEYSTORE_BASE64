@@ -9,7 +9,7 @@ import 'package:share_plus/share_plus.dart';
 import 'product_details_page.dart';
 
 /// CHANGE THIS to your Firebase Hosting domain, e.g. buynova-12345.web.app
-const String kLinkHost = 'YOUR_PROJECT_ID.web.app';
+const String kLinkHost = 'buynova-cc5dd.web.app';
 
 const String _kFunctionsRegion = 'asia-northeast3';
 
