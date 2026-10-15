@@ -5,334 +5,122 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#ff3045">
-<title>BuyNova</title>
+<title>BuyNova | অনলাইন শপিং</title>
 
 <style>
 :root {
-  --brand: #ff3045;
-  --brand-dark: #e91d35;
-  --bg: #fff5f8;
-  --text: #202027;
-  --muted: #686873;
-  --white: #ffffff;
-  --pink: #ffe8ee;
-  --border: #ffd0da;
-  --shadow: 0 10px 35px rgba(125, 35, 55, .10);
+  --brand:#ff3045;
+  --dark:#e91d35;
+  --bg:#fff5f8;
+  --text:#202027;
+  --muted:#686873;
+  --pink:#ffe8ee;
+  --border:#ffd0da;
 }
-* { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
-body {
-  margin: 0;
-  font-family: system-ui, -apple-system, "Noto Sans Bengali",
-               "Noto Sans", sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  -webkit-font-smoothing: antialiased;
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;
+  font-family:system-ui,-apple-system,"Noto Sans Bengali",
+  "Noto Sans",sans-serif;
+  background:var(--bg);
+  color:var(--text);
 }
-a { -webkit-tap-highlight-color: transparent; }
-.wrap {
-  width: 100%;
-  max-width: 760px;
-  margin: 0 auto;
-  padding: 18px;
+.wrap{max-width:760px;margin:auto;padding:18px}
+.brand-header{display:flex;align-items:center;gap:12px;margin:5px 0 24px}
+.brand-logo{
+  width:54px;height:54px;display:grid;place-items:center;
+  border-radius:17px;color:#fff;font-size:28px;
+  background:linear-gradient(145deg,#ff596b,#ed1731);
+  box-shadow:0 7px 18px #ff304533
 }
-.brand-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 5px 0 28px;
+.brand-name{margin:0;font-size:30px;font-weight:900;letter-spacing:-1px}
+.brand-name span,.hero span{color:var(--brand)}
+.brand-caption{margin:4px 0 0;color:var(--muted);font-size:12px}
+.home{
+  padding:27px 21px;margin-bottom:22px;border-radius:26px;
+  background:radial-gradient(circle at 100% 0%,#ffdce5,transparent 45%),
+  linear-gradient(145deg,#fff,#fff0f5);
+  box-shadow:0 10px 35px #7d23351a
 }
-.brand-logo {
-  width: 53px;
-  height: 53px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 17px;
-  color: #fff;
-  background: linear-gradient(145deg, #ff596b, #ed1731);
-  box-shadow: 0 7px 18px rgba(255, 48, 69, .22);
-  font-size: 29px;
-  font-weight: 800;
+.hero-badge{
+  display:inline-block;background:#ffe0e8;color:#d91e37;
+  padding:9px 13px;border-radius:30px;font-size:12px;font-weight:750
 }
-.brand-name {
-  margin: 0;
-  font-size: 30px;
-  line-height: 1.15;
-  letter-spacing: -1.2px;
-  font-weight: 850;
+.hero{font-size:clamp(36px,8vw,54px);line-height:1.15;margin:16px 0 10px;font-weight:900}
+.tag{font-size:15px;line-height:1.9;color:#4d4b54;margin:0}
+.hero-benefits{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:23px}
+.benefit{text-align:center;font-size:11px;font-weight:650}
+.benefit-icon{
+  width:46px;height:46px;display:grid;place-items:center;
+  margin:0 auto 7px;border-radius:15px;background:#ffe4eb;
+  font-size:22px
 }
-.brand-name span, .hero span { color: var(--brand); }
-.brand-caption {
-  margin: 5px 0 0;
-  color: var(--muted);
-  font-size: 12px;
+.card{
+  overflow:hidden;background:#fff;border:1px solid #fff;
+  border-radius:25px;box-shadow:0 10px 35px #7d23351a
 }
-.home {
-  position: relative;
-  overflow: hidden;
-  padding: 26px 21px 24px;
-  margin: 0 -2px 25px;
-  border: 1px solid rgba(255, 255, 255, .9);
-  border-radius: 28px;
-  background:
-    radial-gradient(circle at 100% 0%, #ffdce5 0, transparent 40%),
-    linear-gradient(145deg, #ffffff, #fff0f5);
-  box-shadow: var(--shadow);
+.product-layout{display:block}
+.product-top{padding:15px}
+.img-frame{position:relative;overflow:hidden;border-radius:19px;background:#f3edf3}
+.img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block}
+.product-badge{
+  position:absolute;top:12px;left:12px;background:var(--brand);
+  color:white;border-radius:30px;padding:8px 12px;font-size:12px;font-weight:750
 }
-.hero {
-  margin: 0 0 12px;
-  font-size: clamp(36px, 8vw, 54px);
-  line-height: 1.12;
-  font-weight: 900;
-  letter-spacing: -1.8px;
+.product-content{padding:4px 19px 20px}
+.product-label{
+  display:inline-block;background:#fff0f4;color:#dc243c;
+  border-radius:8px;padding:6px 10px;font-size:11px;font-weight:750
 }
-.tag {
-  max-width: 450px;
-  margin: 0;
-  color: #4d4b54;
-  font-size: 17px;
-  line-height: 1.8;
+h1.product-name{font-size:23px;line-height:1.5;margin:10px 0;overflow-wrap:anywhere}
+.price{font-size:30px;color:var(--brand);font-weight:900;margin:0 0 15px;overflow-wrap:anywhere}
+.feature-list{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:22px}
+.feature{background:#fff0f4;padding:8px 10px;border-radius:25px;font-size:11px}
+.description-heading{font-weight:850;margin-bottom:8px}
+.desc{white-space:pre-line;overflow-wrap:anywhere;color:#5b5962;font-size:14px;line-height:1.9;margin:0}
+.actions{
+  padding:0 16px 18px;display:grid;gap:11px
 }
-.hero-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 9px 13px;
-  margin-bottom: 17px;
-  border-radius: 30px;
-  background: #ffe0e8;
-  color: #d91e37;
-  font-size: 12px;
-  font-weight: 750;
+.actions-title{font-size:15px;font-weight:850;margin:0 0 2px}
+.btn{
+  display:flex;align-items:center;justify-content:center;gap:9px;
+  width:100%;min-height:53px;padding:12px 14px;
+  border:1.5px solid transparent;border-radius:15px;
+  text-align:center;font-family:inherit;font-size:14px;
+  font-weight:800;line-height:1.5;text-decoration:none;
+  cursor:pointer;overflow-wrap:anywhere
 }
-.hero-benefits {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 9px;
-  margin-top: 25px;
+.btn:active{transform:scale(.985)}
+.primary{color:white;background:linear-gradient(110deg,#ff3449,#ed1935);box-shadow:0 7px 18px #ff304533}
+.secondary{color:var(--brand);border-color:#ff5367;background:#fff}
+.btn-icon{font-size:20px}
+.actions-bottom{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.msg{
+  padding:20px 16px;margin:12px 0 18px;text-align:center;
+  border-radius:18px;background:#fff;color:var(--muted);
+  font-size:14px;line-height:1.8
 }
-.benefit { text-align: center; min-width: 0; }
-.benefit-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 49px;
-  height: 49px;
-  margin: 0 auto 8px;
-  border-radius: 16px;
-  background: #ffe4eb;
-  color: var(--brand);
-  font-size: 23px;
+.msg[hidden]{display:none}
+.footer{text-align:center;color:#77717a;font-size:12px;line-height:1.8;padding:25px 8px}
+.footer strong{color:#29252c}
+.status-note{font-size:12px;color:#777;line-height:1.7;margin:0}
+@media(min-width:560px){
+  .wrap{padding:25px}
+  .home{padding:35px 30px}
+  .product-layout{display:grid;grid-template-columns:.88fr 1.12fr;gap:10px;align-items:start}
+  .product-top{padding:18px 0 18px 18px}
+  .product-content{padding:24px 20px 18px 5px}
+  .actions{padding:0 18px 20px}
+  h1.product-name{font-size:25px}
 }
-.benefit-text {
-  font-size: 11px;
-  line-height: 1.5;
-  color: #45434b;
-  font-weight: 650;
-}
-.card {
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, .95);
-  border-radius: 26px;
-  background: var(--white);
-  box-shadow: var(--shadow);
-}
-.product-top { padding: 16px; }
-.img-frame {
-  position: relative;
-  overflow: hidden;
-  width: 100%;
-  border-radius: 20px;
-  background: linear-gradient(135deg, #f5eaf0, #eeeaf5);
-}
-.img {
-  display: block;
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  object-fit: cover;
-  background: #f2edf2;
-}
-.product-badge {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  border-radius: 30px;
-  background: var(--brand);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 750;
-  box-shadow: 0 4px 12px rgba(255, 48, 69, .2);
-}
-.product-content { padding: 5px 19px 21px; }
-.product-label {
-  display: inline-block;
-  margin-bottom: 9px;
-  padding: 6px 10px;
-  border-radius: 8px;
-  background: #fff0f4;
-  color: #dc243c;
-  font-size: 11px;
-  font-weight: 750;
-}
-h1 {
-  font-size: 22px;
-  line-height: 1.45;
-  margin: 0 0 10px;
-  overflow-wrap: anywhere;
-}
-.price {
-  margin: 0 0 15px;
-  color: var(--brand);
-  font-size: 30px;
-  line-height: 1.3;
-  font-weight: 850;
-  letter-spacing: -.5px;
-  overflow-wrap: anywhere;
-}
-.feature-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 0 0 23px;
-}
-.feature {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 11px;
-  border-radius: 30px;
-  background: #fff0f4;
-  color: #4c4146;
-  font-size: 11px;
-  font-weight: 650;
-}
-.feature span { color: var(--brand); }
-.description-heading {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin-bottom: 9px;
-  font-size: 16px;
-  font-weight: 800;
-}
-.description-heading::before {
-  content: "";
-  width: 4px;
-  height: 21px;
-  flex-shrink: 0;
-  border-radius: 5px;
-  background: var(--brand);
-}
-.desc {
-  margin: 0;
-  color: #5b5962;
-  font-size: 14px;
-  line-height: 1.9;
-  overflow-wrap: anywhere;
-  white-space: pre-line;
-}
-.btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 54px;
-  padding: 13px 16px;
-  border: 1.5px solid transparent;
-  border-radius: 15px;
-  text-align: center;
-  font-family: inherit;
-  font-size: 15px;
-  font-weight: 750;
-  line-height: 1.5;
-  text-decoration: none;
-  cursor: pointer;
-  transition: transform .18s ease, box-shadow .18s ease;
-  overflow-wrap: anywhere;
-}
-.btn:active { transform: scale(.98); }
-.primary {
-  color: #fff;
-  background: linear-gradient(110deg, #ff3449, #ed1935);
-  box-shadow: 0 7px 18px rgba(255, 48, 69, .20);
-}
-.secondary {
-  color: var(--brand);
-  border-color: #ff5367;
-  background: #fff;
-}
-.btn-icon { font-size: 21px; line-height: 1; }
-.actions {
-  display: grid;
-  gap: 11px;
-  padding: 0 16px 18px;
-}
-.actions .btn { margin: 0; }
-.actions-bottom {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-.msg {
-  text-align: center;
-  padding: 35px 18px;
-  margin: 12px 0 20px;
-  border-radius: 20px;
-  background: #fff;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1.8;
-  box-shadow: 0 4px 18px rgba(50, 20, 40, .05);
-}
-.msg:not([hidden]) { animation: fade-in .3s ease; }
-.footer {
-  padding: 27px 8px 15px;
-  text-align: center;
-  color: #77717a;
-  font-size: 12px;
-  line-height: 1.8;
-}
-.footer-heart {
-  color: var(--brand);
-  font-size: 17px;
-  margin-right: 5px;
-}
-.footer strong { color: #29252c; }
-@media (min-width: 560px) {
-  .wrap { padding: 25px; }
-  .home { padding: 35px 30px; }
-  .product-layout {
-    display: grid;
-    grid-template-columns: .88fr 1.12fr;
-    align-items: start;
-    gap: 23px;
-  }
-  .product-top { padding: 18px 0 18px 18px; }
-  .product-content { padding: 23px 20px 18px 0; }
-  .product-content h1 { font-size: 25px; }
-  .product-content .price { font-size: 32px; }
-  .actions { padding: 0 18px 20px; }
-}
-@media (max-width: 360px) {
-  .wrap { padding: 12px; }
-  .brand-name { font-size: 26px; }
-  .home { padding: 22px 15px; }
-  .hero-benefits { gap: 4px; }
-  .benefit-text { font-size: 10px; }
-  .product-content { padding-right: 14px; padding-left: 14px; }
-  .actions-bottom { grid-template-columns: 1fr; }
-  .btn { font-size: 14px; }
-}
-@keyframes fade-in {
-  from { opacity: 0; transform: translateY(5px); }
-  to { opacity: 1; transform: translateY(0); }
+@media(max-width:360px){
+  .wrap{padding:12px}
+  .brand-name{font-size:26px}
+  .home{padding:22px 15px}
+  .hero-benefits{gap:4px}
+  .benefit{font-size:10px}
+  .actions-bottom{grid-template-columns:1fr}
 }
 </style>
 </head>
@@ -341,235 +129,209 @@ h1 {
 <div class="wrap">
 
   <header class="brand-header">
-    <div class="brand-logo" aria-hidden="true">🛍</div>
+    <div class="brand-logo" aria-hidden="true">🛍️</div>
     <div>
       <div class="brand-name">Buy<span>Nova</span></div>
       <p class="brand-caption">আপনার অনলাইন শপিং পার্টনার</p>
     </div>
   </header>
 
-  <div id="home" class="home" hidden>
-    <div class="hero-badge"><span>🚀</span> স্মার্ট কেনাকাটার সঙ্গী</div>
+  <section id="home" class="home" hidden>
+    <div class="hero-badge">🚀 স্মার্ট কেনাকাটার সঙ্গী</div>
     <h1 class="hero">Buy<span>Nova</span></h1>
     <p class="tag">
-      BuyNova অ্যাপে সহজে কেনাকাটা করুন।
-      পছন্দের পণ্য খুঁজুন, দেখুন এবং কেনাকাটা উপভোগ করুন।
+      পছন্দের পণ্য খুঁজুন, পণ্যের বিস্তারিত দেখুন এবং
+      BuyNova-তে সহজে কেনাকাটা করুন।
     </p>
     <div class="hero-benefits">
-      <div class="benefit">
-        <div class="benefit-icon">🛒</div>
-        <div class="benefit-text">সহজ কেনাকাটা</div>
-      </div>
-      <div class="benefit">
-        <div class="benefit-icon">🛡️</div>
-        <div class="benefit-text">নিরাপদ লেনদেন</div>
-      </div>
-      <div class="benefit">
-        <div class="benefit-icon">⚡</div>
-        <div class="benefit-text">দ্রুত অর্ডার</div>
-      </div>
-      <div class="benefit">
-        <div class="benefit-icon">🎧</div>
-        <div class="benefit-text">সহজ সাপোর্ট</div>
-      </div>
+      <div class="benefit"><div class="benefit-icon">🛒</div>সহজ কেনাকাটা</div>
+      <div class="benefit"><div class="benefit-icon">🛡️</div>নিরাপদ লেনদেন</div>
+      <div class="benefit"><div class="benefit-icon">⚡</div>দ্রুত অর্ডার</div>
+      <div class="benefit"><div class="benefit-icon">🎧</div>সহজ সাপোর্ট</div>
     </div>
-  </div>
+  </section>
 
-  <div id="state" class="msg">লোড হচ্ছে...</div>
+  <div id="state" class="msg">পণ্যের তথ্য লোড হচ্ছে...</div>
 
-  <div id="card" class="card" hidden>
+  <section id="card" class="card" hidden>
     <div class="product-layout">
       <div class="product-top">
         <div class="img-frame">
-          <img id="img" class="img" alt="BuyNova পণ্য">
-          <div class="product-badge"><span>✦</span> BuyNova Product</div>
+          <img id="img" class="img" alt="BuyNova পণ্য" hidden>
+          <div id="imageFallback" style="padding:65px 10px;text-align:center;color:#888">
+            🛍️ BuyNova Product
+          </div>
+          <div class="product-badge">✦ BuyNova Product</div>
         </div>
       </div>
-
       <div class="product-content">
         <div class="product-label">✨ আপনার পছন্দের পণ্য</div>
-        <h1 id="name"></h1>
+        <h1 id="name" class="product-name">পণ্যের নাম</h1>
         <p id="price" class="price"></p>
-
         <div class="feature-list">
-          <div class="feature"><span>✓</span> মানসম্মত পণ্য</div>
-          <div class="feature"><span>♡</span> পছন্দের কালেকশন</div>
-          <div class="feature"><span>✦</span> BuyNova</div>
+          <div class="feature">✓ মানসম্মত পণ্য</div>
+          <div class="feature">♡ পছন্দের কালেকশন</div>
+          <div class="feature">✦ BuyNova</div>
         </div>
-
         <div class="description-heading">পণ্যের বিবরণ</div>
-        <p id="desc" class="desc"></p>
+        <p id="desc" class="desc">পণ্যের বিবরণ লোড হচ্ছে...</p>
       </div>
     </div>
+  </section>
 
+  <!-- তিনটি অপশন সবসময় দৃশ্যমান -->
+  <section class="card" style="margin-top:18px">
     <div class="actions">
-      <a id="openApp" class="btn primary" href="#" hidden>
-        <span class="btn-icon">🛒</span> অ্যাপে খুলুন
-        <span aria-hidden="true">›</span>
+      <p class="actions-title">BuyNova-তে কেনাকাটা করুন</p>
+
+      <a id="openApp" class="btn primary" href="#"
+         aria-label="BuyNova অ্যাপে খুলুন">
+        <span class="btn-icon">🛒</span>
+        অ্যাপে খুলুন <span aria-hidden="true">›</span>
       </a>
+
       <div class="actions-bottom">
-        <a id="website" class="btn secondary" href="#" hidden>
-          <span class="btn-icon">◎</span> ওয়েবসাইট
+        <a id="website" class="btn secondary" href="/">
+          <span class="btn-icon">🌐</span> ওয়েবসাইট
         </a>
-        <a id="download" class="btn secondary" href="#" hidden>
-          <span class="btn-icon">↓</span> অ্যাপ ডাউনলোড
+        <a id="download" class="btn secondary" href="/downloads/BuyNova.apk">
+          <span class="btn-icon">📥</span> অ্যাপ ডাউনলোড
         </a>
       </div>
+      <p class="status-note">
+        অ্যাপ ইনস্টল না থাকলে ওয়েবসাইট ব্যবহার করুন।
+        অ্যাপ ডাউনলোডের জন্য APK ফাইলটি উপলভ্য থাকতে হবে।
+      </p>
     </div>
-  </div>
+  </section>
 
   <footer class="footer">
-    <span class="footer-heart">♥</span>
+    <span style="color:#ff3045">♥</span>
     <strong>BuyNova</strong> — আপনার অনলাইন শপিং পার্টনার
   </footer>
 </div>
 
-<!-- Firebase SDK -->
-<script type="module">
-import { initializeApp, getApps } from
-  'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
-
-import { getFunctions, httpsCallable } from
-  'https://www.gstatic.com/firebasejs/11.10.0/firebase-functions.js';
-
-// ===== ORIGINAL CONFIGURATION =====
+<script>
 const PROJECT_ID = 'buynova-cc5dd';
 const REGION = 'asia-northeast3';
 const PACKAGE = 'com.buynova.app';
-const DOWNLOAD_URL =
-  'https://play.google.com/store/apps/details?id=' + PACKAGE;
-const CURRENCY = '৳';
-const WEBSITE_URL = 'https://' + PROJECT_ID + '.web.app/';
+const FUNCTION_URL =
+  'https://' + REGION + '-' + PROJECT_ID +
+  '.cloudfunctions.net/getResellerListing';
 
-// Firebase client configuration.
-// Firebase project ID must match the deployed Cloud Function.
-const firebaseConfig = {
-  projectId: PROJECT_ID,
-  appId: '1:1068243200000:web:buynova-cc5dd',
-  apiKey: 'REPLACE_WITH_YOUR_WEB_API_KEY',
-  authDomain: PROJECT_ID + '.firebaseapp.com'
-};
+const WEBSITE_URL = location.origin + '/';
+const DOWNLOAD_URL = location.origin + '/downloads/BuyNova.apk';
 
-const $ = (id) => document.getElementById(id);
+const $ = id => document.getElementById(id);
 
-function fail(message) {
+function showMessage(message) {
   $('state').textContent = message;
   $('state').hidden = false;
-  $('card').hidden = true;
 }
 
-function showHome() {
-  $('state').hidden = true;
-  $('home').hidden = false;
+function getListingId() {
+  const parts = location.pathname.split('/').filter(Boolean);
+  if (parts[0] !== 'r' || !parts[1]) return null;
 
-  $('openApp').href = 'intent:#Intent;package=' + PACKAGE +
-    ';S.browser_fallback_url=' + encodeURIComponent(DOWNLOAD_URL) + ';end';
-  $('openApp').hidden = false;
+  try {
+    return decodeURIComponent(parts[1]);
+  } catch (_) {
+    return null;
+  }
+}
 
+function setupButtons(listingId) {
+  const productUrl = listingId
+    ? location.origin + '/r/' + encodeURIComponent(listingId)
+    : WEBSITE_URL;
+
+  $('website').href = productUrl;
   $('download').href = DOWNLOAD_URL;
-  $('download').hidden = false;
+
+  // Android intent: অ্যাপটি এই লিংক সমর্থন করলে সেটি খুলবে।
+  // না হলে একই পণ্যের ওয়েব পেজে ফিরে আসবে।
+  const fallback = encodeURIComponent(productUrl);
+  $('openApp').href = listingId
+    ? 'intent://r/' + encodeURIComponent(listingId) +
+      '#Intent;scheme=buynova;package=' + PACKAGE +
+      ';S.browser_fallback_url=' + fallback + ';end'
+    : productUrl;
 }
 
-function showProductActions(listingId) {
-  $('website').href = WEBSITE_URL;
-  $('website').hidden = false;
-
-  const appLink = 'intent://r/' + encodeURIComponent(listingId) +
-    '#Intent;scheme=buynova;package=' + PACKAGE +
-    ';S.browser_fallback_url=' + encodeURIComponent(DOWNLOAD_URL) + ';end';
-
-  $('openApp').href = appLink;
-  $('openApp').hidden = false;
-
-  $('download').href = DOWNLOAD_URL;
-  $('download').hidden = false;
-}
-
-function displayListing(l) {
-  const name = l.name || l.title || l.productName || 'BuyNova';
-
-  const price = l.price != null
-    ? l.price
-    : (l.sellingPrice != null ? l.sellingPrice : '');
-
-  const image = (Array.isArray(l.images) && l.images[0]) ||
-    l.imageUrl || l.image || '';
+function displayListing(listing) {
+  const name = listing.name || listing.title || 'BuyNova Product';
+  const price = listing.price ?? listing.sellingPrice ?? '';
+  const images = Array.isArray(listing.images) ? listing.images : [];
+  const image = images[0] || listing.imageUrl || listing.image || '';
 
   $('name').textContent = name;
   $('price').textContent = price !== ''
-    ? CURRENCY + Number(price).toLocaleString('en-BD')
-    : '';
+    ? '৳' + Number(price).toLocaleString('en-BD')
+    : 'দাম জানতে যোগাযোগ করুন';
+  $('desc').textContent = listing.description || 'এই পণ্যের বিবরণ এখনো যোগ করা হয়নি।';
 
-  $('desc').textContent = l.description || '';
-
-  const imageElement = $('img');
-  imageElement.hidden = true;
-  imageElement.removeAttribute('src');
+  const img = $('img');
+  const fallback = $('imageFallback');
 
   if (typeof image === 'string' && /^https:\/\/\S+/i.test(image)) {
-    imageElement.onload = () => { imageElement.hidden = false; };
-    imageElement.onerror = () => { imageElement.hidden = true; };
-    imageElement.src = image;
+    img.onload = () => {
+      img.hidden = false;
+      fallback.hidden = true;
+    };
+    img.onerror = () => {
+      img.hidden = true;
+      fallback.hidden = false;
+    };
+    img.src = image;
   }
 
   document.title = name + ' | BuyNova';
-  $('state').hidden = true;
   $('card').hidden = false;
+  $('state').hidden = true;
 }
 
-async function main() {
-  const parts = location.pathname.split('/').filter(Boolean);
-  const listingId = (parts[0] === 'r' && parts[1])
-    ? decodeURIComponent(parts[1])
-    : null;
-
-  if (!listingId) {
-    showHome();
-    return;
-  }
-
-  showProductActions(listingId);
-
-  if (firebaseConfig.apiKey === 'REPLACE_WITH_YOUR_WEB_API_KEY' ||
-      !firebaseConfig.appId) {
-    fail('Firebase Web API configuration সেট করা হয়নি।');
-    return;
-  }
-
+async function loadProduct(listingId) {
   try {
-    const app = getApps().length
-      ? getApps()[0]
-      : initializeApp(firebaseConfig);
+    const response = await fetch(FUNCTION_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: { listingId } })
+    });
 
-    const functions = getFunctions(app, REGION);
-    const getResellerListing = httpsCallable(
-      functions,
-      'getResellerListing'
-    );
+    const result = await response.json();
 
-    const response = await getResellerListing({ listingId });
-    const listing = response?.data?.listing;
+    if (!response.ok || result.error) {
+      const message = result.error?.message || '';
+      throw new Error(message || 'পণ্যের তথ্য পাওয়া যায়নি।');
+    }
+
+    // Firebase Callable Function returns { result: { listing: ... } }
+    const listing = result.result?.listing;
 
     if (!listing) {
-      fail('পণ্যটি পাওয়া যায়নি।');
-      return;
+      throw new Error('পণ্যের তথ্য পাওয়া যায়নি।');
     }
 
     displayListing(listing);
   } catch (error) {
-    console.error('BuyNova listing error:', error);
-
-    if (error?.code === 'functions/not-found') {
-      fail('পণ্যের লিংকটি সঠিক নয় অথবা পণ্যটি পাওয়া যায়নি।');
-    } else if (error?.code === 'functions/failed-precondition') {
-      fail('পণ্যটি বর্তমানে উপলব্ধ নয়।');
-    } else {
-      fail('পণ্যটি লোড করা যায়নি। Firebase configuration ও Function deployment যাচাই করুন।');
-    }
+    console.error('BuyNova product loading error:', error);
+    showMessage(
+      'পণ্যের তথ্য এখন লোড করা যাচ্ছে না। লিংকটি সঠিক কি না এবং Firebase Function কাজ করছে কি না যাচাই করুন।'
+    );
   }
 }
 
-main();
+const listingId = getListingId();
+setupButtons(listingId);
+
+if (listingId) {
+  $('home').hidden = true;
+  loadProduct(listingId);
+} else {
+  $('home').hidden = false;
+  $('card').hidden = true;
+  $('state').hidden = true;
+}
 </script>
 </body>
 </html>
