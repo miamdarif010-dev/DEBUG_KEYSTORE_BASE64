@@ -1,10 +1,15 @@
+
 [
   {
-    "relation": ["delegate_permission/common.handle_all_urls"],
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
     "target": {
       "namespace": "android_app",
-      "package_name": "YOUR.PACKAGE.NAME",
-      "sha256_cert_fingerprints": ["YOUR:SHA256:FINGERPRINT"]
+      "package_name": "com.buynova.app",
+      "sha256_cert_fingerprints": [
+        "73:34:3D:B1:0F:EC:86:95:6C:74:B8:D2:47:31:1B:8D:66:08:D5:82:A2:57:24:E6:55:9F:BC:79:5C:63:08:B2"
+      ]
     }
   }
 ]
