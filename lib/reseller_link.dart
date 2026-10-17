@@ -13,11 +13,23 @@ const String kLinkHost = 'buynova-cc5dd.web.app';
 
 const String _kFunctionsRegion = 'asia-northeast3';
 
+/// Parsed deep link. kind = 'r' (reseller listing) or 'p' (normal product).
+class ParsedLink {
+  final String kind;
+  final String id;
+
+  const ParsedLink(this.kind, this.id);
+}
+
 class ResellerLink {
   /// Web link for one reseller listing (reseller_products document id).
-  /// It opens the web page in the browser; the page has an "Open app" button.
   static String build(String listingId) {
     return 'https://$kLinkHost/r/${Uri.encodeComponent(listingId)}';
+  }
+
+  /// Web link for one normal product (products document id).
+  static String buildProduct(String productId) {
+    return 'https://$kLinkHost/p/${Uri.encodeComponent(productId)}';
   }
 
   /// Opens the phone share sheet (Messenger, WhatsApp, ...).
@@ -28,29 +40,34 @@ class ResellerLink {
     await Share.share('$productName\n${build(listingId)}');
   }
 
-  /// Accepts buynova://r/<listingId> (from the web page's "Open app" button)
-  /// and https://<kLinkHost>/r/<listingId>.
-  static String? parseListingId(Uri uri) {
+  /// Accepts:
+  ///  buynova://r/<id>  buynova://p/<id>
+  ///  https://<kLinkHost>/r/<id>  https://<kLinkHost>/p/<id>
+  static ParsedLink? parse(Uri uri) {
     final segments = uri.pathSegments;
 
     if (uri.scheme == 'buynova') {
-      if (uri.host == 'r' && segments.isNotEmpty && segments[0].isNotEmpty) {
-        return segments[0];
+      if ((uri.host == 'r' || uri.host == 'p') &&
+          segments.isNotEmpty &&
+          segments[0].isNotEmpty) {
+        return ParsedLink(uri.host, segments[0]);
       }
       return null;
     }
 
     if (uri.host != kLinkHost) return null;
 
-    if (segments.length >= 2 && segments[0] == 'r' && segments[1].isNotEmpty) {
-      return segments[1];
+    if (segments.length >= 2 &&
+        (segments[0] == 'r' || segments[0] == 'p') &&
+        segments[1].isNotEmpty) {
+      return ParsedLink(segments[0], segments[1]);
     }
 
     return null;
   }
 }
 
-/// Listens for opened links and shows the reseller product.
+/// Listens for opened links and shows the product.
 class ResellerLinkHandler {
   ResellerLinkHandler(this.navigatorKey);
 
@@ -85,35 +102,42 @@ class ResellerLinkHandler {
   }
 
   Future<void> _handle(Uri uri) async {
-    final id = ResellerLink.parseListingId(uri);
+    final link = ResellerLink.parse(uri);
 
-    if (id == null) return;
+    if (link == null) return;
 
     // The initial link can arrive twice (initial + stream).
+    final key = '${link.kind}:${link.id}';
     final now = DateTime.now();
 
-    if (_lastId == id &&
+    if (_lastId == key &&
         _lastTime != null &&
         now.difference(_lastTime!).inSeconds < 4) {
       return;
     }
 
-    _lastId = id;
+    _lastId = key;
     _lastTime = now;
 
-    await _open(id);
+    await _open(link);
   }
 
-  Future<void> _open(String listingId) async {
+  Future<void> _open(ParsedLink link) async {
     final navigator = navigatorKey.currentState;
     final context = navigatorKey.currentContext;
 
     if (navigator == null || context == null) return;
 
     try {
+      final isProduct = link.kind == 'p';
+
       final result = await FirebaseFunctions.instanceFor(
         region: _kFunctionsRegion,
-      ).httpsCallable('getResellerListing').call({'listingId': listingId});
+      )
+          .httpsCallable(isProduct ? 'getProductListing' : 'getResellerListing')
+          .call(
+            isProduct ? {'productId': link.id} : {'listingId': link.id},
+          );
 
       // Convert to plain Dart maps/lists.
       final json = jsonDecode(jsonEncode(result.data)) as Map<String, dynamic>;
@@ -123,7 +147,7 @@ class ResellerLinkHandler {
       navigator.push(
         MaterialPageRoute(
           builder: (_) => ProductDetailsPage(
-            productId: listingId,
+            productId: link.id,
             product: product,
           ),
         ),
