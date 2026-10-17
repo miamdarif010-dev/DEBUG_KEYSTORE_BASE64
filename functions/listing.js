@@ -159,7 +159,7 @@ const APK_BUCKET = 'buynova-cc5dd.firebasestorage.app';
 const APK_PATH = 'app-release.apk';
 
 exports.downloadApp = onRequest(
-  { region: REGION, memory: '256MiB', timeoutSeconds: 540, cors: true },
+  { region: REGION, memory: '512MiB', timeoutSeconds: 540, cors: true },
   async (req, res) => {
     try {
       const file = admin.storage().bucket(APK_BUCKET).file(APK_PATH);
@@ -170,12 +170,11 @@ exports.downloadApp = onRequest(
         return;
       }
 
-      const [meta] = await file.getMetadata();
-
-      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+            res.setHeader('Content-Type', 'application/vnd.android.package-archive');
       res.setHeader('Content-Disposition', 'attachment; filename="BuyNova.apk"');
       res.setHeader('Cache-Control', 'no-store');
-      if (meta.size) res.setHeader('Content-Length', String(meta.size));
+      // No Content-Length on purpose: Cloud Run only allows responses over
+      // 32 MiB when they are streamed (chunked), and the APK is bigger.
 
       file
         .createReadStream()
