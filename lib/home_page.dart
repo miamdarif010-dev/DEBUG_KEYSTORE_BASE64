@@ -17,6 +17,7 @@ import 'news_feed_page.dart';
 import 'product_details_page.dart';
 import 'global_notifications_page.dart';
 import 'coupon_page.dart';
+import 'product_share.dart';
 
 part 'home_page_image_search.dart';
 
@@ -318,6 +319,33 @@ class _HomePageState extends State<HomePage>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Could not update Favorites: $e'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  // =========================================================
+  // SHARE
+  // =========================================================
+
+  Future<void> _shareProduct({
+    required String productId,
+    required Map<String, dynamic> productData,
+  }) async {
+    try {
+      await ProductShare.share(
+        productId: productId,
+        product: productData,
+        name: productData['name']?.toString() ?? 'Unnamed Product',
+        formattedPrice: _formatBdtPrice(productData),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Share failed: $e'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -978,6 +1006,8 @@ class _HomePageState extends State<HomePage>
                             ),
                           ),
                   ),
+
+                  // FAVORITE
                   Positioned(
                     top: 8,
                     right: 8,
@@ -1013,6 +1043,34 @@ class _HomePageState extends State<HomePage>
                                 ? Icons.favorite
                                 : Icons.favorite_border,
                             color: isFavorite ? Colors.redAccent : Colors.grey,
+                            size: 21,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // SHARE (under the favorite button)
+                  Positioned(
+                    top: 48,
+                    right: 8,
+                    child: Material(
+                      color: Colors.white,
+                      shape: const CircleBorder(),
+                      elevation: 2,
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: () {
+                          _shareProduct(
+                            productId: productId,
+                            productData: data,
+                          );
+                        },
+                        child: const Padding(
+                          padding: EdgeInsets.all(7),
+                          child: Icon(
+                            Icons.share_outlined,
+                            color: Colors.grey,
                             size: 21,
                           ),
                         ),
