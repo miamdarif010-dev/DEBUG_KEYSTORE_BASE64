@@ -1,32 +1,23 @@
+This XML file does not appear to have any style information associated with it. The document tree is shown below.
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-permission android:name="android.permission.INTERNET"/>
-    <application
-        android:label="buynova"
-        android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
-        <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:launchMode="singleTop"
-            android:theme="@style/LaunchTheme"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
-            android:hardwareAccelerated="true"
-            android:windowSoftInputMode="adjustResize">
-            <meta-data
-                android:name="io.flutter.embedding.android.NormalTheme"
-                android:resource="@style/NormalTheme"/>
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW"/>
-                <category android:name="android.intent.category.DEFAULT"/>
-                <category android:name="android.intent.category.BROWSABLE"/>
-                <data android:scheme="buynova" android:host="r"/>
-                <data android:scheme="buynova" android:host="p"/>
-            </intent-filter>
-        </activity>
-        <meta-data android:name="flutterEmbedding" android:value="2"/>
-    </application>
+<uses-permission android:name="android.permission.INTERNET"/>
+<application android:label="buynova" android:name="${applicationName}" android:icon="@mipmap/ic_launcher">
+<activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop" android:theme="@style/LaunchTheme" android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode" android:hardwareAccelerated="true" android:windowSoftInputMode="adjustResize">
+<meta-data android:name="io.flutter.embedding.android.NormalTheme" android:resource="@style/NormalTheme"/>
+<intent-filter>
+<action android:name="android.intent.action.MAIN"/>
+<category android:name="android.intent.category.LAUNCHER"/>
+</intent-filter>
+<intent-filter>
+<action android:name="android.intent.action.VIEW"/>
+<category android:name="android.intent.category.DEFAULT"/>
+<category android:name="android.intent.category.BROWSABLE"/>
+<data android:scheme="buynova" android:host="r"/>
+<data android:scheme="buynova" android:host="p"/>
+</intent-filter>
+</activity>
+<meta-data android:name="flutterEmbedding" android:value="2"/>
+<!--  app_links handles the links itself; stop Flutter's built-in deep link routing  -->
+<meta-data android:name="flutter_deeplinking_enabled" android:value="false"/>
+</application>
 </manifest>
