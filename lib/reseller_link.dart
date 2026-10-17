@@ -81,20 +81,23 @@ class ResellerLinkHandler {
   DateTime? _lastTime;
 
   Future<void> start() async {
+    // Listen first, so no link is missed while the initial link is read.
+    _subscription = _appLinks.uriLinkStream.listen(
+      (uri) => _handle(uri),
+      onError: (Object e) => debugPrint('Link stream error: $e'),
+    );
+
     try {
       final initial = await _appLinks.getInitialLink();
 
       if (initial != null) {
+        // Cold start: give the home page a moment to appear first.
+        await Future.delayed(const Duration(milliseconds: 700));
         await _handle(initial);
       }
     } catch (e) {
       debugPrint('Initial link failed: $e');
     }
-
-    _subscription = _appLinks.uriLinkStream.listen(
-      (uri) => _handle(uri),
-      onError: (Object e) => debugPrint('Link stream error: $e'),
-    );
   }
 
   void dispose() {
@@ -123,6 +126,15 @@ class ResellerLinkHandler {
   }
 
   Future<void> _open(ParsedLink link) async {
+    // Wait (up to ~3 seconds) until the Navigator is ready.
+    for (int i = 0;
+        i < 15 &&
+            (navigatorKey.currentState == null ||
+                navigatorKey.currentContext == null);
+        i++) {
+      await Future.delayed(const Duration(milliseconds: 200));
+    }
+
     final navigator = navigatorKey.currentState;
     final context = navigatorKey.currentContext;
 
