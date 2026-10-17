@@ -13,10 +13,8 @@
     "public": "hosting",
     "ignore": ["firebase.json", "**/node_modules/**"],
     "rewrites": [
-      {
-        "source": "/r/**",
-        "destination": "/index.html"
-      }
+      { "source": "/r/**", "destination": "/index.html" },
+      { "source": "/p/**", "destination": "/index.html" }
     ],
     "headers": [
       {
