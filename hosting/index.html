@@ -61,6 +61,10 @@
   .row { display:flex; gap:10px; margin-top:10px; }
   .row .btn { flex:1; background:#fff; color:var(--brand); border:2px solid var(--brand); font-size:15px; }
 
+  .hint { margin-top:12px; background:#fff; border:2px dashed var(--brand); border-radius:18px; padding:14px; font-size:14px; line-height:1.55; }
+  .hint b { color:var(--brand); }
+  .hint .btn { margin-top:10px; font-size:14px; padding:12px 10px; background:#fff; color:var(--brand); border:2px solid var(--brand); }
+  .note { text-align:center; margin:10px 4px 0; font-size:12.5px; color:var(--muted); }
   .msg { text-align:center; padding:28px 12px; color:var(--muted); }
   .foot { text-align:center; margin-top:18px; font-size:14px; color:var(--muted); }
   .foot b { color:var(--ink); }
@@ -147,6 +151,12 @@
     </div>
   </div>
 
+  <div id="hint" class="hint" hidden>
+    <div id="hintText"></div>
+    <a id="chromeBtn" class="btn" href="#" hidden>🌐 Chrome-এ খুলুন</a>
+  </div>
+  <p class="note">অ্যাপ ডাউনলোড না হলে ব্রাউজারের ⋮ মেনু থেকে <b>Open in browser / Chrome-এ খুলুন</b> চাপুন।</p>
+
   <div class="foot">❤️ <b>BuyNova</b> — আপনার অনলাইন শপিং পার্টনার</div>
 </div>
 
@@ -155,7 +165,8 @@
 var PROJECT_ID   = 'buynova-cc5dd';
 var REGION       = 'asia-northeast3';
 var PACKAGE      = 'com.buynova.app';
-var DOWNLOAD_URL = 'https://firebasestorage.googleapis.com/v0/b/buynova-cc5dd.firebasestorage.app/o/app-release.apk?alt=media&token=dad6b003-02d5-43f7-8e0e-da89a5b2a9f9';
+// Direct download (Cloud Function streams the APK as a file)
+var DOWNLOAD_URL = 'https://asia-northeast3-buynova-cc5dd.cloudfunctions.net/downloadApp';
 var HERO_IMAGE   = '';
 var CURRENCY     = '৳';
 var WEBSITE_URL  = 'https://' + PROJECT_ID + '.web.app/';
@@ -182,16 +193,63 @@ $('openApp').hidden = false;
 $('website').href = WEBSITE_URL;
 $('website').hidden = false;
 
+var UA = navigator.userAgent || '';
+var IS_ANDROID = /Android/i.test(UA);
+var IN_APP = /FBAN|FBAV|FB_IAB|Messenger|Instagram|Line\/|TikTok|Snapchat|; wv\)/i.test(UA);
+
+// Link used to open the app
+var SCHEME_URL = listingId
+  ? 'buynova://' + kind + '/' + encodeURIComponent(listingId)
+  : 'buynova://r';
+var INTENT_URL = listingId
+  ? 'intent://' + kind + '/' + encodeURIComponent(listingId) +
+    '#Intent;scheme=buynova;package=' + PACKAGE + ';end'
+  : 'intent:#Intent;package=' + PACKAGE + ';end';
+
+$('openApp').href = SCHEME_URL;
+
+function showHint(text, withChrome) {
+  $('hintText').innerHTML = text;
+  $('hint').hidden = false;
+  if (withChrome && IS_ANDROID) {
+    $('chromeBtn').href = 'intent://' + location.host + location.pathname +
+      '#Intent;scheme=https;package=com.android.chrome;end';
+    $('chromeBtn').hidden = false;
+  }
+}
+
+$('openApp').addEventListener('click', function (e) {
+  e.preventDefault();
+  $('hint').hidden = true;
+
+  if (!IS_ANDROID) {
+    showHint('এই লিংক শুধু <b>Android ফোনের</b> BuyNova অ্যাপে খোলে। ফোন থেকে লিংকটি খুলুন।', false);
+    return;
+  }
+
+  var left = false;
+  function onHide() { if (document.hidden) left = true; }
+  document.addEventListener('visibilitychange', onHide);
+  window.addEventListener('pagehide', function () { left = true; });
+
+  // Chrome supports intent:// ; in-app browsers (Messenger/Facebook) need the plain scheme.
+  window.location.href = IN_APP ? SCHEME_URL : INTENT_URL;
+
+  setTimeout(function () {
+    document.removeEventListener('visibilitychange', onHide);
+    if (left || document.hidden) return;
+    if (IN_APP) {
+      showHint('Messenger-এর ভেতর থেকে অ্যাপ খুলছে না।<br>নিচের <b>Chrome-এ খুলুন</b> চাপুন, তারপর আবার <b>অ্যাপে খুলুন</b> চাপুন।<br>অ্যাপ না থাকলে আগে <b>অ্যাপ ডাউনলোড</b> করুন।', true);
+    } else {
+      showHint('অ্যাপ খোলেনি। BuyNova অ্যাপ ইনস্টল না থাকলে আগে <b>অ্যাপ ডাউনলোড</b> চাপুন, ইনস্টল করে আবার চেষ্টা করুন।', false);
+    }
+  }, 1800);
+});
+
 if (!listingId) {
   // Home page (no product link)
   $('state').hidden = true;
-  $('openApp').href = 'intent:#Intent;package=' + PACKAGE +
-    ';S.browser_fallback_url=' + encodeURIComponent(DOWNLOAD_URL) + ';end';
 } else {
-  $('openApp').href = 'intent://' + kind + '/' + encodeURIComponent(listingId) +
-    '#Intent;scheme=buynova;package=' + PACKAGE +
-    ';S.browser_fallback_url=' + encodeURIComponent(DOWNLOAD_URL) + ';end';
-
   var fn = kind === 'p' ? 'getProductListing' : 'getResellerListing';
   var payload = kind === 'p' ? { productId: listingId } : { listingId: listingId };
   var url = 'https://' + REGION + '-' + PROJECT_ID + '.cloudfunctions.net/' + fn;
