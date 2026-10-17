@@ -1,5 +1,5 @@
 const admin = require('firebase-admin');
-const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -146,3 +146,48 @@ exports.getProductListing = onCall({ region: REGION }, async (request) => {
     },
   };
 });
+
+
+// ============================================================
+// downloadApp
+// Streams the APK from Firebase Storage as a real file download
+// (Content-Disposition: attachment), so tapping the button on the
+// web page downloads it directly instead of opening a preview page.
+// Link: https://asia-northeast3-<project>.cloudfunctions.net/downloadApp
+// ============================================================
+const APK_BUCKET = 'buynova-cc5dd.firebasestorage.app';
+const APK_PATH = 'app-release.apk';
+
+exports.downloadApp = onRequest(
+  { region: REGION, memory: '256MiB', timeoutSeconds: 540, cors: true },
+  async (req, res) => {
+    try {
+      const file = admin.storage().bucket(APK_BUCKET).file(APK_PATH);
+      const [exists] = await file.exists();
+
+      if (!exists) {
+        res.status(404).send('App file not found.');
+        return;
+      }
+
+      const [meta] = await file.getMetadata();
+
+      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+      res.setHeader('Content-Disposition', 'attachment; filename="BuyNova.apk"');
+      res.setHeader('Cache-Control', 'no-store');
+      if (meta.size) res.setHeader('Content-Length', String(meta.size));
+
+      file
+        .createReadStream()
+        .on('error', (e) => {
+          console.error('APK stream failed:', e);
+          if (!res.headersSent) res.status(500).send('Download failed.');
+          else res.end();
+        })
+        .pipe(res);
+    } catch (e) {
+      console.error('downloadApp failed:', e);
+      res.status(500).send('Download failed.');
+    }
+  }
+);
