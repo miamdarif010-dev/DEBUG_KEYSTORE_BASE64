@@ -12,14 +12,12 @@
          background:linear-gradient(180deg,#fff6f9 0%,#ffe9f0 100%) fixed; }
   .wrap { max-width:560px; margin:0 auto; padding:14px 14px 28px; }
 
-  /* header */
   .top { display:flex; align-items:center; gap:12px; padding:6px 2px 12px; }
   .top svg { width:52px; height:52px; flex:none; }
   .brand { font-size:30px; font-weight:800; line-height:1.1; margin:0; }
   .brand b { color:var(--brand); }
   .sub { margin:2px 0 0; font-size:13px; color:var(--muted); }
 
-  /* hero */
   .hero { position:relative; overflow:hidden; border-radius:24px; padding:22px 18px;
           background:linear-gradient(120deg,#ffe3ec 0%,#ffd0de 60%,#ffc2d4 100%); min-height:190px; }
   .hero .in { position:relative; z-index:1; max-width:62%; }
@@ -31,7 +29,6 @@
   .hero p { margin:0; font-size:14px; line-height:1.55; color:#3a3744; }
   .hero img { position:absolute; right:0; bottom:0; height:100%; max-width:50%; object-fit:cover; object-position:top; }
 
-  /* features */
   .feats { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:12px 0; }
   .feat { background:rgba(255,255,255,.85); border-radius:16px; padding:12px 4px; text-align:center;
           font-size:12.5px; font-weight:600; line-height:1.3; box-shadow:0 2px 10px rgba(229,35,63,.08); }
@@ -39,7 +36,6 @@
             border-radius:50%; background:var(--pink); }
   .feat svg { width:22px; height:22px; }
 
-  /* product card */
   .pcard { background:#fff; border-radius:24px; padding:16px; box-shadow:0 4px 18px rgba(229,35,63,.1); }
   .pgrid { display:grid; grid-template-columns:1fr 1.15fr; gap:14px; align-items:start; }
   .pimgbox { position:relative; border-radius:18px; overflow:hidden; aspect-ratio:1/1.1;
@@ -57,7 +53,6 @@
   .dh:before { content:""; width:4px; height:20px; background:var(--brand); border-radius:2px; }
   .pdesc { margin:0; font-size:14px; line-height:1.6; color:#3a3744; white-space:pre-line; }
 
-  /* buttons */
   .actions { margin-top:14px; }
   .btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:15px 10px;
          border-radius:30px; font-size:16px; font-weight:700; text-decoration:none; }
@@ -160,10 +155,10 @@
 var PROJECT_ID   = 'buynova-cc5dd';
 var REGION       = 'asia-northeast3';
 var PACKAGE      = 'com.buynova.app';
-var DOWNLOAD_URL = 'https://firebasestorage.googleapis.com/v0/b/buynova-cc5dd.firebasestorage.app/o/app-release.apk?alt=media&token=dad6b003-02d5-43f7-8e0e-da89a5b2a9f9'; // APK link (Firebase Storage)
-var HERO_IMAGE   = '';   // optional: https link of a banner picture (shown on the right of the top card)
+var DOWNLOAD_URL = 'https://firebasestorage.googleapis.com/v0/b/buynova-cc5dd.firebasestorage.app/o/app-release.apk?alt=media&token=dad6b003-02d5-43f7-8e0e-da89a5b2a9f9';
+var HERO_IMAGE   = '';
 var CURRENCY     = '৳';
-var WEBSITE_URL  = 'https://' + PROJECT_ID + '.web.app/';  // change to any link you want the "ওয়েবসাইট" button to open
+var WEBSITE_URL  = 'https://' + PROJECT_ID + '.web.app/';
 // ========================
 
 function $(id) { return document.getElementById(id); }
@@ -175,8 +170,11 @@ if (HERO_IMAGE.indexOf('https://') === 0) {
   $('hero').classList.remove('noimg');
 }
 
+// /r/<id> = reseller listing, /p/<id> = normal product
 var parts = location.pathname.split('/').filter(Boolean);
-var listingId = (parts[0] === 'r' && parts[1]) ? decodeURIComponent(parts[1]) : null;
+var kind = parts[0];
+var listingId = ((kind === 'r' || kind === 'p') && parts[1])
+  ? decodeURIComponent(parts[1]) : null;
 
 $('download').href = DOWNLOAD_URL;
 $('download').hidden = false;
@@ -190,26 +188,26 @@ if (!listingId) {
   $('openApp').href = 'intent:#Intent;package=' + PACKAGE +
     ';S.browser_fallback_url=' + encodeURIComponent(DOWNLOAD_URL) + ';end';
 } else {
-  $('openApp').href = 'intent://r/' + encodeURIComponent(listingId) +
+  $('openApp').href = 'intent://' + kind + '/' + encodeURIComponent(listingId) +
     '#Intent;scheme=buynova;package=' + PACKAGE +
     ';S.browser_fallback_url=' + encodeURIComponent(DOWNLOAD_URL) + ';end';
-  $('website').href = WEBSITE_URL;
-  $('website').hidden = false;
 
-  var url = 'https://' + REGION + '-' + PROJECT_ID + '.cloudfunctions.net/getResellerListing';
+  var fn = kind === 'p' ? 'getProductListing' : 'getResellerListing';
+  var payload = kind === 'p' ? { productId: listingId } : { listingId: listingId };
+  var url = 'https://' + REGION + '-' + PROJECT_ID + '.cloudfunctions.net/' + fn;
+
   fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data: { listingId: listingId } })
+    body: JSON.stringify({ data: payload })
   })
   .then(function (r) { return r.json(); })
   .then(function (j) {
     var l = j && j.result && j.result.listing;
     if (!l) { fail('পণ্যটি পাওয়া যায়নি।'); return; }
 
-    // Field names are guesses: adjust to your reseller_products fields.
     var name  = l.name || l.title || l.productName || 'BuyNova';
-    var price = l.resellerPrice != null ? l.resellerPrice : (l.price != null ? l.price : '');
+    var price = l.price != null ? l.price : '';
     var img   = (Array.isArray(l.images) && l.images[0]) || l.imageUrl || l.image || '';
 
     $('pname').textContent = name;
