@@ -36,6 +36,7 @@ const listing = require("./listing");
 
 exports.getResellerListing = listing.getResellerListing;
 exports.getProductListing = listing.getProductListing;
+exports.downloadApp = listing.downloadApp;
 
 // ============================================================
 // CLOUDINARY SECRETS
