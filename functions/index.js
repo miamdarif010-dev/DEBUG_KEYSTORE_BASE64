@@ -28,6 +28,16 @@ exports.createOrder = orders.createOrder;
 exports.cancelUnpaidOrder = orders.cancelUnpaidOrder;
 
 // ============================================================
+// SHARE LINKS (public product pages: /r/<id> and /p/<id>)
+// File name in the repo: functions/listing.js
+// ============================================================
+
+const listing = require("./listing");
+
+exports.getResellerListing = listing.getResellerListing;
+exports.getProductListing = listing.getProductListing;
+
+// ============================================================
 // CLOUDINARY SECRETS
 // ============================================================
 
