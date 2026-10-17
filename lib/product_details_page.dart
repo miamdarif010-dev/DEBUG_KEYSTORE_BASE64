@@ -8,6 +8,7 @@ import 'login_page.dart';
 import 'checkout_page.dart';
 import 'buyer_chat_page.dart';
 import 'product_variants.dart';
+import 'product_share.dart';
 
 class ProductDetailsPage extends StatefulWidget {
   final String productId;
@@ -378,6 +379,25 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
           _videoUrl = first;
         }
       }
+    }
+  }
+
+  // =========================================================
+  // SHARE (works for every product)
+  // =========================================================
+
+  Future<void> _shareProduct() async {
+    try {
+      await ProductShare.share(
+        productId: widget.productId,
+        product: widget.product,
+        name: productName,
+        formattedPrice: formattedPrice,
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      _showSelectSnack('Share failed: $e');
     }
   }
 
@@ -2034,6 +2054,14 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
         ),
         actions: [
           Center(child: _cartAction()),
+          const SizedBox(width: 10),
+          // SHARE: visible for every product (also your own)
+          Center(
+            child: _roundButton(
+              icon: Icons.share_outlined,
+              onTap: _shareProduct,
+            ),
+          ),
           const SizedBox(width: 10),
           Center(
             child: _roundButton(
