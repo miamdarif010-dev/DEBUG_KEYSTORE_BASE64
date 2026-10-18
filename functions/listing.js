@@ -42,6 +42,20 @@ const collectImages = (...sources) => {
 // Returns ONLY public fields. supplierPrice and profit are
 // never returned.
 // ============================================================
+// Regular price of a reseller listing (null when there is no discount).
+// Falls back to the stored percent for listings saved without originalPrice.
+const resellerOriginalPrice = (listing) => {
+  const selling = Number(pick(listing.sellingPrice, listing.price)) || 0;
+  const stored = Number(listing.originalPrice) || 0;
+  if (stored > selling) return stored;
+
+  const percent = Number(listing.discountPercent) || 0;
+  if (percent > 0 && percent < 100 && selling > 0) {
+    return Math.round((selling / (1 - percent / 100)) * 100) / 100;
+  }
+  return null;
+};
+
 exports.getResellerListing = onCall({ region: REGION }, async (request) => {
   const listingId = safeId(request.data?.listingId);
   if (!listingId) throw new HttpsError('invalid-argument', 'Invalid link.');
@@ -49,7 +63,7 @@ exports.getResellerListing = onCall({ region: REGION }, async (request) => {
   const listingSnap = await db.collection('reseller_products').doc(listingId).get();
   if (!listingSnap.exists) throw unavailable();
   const listing = listingSnap.data();
-  if (listing.isActive === false) throw unavailable();
+  if (listing.isActive === false || listing.active === false) throw unavailable();
 
   const supplierProductId = safeId(
     listing.supplierProductId ?? listing.sourceProductId
@@ -59,7 +73,7 @@ exports.getResellerListing = onCall({ region: REGION }, async (request) => {
   const supplierSnap = await getProductDoc(supplierProductId);
   if (!supplierSnap.exists) throw unavailable();
   const supplier = supplierSnap.data();
-  if (supplier.isActive === false) throw unavailable();
+  if (supplier.isActive === false || supplier.active === false) throw unavailable();
 
   const resellerUid = String(listing.entrepreneurUid || '');
   if (!resellerUid) throw unavailable();
@@ -90,7 +104,7 @@ exports.getResellerListing = onCall({ region: REGION }, async (request) => {
       colors: supplier.colors ?? null,
       stock: pick(supplier.stock, supplier.stockQuantity) ?? null,
       price: Number(pick(listing.sellingPrice, listing.price)) || 0,
-      originalPrice: Number(listing.originalPrice) || null,
+      originalPrice: resellerOriginalPrice(listing),
       discountPercent: Number(listing.discountPercent) || 0,
       currency: 'BDT',
       isResellerProduct: true,
@@ -112,7 +126,7 @@ exports.getProductListing = onCall({ region: REGION }, async (request) => {
   const snap = await getProductDoc(productId);
   if (!snap.exists) throw unavailable();
   const p = snap.data();
-  if (p.isActive === false) throw unavailable();
+  if (p.isActive === false || p.active === false) throw unavailable();
 
   const images = collectImages(
     p.imageUrl,
