@@ -90,6 +90,8 @@ exports.getResellerListing = onCall({ region: REGION }, async (request) => {
       colors: supplier.colors ?? null,
       stock: pick(supplier.stock, supplier.stockQuantity) ?? null,
       price: Number(pick(listing.sellingPrice, listing.price)) || 0,
+      originalPrice: Number(listing.originalPrice) || null,
+      discountPercent: Number(listing.discountPercent) || 0,
       currency: 'BDT',
       isResellerProduct: true,
       entrepreneurUid: resellerUid,
@@ -124,7 +126,10 @@ exports.getProductListing = onCall({ region: REGION }, async (request) => {
   // Same rule as the app: if currency is not BDT, price * 0.09
   const raw = Number(pick(p.price, p.sellingPrice)) || 0;
   const cur = String(p.currency || '').trim().toUpperCase();
-  const price = cur === 'BDT' || cur === '৳' ? raw : raw * 0.09;
+  const factor = cur === 'BDT' || cur === '৳' ? 1 : 0.09;
+  const price = raw * factor;
+  const originalRaw = Number(p.originalPrice) || 0;
+  const originalPrice = originalRaw > 0 ? originalRaw * factor : null;
 
   return {
     listing: {
@@ -138,6 +143,8 @@ exports.getProductListing = onCall({ region: REGION }, async (request) => {
       colors: p.colors ?? null,
       stock: pick(p.stock, p.stockQuantity) ?? null,
       price: Math.round(price * 100) / 100,
+      originalPrice: originalPrice ? Math.round(originalPrice * 100) / 100 : null,
+      discountPercent: Number(p.discountPercent) || 0,
       currency: 'BDT',
       isResellerProduct: false,
       sellerId: String(pick(p.sellerId, p.ownerId) ?? ''),
