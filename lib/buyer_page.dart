@@ -6,7 +6,7 @@ import 'my_orders_page.dart';
 import 'buyer_support_page.dart';
 import 'notifications_page.dart';
 import 'buyer_messages_page.dart';
-import 'news_feed_page.dart';
+import 'my_videos_page.dart';
 
 class BuyerPage extends StatelessWidget {
   const BuyerPage({super.key});
@@ -19,7 +19,7 @@ class BuyerPage extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => const NewsFeedPage(),
+        builder: (_) => const MyVideosPage(),
       ),
     );
   }
