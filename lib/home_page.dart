@@ -17,6 +17,7 @@ import 'news_feed_page.dart';
 import 'product_details_page.dart';
 import 'global_notifications_page.dart';
 import 'coupon_page.dart';
+import 'price_discount.dart';
 import 'product_share.dart';
 
 part 'home_page_image_search.dart';
@@ -237,6 +238,19 @@ class _HomePageState extends State<HomePage>
     }
 
     return rawPrice * 0.09;
+  }
+
+  /// Price before discount in BDT (0 when the product has no discount).
+  double _displayOriginalBdtPrice(Map<String, dynamic> productData) {
+    final value = productData['originalPrice'];
+
+    final raw = value is num ? value.toDouble() : 0.0;
+
+    if (raw <= 0) return 0;
+
+    final currency = productData['currency']?.toString().trim().toUpperCase();
+
+    return currency == 'BDT' ? raw : raw * 0.09;
   }
 
   String _formatBdtPrice(Map<String, dynamic> productData) {
@@ -959,8 +973,6 @@ class _HomePageState extends State<HomePage>
   }) {
     final name = data['name']?.toString() ?? 'Unnamed Product';
 
-    final displayPrice = _formatBdtPrice(data);
-
     final imageUrl = data['imageUrl']?.toString();
 
     return Card(
@@ -1096,15 +1108,13 @@ class _HomePageState extends State<HomePage>
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Flexible(
-                        child: Text(
-                          displayPrice,
-                          style: const TextStyle(
-                            color: Colors.redAccent,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        child: PriceTag(
+                          price: _displayBdtPrice(data),
+                          originalPrice: _displayOriginalBdtPrice(data) > 0
+                              ? _displayOriginalBdtPrice(data)
+                              : null,
+                          fontSize: 15,
+                          color: Colors.redAccent,
                         ),
                       ),
                       const SizedBox(width: 5),
