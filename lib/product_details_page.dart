@@ -7,6 +7,7 @@ import 'cart_page.dart';
 import 'login_page.dart';
 import 'checkout_page.dart';
 import 'buyer_chat_page.dart';
+import 'price_discount.dart';
 import 'product_variants.dart';
 import 'product_share.dart';
 
@@ -265,6 +266,19 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
 
   String get formattedPrice => '৳${price.toStringAsFixed(2)}';
 
+  /// Price before the seller's discount (0 when there is no discount).
+  double get originalPrice {
+    final value = widget.product['originalPrice'];
+
+    final raw = value is num
+        ? value.toDouble()
+        : double.tryParse(value?.toString() ?? '') ?? 0;
+
+    if (raw <= 0) return 0;
+
+    return isBdt ? raw : raw * 0.09;
+  }
+
   String get sellerCode => widget.product['sellerCode']?.toString() ?? '';
 
   String get sellerId => widget.product['sellerId']?.toString() ?? '';
@@ -392,7 +406,9 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
         productId: widget.productId,
         product: widget.product,
         name: productName,
-        formattedPrice: formattedPrice,
+        formattedPrice: originalPrice > price
+            ? '$formattedPrice (was ${formatTaka(originalPrice)})'
+            : formattedPrice,
       );
     } catch (e) {
       if (!mounted) return;
@@ -1855,50 +1871,43 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
             const SizedBox(height: 8),
             Row(
               children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      ...List.generate(5, (index) {
-                        return Icon(
-                          index < average.round()
-                              ? Icons.star_rounded
-                              : Icons.star_border_rounded,
-                          color: Colors.amber,
-                          size: 21,
-                        );
-                      }),
-                      const SizedBox(width: 8),
-                      Text(
-                        average.toStringAsFixed(1),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 15,
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      Flexible(
-                        child: Text(
-                          '($counted Reviews)',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                ...List.generate(5, (index) {
+                  return Icon(
+                    index < average.round()
+                        ? Icons.star_rounded
+                        : Icons.star_border_rounded,
+                    color: Colors.amber,
+                    size: 21,
+                  );
+                }),
                 const SizedBox(width: 8),
                 Text(
-                  formattedPrice,
+                  average.toStringAsFixed(1),
                   style: const TextStyle(
-                    fontSize: 24,
                     fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                  ),
+                ),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    '($counted Reviews)',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 13,
+                    ),
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 10),
+            PriceTag(
+              price: price,
+              originalPrice: originalPrice > 0 ? originalPrice : null,
+              fontSize: 26,
+              color: Colors.black87,
             ),
             const SizedBox(height: 12),
             Divider(color: Colors.grey.shade200, height: 1),
