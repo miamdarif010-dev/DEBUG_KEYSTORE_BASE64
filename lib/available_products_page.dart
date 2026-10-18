@@ -886,7 +886,7 @@ class _AvailableProductsPageState extends State<AvailableProductsPage> {
                           crossAxisCount: 2,
                           crossAxisSpacing: 10,
                           mainAxisSpacing: 10,
-                          childAspectRatio: 0.58,
+                          mainAxisExtent: 480,
                         ),
                         itemCount: docs.length,
                         itemBuilder: (context, index) {
