@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -301,6 +302,19 @@ class _AddSellerVideoPageState
       multipartRequest.fields[
               'upload_preset'] =
           _uploadPreset;
+
+      // Every upload gets its OWN unique Cloudinary name.
+      // Without this, uploads can end up under the same name and
+      // a new video replaces the old one for everybody.
+      final String uploaderId =
+          FirebaseAuth.instance.currentUser?.uid ?? 'guest';
+
+      final String uniqueSuffix =
+          '${DateTime.now().microsecondsSinceEpoch}_'
+          '${Random().nextInt(1 << 31)}';
+
+      multipartRequest.fields['public_id'] =
+          'buynova_videos/${uploaderId}_$uniqueSuffix';
 
       multipartRequest.files.add(
         await http.MultipartFile.fromPath(
