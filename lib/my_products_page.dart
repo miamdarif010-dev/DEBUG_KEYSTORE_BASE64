@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 
 import 'edit_product_page.dart';
+import 'price_discount.dart';
 
 class MyProductsPage extends StatelessWidget {
   const MyProductsPage({super.key});
@@ -32,9 +33,7 @@ class MyProductsPage extends StatelessWidget {
               child: const Text('Cancel'),
             ),
             FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: Colors.red,
-              ),
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
               onPressed: () {
                 Navigator.pop(dialogContext, true);
               },
@@ -56,30 +55,15 @@ class MyProductsPage extends StatelessWidget {
       if (!context.mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Product deleted successfully.'),
-        ),
+        const SnackBar(content: Text('Product deleted successfully.')),
       );
     } catch (e) {
       if (!context.mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Delete failed: $e'),
-        ),
+        SnackBar(content: Text('Delete failed: $e')),
       );
     }
-  }
-
-  // =========================================================
-  // PRICE FORMAT
-  // =========================================================
-  String _formatPrice(double price) {
-    if (price == price.roundToDouble()) {
-      return '₩${price.toInt()}';
-    }
-
-    return '₩${price.toStringAsFixed(2)}';
   }
 
   // =========================================================
@@ -131,10 +115,7 @@ class MyProductsPage extends StatelessWidget {
   // =========================================================
   // STATUS CHIP
   // =========================================================
-  Widget _statusChip(
-    BuildContext context,
-    String status,
-  ) {
+  Widget _statusChip(BuildContext context, String status) {
     final normalized = status.toLowerCase();
 
     Color color;
@@ -148,10 +129,7 @@ class MyProductsPage extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 9,
-        vertical: 5,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
@@ -159,8 +137,7 @@ class MyProductsPage extends StatelessWidget {
       child: Text(
         normalized.isEmpty
             ? 'Unknown'
-            : normalized[0].toUpperCase() +
-                normalized.substring(1),
+            : normalized[0].toUpperCase() + normalized.substring(1),
         style: TextStyle(
           color: color,
           fontSize: 11,
@@ -173,18 +150,19 @@ class MyProductsPage extends StatelessWidget {
   // =========================================================
   // PRODUCT CARD
   // =========================================================
-  Widget _buildProductCard(
-    BuildContext context,
-    QueryDocumentSnapshot doc,
-  ) {
+  Widget _buildProductCard(BuildContext context, QueryDocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
 
     final name = data['name']?.toString().trim().isNotEmpty == true
         ? data['name'].toString()
         : 'Unnamed Product';
 
-    final price = data['price'] is num
-        ? (data['price'] as num).toDouble()
+    // `price` = what the buyer pays, `originalPrice` = before discount.
+    final price =
+        data['price'] is num ? (data['price'] as num).toDouble() : 0.0;
+
+    final originalPrice = data['originalPrice'] is num
+        ? (data['originalPrice'] as num).toDouble()
         : 0.0;
 
     final imageUrl = data['imageUrl']?.toString();
@@ -195,19 +173,13 @@ class MyProductsPage extends StatelessWidget {
 
     final status = data['status']?.toString() ?? 'active';
 
-    final stock = data['stock'] is num
-        ? (data['stock'] as num).toInt()
-        : 0;
+    final stock = data['stock'] is num ? (data['stock'] as num).toInt() : 0;
 
-    final salesCount = data['salesCount'] is num
-        ? (data['salesCount'] as num).toInt()
-        : 0;
+    final salesCount =
+        data['salesCount'] is num ? (data['salesCount'] as num).toInt() : 0;
 
     return Card(
-      margin: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 6,
-      ),
+      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       elevation: 1.5,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
@@ -217,16 +189,8 @@ class MyProductsPage extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // -------------------------------------------------
-            // IMAGE
-            // -------------------------------------------------
             _productImage(imageUrl),
-
             const SizedBox(width: 12),
-
-            // -------------------------------------------------
-            // PRODUCT INFORMATION
-            // -------------------------------------------------
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -240,20 +204,15 @@ class MyProductsPage extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-
                   const SizedBox(height: 5),
 
-                  Text(
-                    _formatPrice(price),
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.redAccent,
-                    ),
+                  // PRICE (red struck total price + % badge when discounted)
+                  PriceTag(
+                    price: price,
+                    originalPrice: originalPrice > price ? originalPrice : null,
+                    fontSize: 16,
                   ),
-
                   const SizedBox(height: 5),
-
                   Row(
                     children: [
                       Flexible(
@@ -271,9 +230,7 @@ class MyProductsPage extends StatelessWidget {
                       _statusChip(context, status),
                     ],
                   ),
-
                   const SizedBox(height: 7),
-
                   Wrap(
                     spacing: 12,
                     runSpacing: 4,
@@ -297,21 +254,13 @@ class MyProductsPage extends StatelessWidget {
                 ],
               ),
             ),
-
             const SizedBox(width: 4),
-
-            // -------------------------------------------------
-            // ACTIONS
-            // -------------------------------------------------
             Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
                   tooltip: 'Edit',
-                  icon: const Icon(
-                    Icons.edit_outlined,
-                    color: Colors.blue,
-                  ),
+                  icon: const Icon(Icons.edit_outlined, color: Colors.blue),
                   onPressed: () async {
                     await Navigator.push(
                       context,
@@ -326,19 +275,11 @@ class MyProductsPage extends StatelessWidget {
                     );
                   },
                 ),
-
                 IconButton(
                   tooltip: 'Delete',
-                  icon: const Icon(
-                    Icons.delete_outline,
-                    color: Colors.red,
-                  ),
+                  icon: const Icon(Icons.delete_outline, color: Colors.red),
                   onPressed: () {
-                    _deleteProduct(
-                      context,
-                      doc.id,
-                      name,
-                    );
+                    _deleteProduct(context, doc.id, name);
                   },
                 ),
               ],
@@ -367,19 +308,13 @@ class MyProductsPage extends StatelessWidget {
             const SizedBox(height: 20),
             const Text(
               'No Products Yet',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
             Text(
               'You haven\'t added any products yet.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade600,
-              ),
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
             ),
           ],
         ),
@@ -400,45 +335,29 @@ class MyProductsPage extends StatelessWidget {
         backgroundColor: Colors.redAccent,
         foregroundColor: Colors.white,
       ),
-
       body: user == null
           ? const Center(
               child: Text(
                 'Please login first.',
-                style: TextStyle(
-                  fontSize: 16,
-                ),
+                style: TextStyle(fontSize: 16),
               ),
             )
           : StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('products')
-                  .where(
-                    'sellerId',
-                    isEqualTo: user.uid,
-                  )
+                  .where('sellerId', isEqualTo: user.uid)
                   .snapshots(),
               builder: (context, snapshot) {
-                // -------------------------------------------------
-                // LOADING
-                // -------------------------------------------------
-                if (snapshot.connectionState ==
-                    ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(),
-                  );
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
                 }
 
-                // -------------------------------------------------
-                // ERROR
-                // -------------------------------------------------
                 if (snapshot.hasError) {
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
                       child: Column(
-                        mainAxisAlignment:
-                            MainAxisAlignment.center,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           const Icon(
                             Icons.error_outline,
@@ -471,39 +390,23 @@ class MyProductsPage extends StatelessWidget {
 
                 final docs = snapshot.data?.docs ?? [];
 
-                // -------------------------------------------------
-                // EMPTY
-                // -------------------------------------------------
                 if (docs.isEmpty) {
                   return _emptyView(context);
                 }
 
-                // -------------------------------------------------
-                // PRODUCT LIST
-                // -------------------------------------------------
                 return RefreshIndicator(
                   onRefresh: () async {
                     await FirebaseFirestore.instance
                         .collection('products')
-                        .where(
-                          'sellerId',
-                          isEqualTo: user.uid,
-                        )
+                        .where('sellerId', isEqualTo: user.uid)
                         .get();
                   },
                   child: ListView.builder(
-                    physics:
-                        const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.only(
-                      top: 8,
-                      bottom: 20,
-                    ),
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.only(top: 8, bottom: 20),
                     itemCount: docs.length,
                     itemBuilder: (context, index) {
-                      return _buildProductCard(
-                        context,
-                        docs[index],
-                      );
+                      return _buildProductCard(context, docs[index]);
                     },
                   ),
                 );
