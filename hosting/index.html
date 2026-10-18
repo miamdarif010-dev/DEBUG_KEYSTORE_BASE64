@@ -290,10 +290,24 @@ if (!listingId) {
     var img   = (Array.isArray(l.images) && l.images[0]) || l.imageUrl || l.image || '';
 
     $('pname').textContent = name;
-    if (price !== '' && !isNaN(Number(price))) {
-      $('pprice').textContent = CURRENCY + ' ' + Number(price).toLocaleString('en-US');
-    } else {
-      $('pprice').textContent = price !== '' ? CURRENCY + ' ' + price : '';
+    var priceEl = $('pprice');
+    priceEl.textContent = '';
+    var numPrice = Number(price);
+    var numOrig = Number(l.originalPrice);
+    function money(v) { return CURRENCY + ' ' + Number(v).toLocaleString('en-US'); }
+    var cur = document.createElement('span');
+    cur.textContent = (price !== '' && !isNaN(numPrice)) ? money(numPrice) : (price !== '' ? CURRENCY + ' ' + price : '');
+    priceEl.appendChild(cur);
+    if (!isNaN(numOrig) && numOrig > numPrice && numPrice > 0) {
+      var pct = Math.max(1, Math.round((1 - numPrice / numOrig) * 100));
+      var old = document.createElement('s');
+      old.textContent = money(numOrig);
+      old.style.cssText = 'display:block;font-size:16px;font-weight:600;color:#8a8794;text-decoration-color:#e5233f;text-decoration-thickness:2px;';
+      priceEl.insertBefore(old, cur);
+      var badge = document.createElement('span');
+      badge.textContent = ' -' + pct + '%';
+      badge.style.cssText = 'display:inline-block;margin-left:8px;background:#e5233f;color:#fff;font-size:12px;font-weight:700;padding:3px 8px;border-radius:10px;vertical-align:middle;';
+      priceEl.appendChild(badge);
     }
     if (l.description) {
       $('pdesc').textContent = l.description;
