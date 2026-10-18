@@ -1,0 +1,35 @@
+name: BuyNova Deploy Firebase Hosting
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "hosting/**"
+      - "firebase.json"
+      - ".github/workflows/firebase-hosting.yml"
+    branches:
+      - main
+
+jobs:
+  deploy-hosting:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Authenticate with Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Deploy Firebase Hosting
+        run: firebase deploy --only hosting --project buynova-cc5dd --non-interactive
