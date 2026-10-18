@@ -242,6 +242,28 @@ class _MyStorePageState extends State<MyStorePage> {
   // EDIT PRICE + DISCOUNT
   // =========================================================
 
+  // The supplier may have changed (or discounted) his price after you added
+  // the product. The price is always read again from the original product.
+  Future<double> _currentSupplierPrice(
+    Map<String, dynamic> data,
+    double fallback,
+  ) async {
+    final String sourceId = data['sourceProductId']?.toString() ?? '';
+
+    if (sourceId.isEmpty || sourceId.contains('/')) return fallback;
+
+    try {
+      final snapshot =
+          await _firestore.collection('products').doc(sourceId).get();
+
+      final double price = _toDouble(snapshot.data()?['price']);
+
+      return price > 0 ? price : fallback;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
   Future<void> _editSellingPrice(DocumentSnapshot product) async {
     final data = product.data() as Map<String, dynamic>;
 
@@ -335,10 +357,14 @@ class _MyStorePageState extends State<MyStorePage> {
                       return;
                     }
 
-                    if (result.finalPrice <= supplierPrice) {
+                    final double latestSupplierPrice =
+                        await _currentSupplierPrice(data, supplierPrice);
+
+                    if (result.finalPrice <= latestSupplierPrice) {
                       _showMessage(
-                        'Customer price (after discount) must be '
-                        'higher than the supplier price.',
+                        'Customer price (after discount) must be higher '
+                        'than the supplier price '
+                        '(${_money(latestSupplierPrice)}).',
                       );
                       return;
                     }
@@ -352,7 +378,8 @@ class _MyStorePageState extends State<MyStorePage> {
                           .update({
                         // What the customer pays
                         'sellingPrice': result.finalPrice,
-                        'profit': result.finalPrice - supplierPrice,
+                        'supplierPrice': latestSupplierPrice,
+                        'profit': result.finalPrice - latestSupplierPrice,
 
                         // Discount information (display only)
                         'originalPrice':
