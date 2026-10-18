@@ -48,6 +48,10 @@ const safeId = (v) => {
   return s && !s.includes('/') ? s : '';
 };
 
+// A product / listing counts as switched off when either flag is false.
+// (Seller products use `isActive`, reseller listings use `active`.)
+const isOff = (d) => d.isActive === false || d.active === false;
+
 // Looks in `products` first, then in the admin `Products` collection.
 const getProductDoc = async (id) => {
   const snap = await db.collection(COL.products).doc(id).get();
@@ -68,7 +72,7 @@ const assertStock = (d, quantity) => {
   }
 };
 
-const productName = (d) => String(d.name ?? d.title ?? '');
+const productName = (d) => String(d.name ?? d.title ?? d.productName ?? '');
 const productImage = (d) =>
   d.imageUrl ??
   d.image ??
@@ -82,6 +86,10 @@ const productSeller = (d) => String(d.sellerId ?? d.ownerId ?? 'unknown_seller')
 // The only restriction: nobody can buy their own product/listing.
 // The client only sends WHAT it wants (product ids + quantities).
 // Prices, discount, delivery fee and totals are all computed here.
+//
+// Product discounts: `price` (seller) and `sellingPrice` (reseller)
+// are already the price AFTER the product discount, so they are used
+// as they are. `originalPrice` is only for display.
 // ============================================================
 exports.createOrder = onCall({ region: REGION }, async (request) => {
   const uid = request.auth?.uid;
@@ -151,7 +159,7 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
         }
         const supplier = supplierSnap.data();
 
-        if (listing.isActive === false || supplier.isActive === false) {
+        if (isOff(listing) || isOff(supplier)) {
           throw new HttpsError('failed-precondition', 'A product in your cart is unavailable.');
         }
         assertStock(supplier, quantity);
@@ -186,7 +194,7 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
       }
       const product = productSnap.data();
 
-      if (product.isActive === false) {
+      if (isOff(product)) {
         throw new HttpsError('failed-precondition', 'A product in your cart is unavailable.');
       }
       assertStock(product, quantity);
@@ -296,6 +304,9 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
     grandTotal = Math.max(0, round2(subtotal + deliveryFee - discount));
 
     // ----- Main order -----
+    // The buyer can read this document, so it must NOT contain the
+    // supplier price or the reseller profit. Those stay only in the
+    // reseller_orders document.
     const orderItems = lines.map((l) => ({
       productId: l.id,
       name: l.name,
@@ -307,8 +318,6 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
       entrepreneurUid: l.entrepreneurUid,
       sellerId: l.sellerId,
       supplierProductId: l.supplierProductId,
-      supplierPrice: l.supplierPrice,
-      resellerProfit: l.resellerProfit,
     }));
 
     tx.set(orderRef, {
