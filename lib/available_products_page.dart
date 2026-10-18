@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'price_discount.dart';
+import 'product_details_page.dart';
 
 class AvailableProductsPage extends StatefulWidget {
   const AvailableProductsPage({super.key});
@@ -19,6 +20,9 @@ class _AvailableProductsPageState extends State<AvailableProductsPage> {
   bool _isApprovedEntrepreneur = false;
 
   String? _entrepreneurCode;
+
+  // Set to true when the last "Add to My Store" dialog saved a product.
+  bool _lastAddedToStore = false;
 
   @override
   void initState() {
@@ -106,6 +110,8 @@ class _AvailableProductsPageState extends State<AvailableProductsPage> {
   // =========================================================
 
   Future<void> _showAddToStoreDialog(DocumentSnapshot product) async {
+    _lastAddedToStore = false;
+
     final user = _auth.currentUser;
 
     if (user == null) {
@@ -413,6 +419,7 @@ class _AvailableProductsPageState extends State<AvailableProductsPage> {
                           }
 
                           if (success) {
+                            _lastAddedToStore = true;
                             Navigator.pop(dialogContext);
                           } else {
                             setDialogState(() {
@@ -651,7 +658,40 @@ class _AvailableProductsPageState extends State<AvailableProductsPage> {
   // PRODUCT CARD
   // =========================================================
 
+  // Tap a product -> see the full product details, add to store from there.
+  void _openDetails(DocumentSnapshot product) {
+    final data = Map<String, dynamic>.from(
+      product.data() as Map<String, dynamic>,
+    );
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProductDetailsPage(
+          productId: product.id,
+          product: data,
+          onAddToStore: (BuildContext detailsContext) async {
+            await _showAddToStoreDialog(product);
+
+            if (_lastAddedToStore && detailsContext.mounted) {
+              Navigator.pop(detailsContext);
+            }
+          },
+        ),
+      ),
+    );
+  }
+
   Widget _productCard(DocumentSnapshot product) {
+    return GestureDetector(
+      onTap: () {
+        _openDetails(product);
+      },
+      child: _productCardBody(product),
+    );
+  }
+
+  Widget _productCardBody(DocumentSnapshot product) {
     final data = product.data() as Map<String, dynamic>;
 
     final name = data['name']?.toString() ?? 'Unnamed Product';
