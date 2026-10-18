@@ -7,7 +7,7 @@ import 'available_products_page.dart';
 import 'my_store_page.dart';
 import 'reseller_orders_page.dart';
 import 'my_profit_page.dart';
-import 'news_feed_page.dart';
+import 'my_videos_page.dart';
 import 'wallet_page.dart';
 
 class EntrepreneurPage extends StatefulWidget {
@@ -149,7 +149,7 @@ class _EntrepreneurPageState
       context,
       MaterialPageRoute(
         builder: (_) =>
-            const NewsFeedPage(),
+            const MyVideosPage(),
       ),
     );
   }
