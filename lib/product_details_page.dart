@@ -15,10 +15,15 @@ class ProductDetailsPage extends StatefulWidget {
   final String productId;
   final Map<String, dynamic> product;
 
+  /// Reseller preview mode: when set, the bottom bar shows
+  /// "Add to My Store" instead of Add to cart / Buy now.
+  final Future<void> Function(BuildContext context)? onAddToStore;
+
   const ProductDetailsPage({
     super.key,
     required this.productId,
     required this.product,
+    this.onAddToStore,
   });
 
   @override
@@ -2013,13 +2018,83 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
               ),
             ),
             const SizedBox(height: 10),
-            if (isResellerProduct && entrepreneurUid.isNotEmpty)
-              Text('Reseller UID: $entrepreneurUid'),
+            // For a reseller product only the reseller is shown.
+            // The supplier (and the supplier price / profit) stay hidden.
             if (isResellerProduct && entrepreneurName.isNotEmpty)
               Text('Reseller Name: $entrepreneurName'),
-            if (sellerCode.isNotEmpty) Text('Seller ID: $sellerCode'),
-            if (sellerId.isNotEmpty) Text('Seller UID: $sellerId'),
-            if (sellerEmail.isNotEmpty) Text('Seller Email: $sellerEmail'),
+            if (!isResellerProduct && sellerCode.isNotEmpty)
+              Text('Seller ID: $sellerCode'),
+            if (!isResellerProduct && sellerId.isNotEmpty)
+              Text('Seller UID: $sellerId'),
+            if (!isResellerProduct && sellerEmail.isNotEmpty)
+              Text('Seller Email: $sellerEmail'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // =========================================================
+  // RESELLER PREVIEW: ADD TO MY STORE BAR
+  // =========================================================
+
+  Widget _buildAddToStoreBar() {
+    return SafeArea(
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 10,
+              offset: const Offset(0, -3),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Supplier price',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  ),
+                  PriceTag(
+                    price: price,
+                    originalPrice: originalPrice > 0 ? originalPrice : null,
+                    fontSize: 18,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              height: 54,
+              child: FilledButton.icon(
+                onPressed: () async {
+                  final callback = widget.onAddToStore;
+
+                  if (callback != null) {
+                    await callback(context);
+                  }
+                },
+                icon: const Icon(Icons.add_business_rounded),
+                label: const Text(
+                  'Add to My Store',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: kAccent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -2064,14 +2139,17 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
         actions: [
           Center(child: _cartAction()),
           const SizedBox(width: 10),
-          // SHARE: visible for every product (also your own)
-          Center(
-            child: _roundButton(
-              icon: Icons.share_outlined,
-              onTap: _shareProduct,
+          // SHARE: visible for every product (also your own),
+          // but not in the reseller "Add to My Store" preview.
+          if (widget.onAddToStore == null) ...[
+            Center(
+              child: _roundButton(
+                icon: Icons.share_outlined,
+                onTap: _shareProduct,
+              ),
             ),
-          ),
-          const SizedBox(width: 10),
+            const SizedBox(width: 10),
+          ],
           Center(
             child: _roundButton(
               icon: _isFavorite ? Icons.favorite : Icons.favorite_border,
@@ -2107,19 +2185,23 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                 color: Colors.grey.shade700,
               ),
             ),
-            const SizedBox(height: 22),
-            const Text(
-              'Quantity',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            _buildQuantityRow(),
+            if (widget.onAddToStore == null) ...[
+              const SizedBox(height: 22),
+              const Text(
+                'Quantity',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              _buildQuantityRow(),
+            ],
             _buildSellerCard(),
             _buildReviewsSection(),
           ],
         ),
       ),
-      bottomNavigationBar: SafeArea(
+      bottomNavigationBar: widget.onAddToStore != null
+          ? _buildAddToStoreBar()
+          : SafeArea(
         child: Container(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
           decoration: BoxDecoration(
