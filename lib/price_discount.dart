@@ -136,6 +136,7 @@ class DiscountPriceInput extends StatefulWidget {
   final String originalLabel;
   final String? helperText;
   final double? initialOriginal;
+  final double? initialDiscountAmount; // existing discount (edit pages)
   final bool enabled;
 
   const DiscountPriceInput({
@@ -144,6 +145,7 @@ class DiscountPriceInput extends StatefulWidget {
     this.originalLabel = 'Total Price (BDT)',
     this.helperText,
     this.initialOriginal,
+    this.initialDiscountAmount,
     this.enabled = true,
   });
 
@@ -168,10 +170,20 @@ class _DiscountPriceInputState extends State<DiscountPriceInput> {
       text: initial == null || initial <= 0 ? '' : _plain(initial),
     );
 
-    _result = DiscountResult(
-      original: initial ?? 0,
-      finalPrice: initial ?? 0,
-    );
+    final double base = initial ?? 0;
+    final double disc = widget.initialDiscountAmount ?? 0;
+
+    if (base > 0 && disc > 0.004 && disc < base) {
+      _amount.text = _plain(disc);
+      _percent.text = _plain(disc / base * 100);
+
+      _result = DiscountResult(
+        original: base,
+        finalPrice: _round2(base - disc),
+      );
+    } else {
+      _result = DiscountResult(original: base, finalPrice: base);
+    }
   }
 
   @override
