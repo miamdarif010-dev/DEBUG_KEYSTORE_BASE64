@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+
+import 'price_discount.dart';
 
 class EditProductPage extends StatefulWidget {
   final String productId;
@@ -23,7 +25,6 @@ class EditProductPage extends StatefulWidget {
 
 class _EditProductPageState extends State<EditProductPage> {
   late final TextEditingController _titleController;
-  late final TextEditingController _priceController;
   late final TextEditingController _descriptionController;
   late final TextEditingController _categoryController;
 
@@ -35,6 +36,13 @@ class _EditProductPageState extends State<EditProductPage> {
   bool _isUploadingPhoto = false;
   bool _isSaving = false;
   bool _isLoadingProduct = true;
+
+  // Price + discount.
+  // `price` in Firestore is what the buyer pays (after discount),
+  // `originalPrice` is the total price before the discount.
+  double _initialTotal = 0;
+  double _initialDiscount = 0;
+  DiscountResult? _priceResult;
 
   // =========================================================
   // CLOUDINARY
@@ -57,12 +65,6 @@ class _EditProductPageState extends State<EditProductPage> {
       text: data['name']?.toString() ?? '',
     );
 
-    _priceController = TextEditingController(
-      text: data['price'] is num
-          ? (data['price'] as num).toString()
-          : '',
-    );
-
     _descriptionController = TextEditingController(
       text: data['description']?.toString() ?? '',
     );
@@ -73,7 +75,30 @@ class _EditProductPageState extends State<EditProductPage> {
 
     _currentImageUrl = data['imageUrl']?.toString() ?? '';
 
+    _readPrice(data);
+
     _loadLatestProduct();
+  }
+
+  double _toDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+
+    return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  void _readPrice(Map<String, dynamic> data) {
+    final double price = _toDouble(data['price']);
+    final double original = _toDouble(data['originalPrice']);
+
+    if (original > price + 0.004) {
+      _initialTotal = original;
+      _initialDiscount = original - price;
+    } else {
+      _initialTotal = price;
+      _initialDiscount = 0;
+    }
+
+    _priceResult = DiscountResult(original: _initialTotal, finalPrice: price);
   }
 
   // =========================================================
@@ -95,9 +120,7 @@ class _EditProductPageState extends State<EditProductPage> {
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Product no longer exists.'),
-          ),
+          const SnackBar(content: Text('Product no longer exists.')),
         );
 
         return;
@@ -106,22 +129,14 @@ class _EditProductPageState extends State<EditProductPage> {
       final data = snapshot.data();
 
       if (data != null && mounted) {
-        _titleController.text =
-            data['name']?.toString() ?? '';
+        _titleController.text = data['name']?.toString() ?? '';
+        _descriptionController.text = data['description']?.toString() ?? '';
+        _categoryController.text = data['category']?.toString() ?? '';
 
-        _priceController.text = data['price'] is num
-            ? (data['price'] as num).toString()
-            : '';
-
-        _descriptionController.text =
-            data['description']?.toString() ?? '';
-
-        _categoryController.text =
-            data['category']?.toString() ?? '';
+        _readPrice(data);
 
         setState(() {
-          _currentImageUrl =
-              data['imageUrl']?.toString() ?? '';
+          _currentImageUrl = data['imageUrl']?.toString() ?? '';
           _isLoadingProduct = false;
         });
       }
@@ -133,11 +148,7 @@ class _EditProductPageState extends State<EditProductPage> {
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Could not load product: $e',
-          ),
-        ),
+        SnackBar(content: Text('Could not load product: $e')),
       );
     }
   }
@@ -150,8 +161,7 @@ class _EditProductPageState extends State<EditProductPage> {
     if (_isUploadingPhoto || _isSaving) return;
 
     try {
-      final XFile? picked =
-          await _imagePicker.pickImage(
+      final XFile? picked = await _imagePicker.pickImage(
         source: ImageSource.gallery,
         imageQuality: 85,
         maxWidth: 1200,
@@ -160,18 +170,12 @@ class _EditProductPageState extends State<EditProductPage> {
 
       if (picked == null) return;
 
-      await _uploadToCloudinary(
-        File(picked.path),
-      );
+      await _uploadToCloudinary(File(picked.path));
     } catch (e) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Could not select photo: $e',
-          ),
-        ),
+        SnackBar(content: Text('Could not select photo: $e')),
       );
     }
   }
@@ -180,9 +184,7 @@ class _EditProductPageState extends State<EditProductPage> {
   // CLOUDINARY UPLOAD
   // =========================================================
 
-  Future<void> _uploadToCloudinary(
-    File imageFile,
-  ) async {
+  Future<void> _uploadToCloudinary(File imageFile) async {
     if (!mounted) return;
 
     setState(() {
@@ -192,53 +194,33 @@ class _EditProductPageState extends State<EditProductPage> {
 
     try {
       final uri = Uri.parse(
-        'https://api.cloudinary.com/v1_1/'
-        '$_cloudName/image/upload',
+        'https://api.cloudinary.com/v1_1/$_cloudName/image/upload',
       );
 
-      final request = http.MultipartRequest(
-        'POST',
-        uri,
-      );
+      final request = http.MultipartRequest('POST', uri);
 
-      request.fields['upload_preset'] =
-          _uploadPreset;
+      request.fields['upload_preset'] = _uploadPreset;
 
       request.files.add(
-        await http.MultipartFile.fromPath(
-          'file',
-          imageFile.path,
-        ),
+        await http.MultipartFile.fromPath('file', imageFile.path),
       );
 
-      final streamedResponse =
-          await request.send();
+      final streamedResponse = await request.send();
 
-      final response =
-          await http.Response.fromStream(
-        streamedResponse,
-      );
+      final response = await http.Response.fromStream(streamedResponse);
 
-      if (response.statusCode < 200 ||
-          response.statusCode >= 300) {
+      if (response.statusCode < 200 || response.statusCode >= 300) {
         throw Exception(
-          'Cloudinary upload failed: '
-          '${response.statusCode}\n'
-          '${response.body}',
+          'Cloudinary upload failed: ${response.statusCode}\n${response.body}',
         );
       }
 
-      final Map<String, dynamic> result =
-          jsonDecode(response.body);
+      final Map<String, dynamic> result = jsonDecode(response.body);
 
-      final secureUrl =
-          result['secure_url']?.toString();
+      final secureUrl = result['secure_url']?.toString();
 
-      if (secureUrl == null ||
-          secureUrl.isEmpty) {
-        throw Exception(
-          'Cloudinary did not return an image URL.',
-        );
+      if (secureUrl == null || secureUrl.isEmpty) {
+        throw Exception('Cloudinary did not return an image URL.');
       }
 
       if (!mounted) return;
@@ -248,11 +230,7 @@ class _EditProductPageState extends State<EditProductPage> {
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'New product image uploaded.',
-          ),
-        ),
+        const SnackBar(content: Text('New product image uploaded.')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -262,11 +240,7 @@ class _EditProductPageState extends State<EditProductPage> {
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Photo upload failed: $e',
-          ),
-        ),
+        SnackBar(content: Text('Photo upload failed: $e')),
       );
     } finally {
       if (mounted) {
@@ -286,52 +260,35 @@ class _EditProductPageState extends State<EditProductPage> {
       return;
     }
 
-    final title =
-        _titleController.text.trim();
-
-    final price =
-        double.tryParse(
-      _priceController.text.trim(),
-    );
-
-    final description =
-        _descriptionController.text.trim();
-
-    final category =
-        _categoryController.text.trim();
-
-    // ---------------------------------------------------------
-    // VALIDATION
-    // ---------------------------------------------------------
+    final title = _titleController.text.trim();
+    final description = _descriptionController.text.trim();
+    final category = _categoryController.text.trim();
+    final DiscountResult? priceResult = _priceResult;
 
     if (title.isEmpty) {
-      _showMessage(
-        'Please enter product name.',
-      );
+      _showMessage('Please enter product name.');
       return;
     }
 
-    if (price == null || price <= 0) {
-      _showMessage(
-        'Please enter a valid price.',
-      );
+    if (priceResult == null || priceResult.original <= 0) {
+      _showMessage('Please enter a valid price.');
+      return;
+    }
+
+    if (priceResult.finalPrice <= 0) {
+      _showMessage('Discount must be less than the total price.');
       return;
     }
 
     if (description.isEmpty) {
-      _showMessage(
-        'Please enter product description.',
-      );
+      _showMessage('Please enter product description.');
       return;
     }
 
-    final user =
-        FirebaseAuth.instance.currentUser;
+    final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      _showMessage(
-        'Please login first.',
-      );
+      _showMessage('Please login first.');
       return;
     }
 
@@ -340,87 +297,61 @@ class _EditProductPageState extends State<EditProductPage> {
     });
 
     try {
-      // -------------------------------------------------------
-      // GET CURRENT PRODUCT
-      // -------------------------------------------------------
-
-      final productRef = FirebaseFirestore
-          .instance
+      final productRef = FirebaseFirestore.instance
           .collection('products')
           .doc(widget.productId);
 
-      final productSnapshot =
-          await productRef.get();
+      final productSnapshot = await productRef.get();
 
       if (!productSnapshot.exists) {
-        throw Exception(
-          'Product does not exist anymore.',
-        );
+        throw Exception('Product does not exist anymore.');
       }
 
-      final productData =
-          productSnapshot.data();
+      final productData = productSnapshot.data();
 
       if (productData == null) {
-        throw Exception(
-          'Product data could not be loaded.',
-        );
+        throw Exception('Product data could not be loaded.');
       }
 
-      // -------------------------------------------------------
       // SELLER OWNERSHIP CHECK
-      // -------------------------------------------------------
-
-      final sellerId =
-          productData['sellerId']?.toString();
+      final sellerId = productData['sellerId']?.toString();
 
       if (sellerId != user.uid) {
-        throw Exception(
-          'You can only edit your own products.',
-        );
+        throw Exception('You can only edit your own products.');
       }
 
-      // -------------------------------------------------------
       // PRESERVE IMPORTANT SELLER DATA
-      // -------------------------------------------------------
+      final sellerCode = productData['sellerCode'];
 
-      final sellerCode =
-          productData['sellerCode'];
+      final sellerEmail = productData['sellerEmail'];
 
-      final sellerEmail =
-          productData['sellerEmail'];
-
-      // -------------------------------------------------------
-      // UPDATE PRODUCT
-      // -------------------------------------------------------
+      // `price` = what the buyer pays (after discount).
+      // Cart, checkout and orders use it, so they stay correct.
+      final bool hasDiscount = priceResult.hasDiscount;
 
       await productRef.update({
         'name': title,
-        'price': price,
+        'price': priceResult.finalPrice,
+        'currency': 'BDT',
+        'currencySymbol': '৳',
+        'originalPrice':
+            hasDiscount ? priceResult.original : priceResult.finalPrice,
+        'discountAmount': hasDiscount ? priceResult.amount : 0,
+        'discountPercent': hasDiscount ? priceResult.percent : 0,
+        'hasDiscount': hasDiscount,
         'description': description,
-        'category': category.isNotEmpty
-            ? category
-            : 'General',
+        'category': category.isNotEmpty ? category : 'General',
         'imageUrl': _currentImageUrl,
         'sellerId': sellerId,
         'sellerCode': sellerCode,
         'sellerEmail': sellerEmail,
-        'updatedAt':
-            FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
       });
 
       if (!mounted) return;
 
-      // -------------------------------------------------------
-      // SUCCESS
-      // -------------------------------------------------------
-
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Product updated successfully!',
-          ),
-        ),
+        const SnackBar(content: Text('Product updated successfully!')),
       );
 
       Navigator.pop(context);
@@ -428,11 +359,7 @@ class _EditProductPageState extends State<EditProductPage> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Update failed: $e',
-          ),
-        ),
+        SnackBar(content: Text('Update failed: $e')),
       );
     } finally {
       if (mounted) {
@@ -443,15 +370,9 @@ class _EditProductPageState extends State<EditProductPage> {
     }
   }
 
-  // =========================================================
-  // MESSAGE
-  // =========================================================
-
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-      ),
+      SnackBar(content: Text(message)),
     );
   }
 
@@ -480,8 +401,7 @@ class _EditProductPageState extends State<EditProductPage> {
           width: double.infinity,
           height: 210,
           fit: BoxFit.cover,
-          errorBuilder:
-              (context, error, stackTrace) {
+          errorBuilder: (context, error, stackTrace) {
             return _emptyImage();
           },
         ),
@@ -490,10 +410,6 @@ class _EditProductPageState extends State<EditProductPage> {
 
     return _emptyImage();
   }
-
-  // =========================================================
-  // EMPTY IMAGE
-  // =========================================================
 
   Widget _emptyImage() {
     return Container(
@@ -504,8 +420,7 @@ class _EditProductPageState extends State<EditProductPage> {
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
-        mainAxisAlignment:
-            MainAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
             Icons.add_a_photo_outlined,
@@ -515,9 +430,7 @@ class _EditProductPageState extends State<EditProductPage> {
           const SizedBox(height: 10),
           Text(
             'Tap to choose product image',
-            style: TextStyle(
-              color: Colors.grey.shade600,
-            ),
+            style: TextStyle(color: Colors.grey.shade600),
           ),
         ],
       ),
@@ -531,7 +444,6 @@ class _EditProductPageState extends State<EditProductPage> {
   @override
   void dispose() {
     _titleController.dispose();
-    _priceController.dispose();
     _descriptionController.dispose();
     _categoryController.dispose();
 
@@ -546,102 +458,66 @@ class _EditProductPageState extends State<EditProductPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Edit Product',
-        ),
+        title: const Text('Edit Product'),
         backgroundColor: Colors.redAccent,
         foregroundColor: Colors.white,
       ),
       body: _isLoadingProduct
-          ? const Center(
-              child: CircularProgressIndicator(),
-            )
+          ? const Center(child: CircularProgressIndicator())
           : SafeArea(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // -------------------------------------------------
                     // IMAGE
-                    // -------------------------------------------------
-
                     GestureDetector(
                       onTap: _pickImage,
                       child: Stack(
-                        alignment:
-                            Alignment.center,
+                        alignment: Alignment.center,
                         children: [
                           _imagePreview(),
-
                           if (_isUploadingPhoto)
                             Container(
                               width: double.infinity,
                               height: 210,
-                              decoration:
-                                  BoxDecoration(
-                                color:
-                                    Colors.black45,
-                                borderRadius:
-                                    BorderRadius.circular(
-                                  14,
-                                ),
+                              decoration: BoxDecoration(
+                                color: Colors.black45,
+                                borderRadius: BorderRadius.circular(14),
                               ),
-                              child:
-                                  const Center(
-                                child:
-                                    CircularProgressIndicator(
-                                  color:
-                                      Colors.white,
+                              child: const Center(
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
                                 ),
                               ),
                             ),
-
                           if (!_isUploadingPhoto)
                             Positioned(
                               bottom: 10,
                               right: 10,
                               child: Container(
-                                padding:
-                                    const EdgeInsets
-                                        .symmetric(
+                                padding: const EdgeInsets.symmetric(
                                   horizontal: 12,
                                   vertical: 8,
                                 ),
-                                decoration:
-                                    BoxDecoration(
-                                  color:
-                                      Colors.black54,
-                                  borderRadius:
-                                      BorderRadius
-                                          .circular(
-                                    20,
-                                  ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: const Row(
-                                  mainAxisSize:
-                                      MainAxisSize.min,
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(
-                                      Icons
-                                          .camera_alt_outlined,
-                                      color:
-                                          Colors.white,
+                                      Icons.camera_alt_outlined,
+                                      color: Colors.white,
                                       size: 18,
                                     ),
-                                    SizedBox(
-                                      width: 6,
-                                    ),
+                                    SizedBox(width: 6),
                                     Text(
                                       'Change',
-                                      style:
-                                          TextStyle(
-                                        color:
-                                            Colors.white,
-                                        fontWeight:
-                                            FontWeight
-                                                .w600,
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
                                   ],
@@ -651,173 +527,99 @@ class _EditProductPageState extends State<EditProductPage> {
                         ],
                       ),
                     ),
-
                     const SizedBox(height: 20),
 
-                    // -------------------------------------------------
                     // PRODUCT NAME
-                    // -------------------------------------------------
-
                     TextField(
-                      controller:
-                          _titleController,
-                      textInputAction:
-                          TextInputAction.next,
-                      decoration:
-                          const InputDecoration(
-                        labelText:
-                            'Product Name',
-                        border:
-                            OutlineInputBorder(),
-                        prefixIcon: Icon(
-                          Icons.inventory_2_outlined,
-                        ),
+                      controller: _titleController,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
+                        labelText: 'Product Name',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.inventory_2_outlined),
                       ),
                     ),
-
                     const SizedBox(height: 14),
 
-                    // -------------------------------------------------
-                    // PRICE
-                    // -------------------------------------------------
-
-                    TextField(
-                      controller:
-                          _priceController,
-                      keyboardType:
-                          const TextInputType
-                              .numberWithOptions(
-                        decimal: true,
-                      ),
-                      decoration:
-                          const InputDecoration(
-                        labelText:
-                            'Price (₩)',
-                        border:
-                            OutlineInputBorder(),
-                        prefixIcon: Icon(
-                          Icons
-                              .payments_outlined,
-                        ),
-                      ),
+                    // TOTAL PRICE + DISCOUNT % + DISCOUNT AMOUNT
+                    DiscountPriceInput(
+                      originalLabel: 'Total Price (BDT)',
+                      initialOriginal: _initialTotal,
+                      initialDiscountAmount: _initialDiscount,
+                      enabled: !_isSaving,
+                      onChanged: (DiscountResult value) {
+                        _priceResult = value;
+                      },
                     ),
-
                     const SizedBox(height: 14),
 
-                    // -------------------------------------------------
                     // CATEGORY
-                    // -------------------------------------------------
-
                     TextField(
-                      controller:
-                          _categoryController,
-                      textInputAction:
-                          TextInputAction.next,
-                      decoration:
-                          const InputDecoration(
-                        labelText:
-                            'Category',
-                        hintText:
-                            'Example: Men, Women, Electronics',
-                        border:
-                            OutlineInputBorder(),
-                        prefixIcon: Icon(
-                          Icons
-                              .category_outlined,
-                        ),
+                      controller: _categoryController,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
+                        labelText: 'Category',
+                        hintText: 'Example: Men, Women, Electronics',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.category_outlined),
                       ),
                     ),
-
                     const SizedBox(height: 14),
 
-                    // -------------------------------------------------
                     // DESCRIPTION
-                    // -------------------------------------------------
-
                     TextField(
-                      controller:
-                          _descriptionController,
+                      controller: _descriptionController,
                       maxLines: 5,
                       maxLength: 1000,
-                      decoration:
-                          const InputDecoration(
-                        labelText:
-                            'Description',
-                        border:
-                            OutlineInputBorder(),
-                        prefixIcon: Icon(
-                          Icons
-                              .description_outlined,
-                        ),
+                      decoration: const InputDecoration(
+                        labelText: 'Description',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.description_outlined),
                         alignLabelWithHint: true,
                       ),
                     ),
-
                     const SizedBox(height: 10),
 
-                    // -------------------------------------------------
                     // SAVE BUTTON
-                    // -------------------------------------------------
-
                     SizedBox(
                       width: double.infinity,
                       height: 52,
                       child: ElevatedButton(
-                        onPressed:
-                            (_isSaving ||
-                                    _isUploadingPhoto)
-                                ? null
-                                : _saveChanges,
-                        style:
-                            ElevatedButton.styleFrom(
-                          backgroundColor:
-                              Colors.redAccent,
-                          foregroundColor:
-                              Colors.white,
-                          shape:
-                              RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(
-                              12,
-                            ),
+                        onPressed: (_isSaving || _isUploadingPhoto)
+                            ? null
+                            : _saveChanges,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.redAccent,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
                         ),
                         child: _isSaving
                             ? const SizedBox(
                                 height: 23,
                                 width: 23,
-                                child:
-                                    CircularProgressIndicator(
-                                  color:
-                                      Colors.white,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
                                   strokeWidth: 2,
                                 ),
                               )
                             : const Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment
-                                        .center,
+                                mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Icon(
-                                    Icons
-                                        .save_outlined,
-                                  ),
+                                  Icon(Icons.save_outlined),
                                   SizedBox(width: 8),
                                   Text(
                                     'Save Changes',
-                                    style:
-                                        TextStyle(
+                                    style: TextStyle(
                                       fontSize: 16,
-                                      fontWeight:
-                                          FontWeight
-                                              .bold,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                 ],
                               ),
                       ),
                     ),
-
                     const SizedBox(height: 20),
                   ],
                 ),
