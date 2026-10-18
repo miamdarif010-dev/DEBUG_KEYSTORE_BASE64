@@ -11,6 +11,9 @@ import 'admin_panel_page.dart';
 import 'entrepreneur_page.dart';
 import 'watch_earn_page.dart';
 import 'seller_page.dart';
+import 'add_seller_video_page.dart';
+import 'my_videos_page.dart';
+import 'user_videos_grid.dart';
 
 class UserProfilePage extends StatefulWidget {
   final String? userId;
@@ -163,8 +166,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
 
     try {
+      // Other people's profiles are read from publicProfiles
+      // (safe copy: no email / phone). /users is owner-only.
       final doc = await FirebaseFirestore.instance
-          .collection('users')
+          .collection('publicProfiles')
           .doc(uid)
           .get();
 
@@ -339,6 +344,14 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   void _openSettings() {
     _push(const SettingsPage());
+  }
+
+  void _openAddVideo() {
+    _push(const AddSellerVideoPage());
+  }
+
+  void _openMyVideos() {
+    _push(const MyVideosPage());
   }
 
   Future<void> _logout() async {
@@ -706,6 +719,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   const SizedBox(height: 14),
                   _statsRow(),
                   const SizedBox(height: 14),
+                  if (_targetUserId != null)
+                    UserVideosGrid(
+                      userId: _targetUserId!,
+                      isOwner: false,
+                    ),
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
@@ -898,6 +916,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     const SizedBox(height: 14),
                     _statsRow(),
                     const SizedBox(height: 14),
+                    if (_targetUserId != null)
+                      UserVideosGrid(
+                        userId: _targetUserId!,
+                        isOwner: true,
+                        onUpload: _openAddVideo,
+                        onManage: _openMyVideos,
+                      ),
                     if (_isAdmin)
                       _sectionCard(
                         title: 'Admin',
