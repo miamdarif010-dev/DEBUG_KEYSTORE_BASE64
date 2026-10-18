@@ -236,9 +236,21 @@ $('openApp').addEventListener('click', function (e) {
   function onHide() { if (document.hidden) left = true; }
   document.addEventListener('visibilitychange', onHide);
   window.addEventListener('pagehide', function () { left = true; });
+  window.addEventListener('blur', function () { left = true; });
 
-  // Chrome supports intent:// ; in-app browsers (Messenger/Facebook) need the plain scheme.
-  window.location.href = IN_APP ? SCHEME_URL : INTENT_URL;
+  // Only real Chrome handles intent:// well. Other browsers (Samsung, Opera, UC,
+  // Mi, Vivo, Messenger...) get the plain buynova:// link first.
+  var IS_CHROME = /Chrome\//i.test(UA) && !/SamsungBrowser|OPR\/|OPiOS|EdgA|UCBrowser|MiuiBrowser|VivoBrowser|HeyTap|Brave|DuckDuckGo/i.test(UA) && !IN_APP;
+  var first  = IS_CHROME ? INTENT_URL : SCHEME_URL;
+  var second = IS_CHROME ? SCHEME_URL : INTENT_URL;
+
+  window.location.href = first;
+
+  // If nothing opened, try the other way once.
+  setTimeout(function () {
+    if (left || document.hidden) return;
+    window.location.href = second;
+  }, 1300);
 
   setTimeout(function () {
     document.removeEventListener('visibilitychange', onHide);
@@ -246,9 +258,9 @@ $('openApp').addEventListener('click', function (e) {
     if (IN_APP) {
       showHint('Messenger-এর ভেতর থেকে অ্যাপ খুলছে না।<br>নিচের <b>Chrome-এ খুলুন</b> চাপুন, তারপর আবার <b>অ্যাপে খুলুন</b> চাপুন।<br>অ্যাপ না থাকলে আগে <b>অ্যাপ ডাউনলোড</b> করুন।', true);
     } else {
-      showHint('অ্যাপ খোলেনি। BuyNova অ্যাপ ইনস্টল না থাকলে আগে <b>অ্যাপ ডাউনলোড</b> চাপুন, ইনস্টল করে আবার চেষ্টা করুন।', false);
+      showHint('অ্যাপ খোলেনি।<br>১) অ্যাপ ইনস্টল হয়েছে কিনা দেখুন (না হলে <b>অ্যাপ ডাউনলোড</b> চেপে ইনস্টল করুন)।<br>২) লিংকটি <b>Chrome ব্রাউজারে</b> খুলে আবার চেষ্টা করুন।', true);
     }
-  }, 1800);
+  }, 2800);
 });
 
 if (location.hash === '#noapp') {
