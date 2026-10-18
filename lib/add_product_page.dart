@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
+import 'price_discount.dart';
 import 'product_variants.dart';
 
 class AddProductPage extends StatefulWidget {
@@ -41,9 +42,12 @@ class _AddProductPageState extends State<AddProductPage> {
   // ============================================================
 
   final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _priceController = TextEditingController();
   final TextEditingController _descriptionController =
       TextEditingController();
+
+  // Price + optional discount (total price, discount %, discount amount)
+  DiscountResult? _priceResult;
+  int _priceFormVersion = 0;
 
   // ============================================================
   // DATA
@@ -122,7 +126,6 @@ class _AddProductPageState extends State<AddProductPage> {
   @override
   void dispose() {
     _nameController.dispose();
-    _priceController.dispose();
     _descriptionController.dispose();
     for (final draft in _colorDrafts) {
       draft.name.dispose();
@@ -159,8 +162,7 @@ class _AddProductPageState extends State<AddProductPage> {
 
       final String role = (data['role'] ?? '').toString().toLowerCase();
 
-      final bool approved =
-          sellerStatus == 'approved' || role == 'admin';
+      final bool approved = sellerStatus == 'approved' || role == 'admin';
 
       if (!mounted) return;
 
@@ -168,13 +170,11 @@ class _AddProductPageState extends State<AddProductPage> {
         _isCheckingSeller = false;
         _isApprovedSeller = approved;
 
-        _sellerName = (data['name'] ?? data['displayName'] ?? '')
-            .toString()
-            .trim();
+        _sellerName =
+            (data['name'] ?? data['displayName'] ?? '').toString().trim();
 
-        _shopName = (data['shopName'] ?? data['storeName'] ?? '')
-            .toString()
-            .trim();
+        _shopName =
+            (data['shopName'] ?? data['storeName'] ?? '').toString().trim();
       });
     } catch (e) {
       if (!mounted) return;
@@ -184,10 +184,7 @@ class _AddProductPageState extends State<AddProductPage> {
         _isApprovedSeller = false;
       });
 
-      _showSnackBar(
-        'Seller information load failed: $e',
-        isError: true,
-      );
+      _showSnackBar('Seller information load failed: $e', isError: true);
     }
   }
 
@@ -210,10 +207,7 @@ class _AddProductPageState extends State<AddProductPage> {
       final int remaining = _maxImages - _pickedImages.length;
 
       if (remaining <= 0) {
-        _showSnackBar(
-          'Maximum $_maxImages images allowed.',
-          isError: true,
-        );
+        _showSnackBar('Maximum $_maxImages images allowed.', isError: true);
         return;
       }
 
@@ -225,16 +219,10 @@ class _AddProductPageState extends State<AddProductPage> {
       });
 
       if (images.length > remaining) {
-        _showSnackBar(
-          'Only $_maxImages images can be added.',
-          isError: true,
-        );
+        _showSnackBar('Only $_maxImages images can be added.', isError: true);
       }
     } catch (e) {
-      _showSnackBar(
-        'Image selection failed: $e',
-        isError: true,
-      );
+      _showSnackBar('Image selection failed: $e', isError: true);
     }
   }
 
@@ -274,10 +262,7 @@ class _AddProductPageState extends State<AddProductPage> {
         _uploadedVideoUrl = null;
       });
     } catch (e) {
-      _showSnackBar(
-        'Video selection failed: $e',
-        isError: true,
-      );
+      _showSnackBar('Video selection failed: $e', isError: true);
     }
   }
 
@@ -295,26 +280,24 @@ class _AddProductPageState extends State<AddProductPage> {
   }
 
   // ============================================================
-  // CLOUDINARY IMAGE UPLOAD
+  // CLOUDINARY UPLOAD (image / video)
   // ============================================================
 
-  Future<String?> _uploadImageToCloudinary(XFile image) async {
+  Future<String?> _uploadToCloudinary(
+    XFile file, {
+    required String resourceType,
+    required String preset,
+  }) async {
     try {
       final Uri url = Uri.parse(
-        'https://api.cloudinary.com/v1_1/$_cloudName/image/upload',
+        'https://api.cloudinary.com/v1_1/$_cloudName/$resourceType/upload',
       );
 
-      final http.MultipartRequest request =
-          http.MultipartRequest('POST', url);
+      final http.MultipartRequest request = http.MultipartRequest('POST', url);
 
-      request.fields['upload_preset'] = _imageUploadPreset;
+      request.fields['upload_preset'] = preset;
 
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          'file',
-          image.path,
-        ),
-      );
+      request.files.add(await http.MultipartFile.fromPath('file', file.path));
 
       final http.StreamedResponse streamedResponse = await request.send();
 
@@ -324,7 +307,7 @@ class _AddProductPageState extends State<AddProductPage> {
       if (streamedResponse.statusCode < 200 ||
           streamedResponse.statusCode >= 300) {
         debugPrint(
-          'Cloudinary image upload failed: '
+          'Cloudinary $resourceType upload failed: '
           '${streamedResponse.statusCode} $responseBody',
         );
         return null;
@@ -342,62 +325,25 @@ class _AddProductPageState extends State<AddProductPage> {
 
       return null;
     } catch (e) {
-      debugPrint('Cloudinary image upload exception: $e');
+      debugPrint('Cloudinary $resourceType upload exception: $e');
       return null;
     }
   }
 
-  // ============================================================
-  // CLOUDINARY VIDEO UPLOAD
-  // ============================================================
+  Future<String?> _uploadImageToCloudinary(XFile image) {
+    return _uploadToCloudinary(
+      image,
+      resourceType: 'image',
+      preset: _imageUploadPreset,
+    );
+  }
 
-  Future<String?> _uploadVideoToCloudinary(XFile video) async {
-    try {
-      final Uri url = Uri.parse(
-        'https://api.cloudinary.com/v1_1/$_cloudName/video/upload',
-      );
-
-      final http.MultipartRequest request =
-          http.MultipartRequest('POST', url);
-
-      request.fields['upload_preset'] = _videoUploadPreset;
-
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          'file',
-          video.path,
-        ),
-      );
-
-      final http.StreamedResponse streamedResponse = await request.send();
-
-      final String responseBody =
-          await streamedResponse.stream.bytesToString();
-
-      if (streamedResponse.statusCode < 200 ||
-          streamedResponse.statusCode >= 300) {
-        debugPrint(
-          'Cloudinary video upload failed: '
-          '${streamedResponse.statusCode} $responseBody',
-        );
-        return null;
-      }
-
-      final dynamic decoded = jsonDecode(responseBody);
-
-      if (decoded is Map<String, dynamic>) {
-        final String? secureUrl = decoded['secure_url']?.toString();
-
-        if (secureUrl != null && secureUrl.isNotEmpty) {
-          return secureUrl;
-        }
-      }
-
-      return null;
-    } catch (e) {
-      debugPrint('Cloudinary video upload exception: $e');
-      return null;
-    }
+  Future<String?> _uploadVideoToCloudinary(XFile video) {
+    return _uploadToCloudinary(
+      video,
+      resourceType: 'video',
+      preset: _videoUploadPreset,
+    );
   }
 
   // ============================================================
@@ -406,10 +352,7 @@ class _AddProductPageState extends State<AddProductPage> {
 
   Future<bool> _uploadSelectedMedia() async {
     if (_pickedImages.isEmpty) {
-      _showSnackBar(
-        'Please select at least one product image.',
-        isError: true,
-      );
+      _showSnackBar('Please select at least one product image.', isError: true);
       return false;
     }
 
@@ -473,10 +416,7 @@ class _AddProductPageState extends State<AddProductPage> {
 
       return true;
     } catch (e) {
-      _showSnackBar(
-        'Media upload failed: $e',
-        isError: true,
-      );
+      _showSnackBar('Media upload failed: $e', isError: true);
 
       return false;
     } finally {
@@ -498,58 +438,55 @@ class _AddProductPageState extends State<AddProductPage> {
     final User? user = _auth.currentUser;
 
     if (user == null) {
-      _showSnackBar(
-        'Please login first.',
-        isError: true,
-      );
+      _showSnackBar('Please login first.', isError: true);
       return;
     }
 
     if (!_isApprovedSeller) {
-      _showSnackBar(
-        'Only approved sellers can add products.',
-        isError: true,
-      );
+      _showSnackBar('Only approved sellers can add products.', isError: true);
       return;
     }
 
     final String name = _nameController.text.trim();
-    final String priceText = _priceController.text.trim();
     final String description = _descriptionController.text.trim();
 
     if (name.isEmpty) {
+      _showSnackBar('Please enter product name.', isError: true);
+      return;
+    }
+
+    // ----- Price + discount -----
+    final DiscountResult? priceResult = _priceResult;
+
+    if (priceResult == null || priceResult.original <= 0) {
+      _showSnackBar('Please enter a valid price.', isError: true);
+      return;
+    }
+
+    if (priceResult.finalPrice <= 0) {
       _showSnackBar(
-        'Please enter product name.',
+        'Discount must be less than the total price.',
         isError: true,
       );
       return;
     }
 
-    final double? price = double.tryParse(
-      priceText.replaceAll(',', ''),
-    );
-
-    if (price == null || price <= 0) {
-      _showSnackBar(
-        'Please enter a valid price.',
-        isError: true,
-      );
-      return;
-    }
+    // `price` is what the buyer pays (after discount).
+    // `originalPrice` is the total price before the discount.
+    final double price = priceResult.finalPrice;
+    final bool hasDiscount = priceResult.hasDiscount;
+    final double originalPrice =
+        hasDiscount ? priceResult.original : priceResult.finalPrice;
+    final double discountAmount = hasDiscount ? priceResult.amount : 0;
+    final double discountPercent = hasDiscount ? priceResult.percent : 0;
 
     if (description.isEmpty) {
-      _showSnackBar(
-        'Please enter product description.',
-        isError: true,
-      );
+      _showSnackBar('Please enter product description.', isError: true);
       return;
     }
 
     if (_pickedImages.isEmpty) {
-      _showSnackBar(
-        'Please select at least one product image.',
-        isError: true,
-      );
+      _showSnackBar('Please select at least one product image.', isError: true);
       return;
     }
 
@@ -589,16 +526,23 @@ class _AddProductPageState extends State<AddProductPage> {
 
       final String shopName = _shopName?.isNotEmpty == true
           ? _shopName!
-          : (userData['shopName'] ?? userData['storeName'] ?? '')
-              .toString();
+          : (userData['shopName'] ?? userData['storeName'] ?? '').toString();
 
       final DocumentReference<Map<String, dynamic>> productRef =
           _firestore.collection('products').doc();
 
-      final Map<String, dynamic> productData =
-          <String, dynamic>{
+      final Map<String, dynamic> productData = <String, dynamic>{
         'name': name,
+
+        // Buyer price (after discount). Cart, checkout and orders use this.
         'price': price,
+
+        // Discount information (display only)
+        'originalPrice': originalPrice,
+        'discountAmount': discountAmount,
+        'discountPercent': discountPercent,
+        'hasDiscount': hasDiscount,
+
         'currency': 'BDT',
         'currencySymbol': '৳',
 
@@ -614,9 +558,8 @@ class _AddProductPageState extends State<AddProductPage> {
 
         'videoUrl': _uploadedVideoUrl ?? '',
 
-        'sizes': _sizePresets
-            .where(_selectedSizes.contains)
-            .toList(growable: false),
+        'sizes':
+            _sizePresets.where(_selectedSizes.contains).toList(growable: false),
         'colors': colorsData,
         'productVideoUrl': _uploadedVideoUrl ?? '',
 
@@ -627,6 +570,7 @@ class _AddProductPageState extends State<AddProductPage> {
 
         'status': 'active',
         'isActive': true,
+        'active': true,
         'approved': true,
         'sellerApproved': true,
 
@@ -643,12 +587,13 @@ class _AddProductPageState extends State<AddProductPage> {
       await productRef.set(productData);
 
       try {
-        await _firestore
-            .collection('global_notifications')
-            .add({
+        await _firestore.collection('global_notifications').add({
           'type': 'new_product',
           'title': 'New Product Added',
-          'message': '$name is now available on BuyNova.',
+          'message': hasDiscount
+              ? '$name is now available on BuyNova with '
+                  '${formatPercent(discountPercent)} discount.'
+              : '$name is now available on BuyNova.',
           'productId': productRef.id,
           'productName': name,
           'productImage': _uploadedImageUrls.first,
@@ -663,19 +608,14 @@ class _AddProductPageState extends State<AddProductPage> {
           'createdAt': FieldValue.serverTimestamp(),
         });
       } catch (e) {
-        debugPrint(
-          'Global notification creation failed: $e',
-        );
+        debugPrint('Global notification creation failed: $e');
       }
 
       if (!mounted) return;
 
-      _showSnackBar(
-        'Product added successfully!',
-      );
+      _showSnackBar('Product added successfully!');
 
       _nameController.clear();
-      _priceController.clear();
       _descriptionController.clear();
 
       setState(() {
@@ -684,21 +624,18 @@ class _AddProductPageState extends State<AddProductPage> {
         _pickedVideo = null;
         _uploadedVideoUrl = null;
         _selectedCategory = 'Phones';
+        _priceResult = null;
+        _priceFormVersion++;
       });
 
-      await Future<void>.delayed(
-        const Duration(milliseconds: 700),
-      );
+      await Future<void>.delayed(const Duration(milliseconds: 700));
 
       if (!mounted) return;
 
       Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
-        _showSnackBar(
-          'Product save failed: $e',
-          isError: true,
-        );
+        _showSnackBar('Product save failed: $e', isError: true);
       }
     } finally {
       if (mounted) {
@@ -726,10 +663,7 @@ class _AddProductPageState extends State<AddProductPage> {
       );
   }
 
-  void _showSnackBar(
-    String message, {
-    bool isError = false,
-  }) {
+  void _showSnackBar(String message, {bool isError = false}) {
     if (!mounted) return;
 
     ScaffoldMessenger.of(context)
@@ -828,6 +762,10 @@ class _AddProductPageState extends State<AddProductPage> {
     return result;
   }
 
+  // ============================================================
+  // VARIANT SECTION (sizes + colors)
+  // ============================================================
+
   Widget _buildVariantSection() {
     return Card(
       elevation: 1,
@@ -844,10 +782,7 @@ class _AddProductPageState extends State<AddProductPage> {
                 Expanded(
                   child: Text(
                     'Sizes & Colors',
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
                   ),
                 ),
                 Text(
@@ -857,10 +792,7 @@ class _AddProductPageState extends State<AddProductPage> {
               ],
             ),
             const SizedBox(height: 14),
-            const Text(
-              'Sizes',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
+            const Text('Sizes', style: TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -888,10 +820,7 @@ class _AddProductPageState extends State<AddProductPage> {
               }).toList(),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Colors',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
+            const Text('Colors', style: TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 4),
             Text(
               'Each color has its own photos. Buyers see these photos when they pick the color.',
@@ -1055,7 +984,7 @@ class _AddProductPageState extends State<AddProductPage> {
   }
 
   // ============================================================
-  // IMAGE PICKER CARD
+  // IMAGE SECTION
   // ============================================================
 
   Widget _buildImageSection() {
@@ -1069,17 +998,12 @@ class _AddProductPageState extends State<AddProductPage> {
           children: [
             Row(
               children: [
-                const Icon(
-                  Icons.photo_library_outlined,
-                ),
+                const Icon(Icons.photo_library_outlined),
                 const SizedBox(width: 8),
                 const Expanded(
                   child: Text(
                     'Product Images',
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
                   ),
                 ),
                 Text(
@@ -1094,10 +1018,7 @@ class _AddProductPageState extends State<AddProductPage> {
             const SizedBox(height: 8),
             Text(
               'Add up to $_maxImages product images.',
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontSize: 13,
-              ),
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
             ),
             const SizedBox(height: 14),
             if (_pickedImages.isEmpty)
@@ -1109,32 +1030,21 @@ class _AddProductPageState extends State<AddProductPage> {
                   height: 170,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: Colors.grey.shade300,
-                      width: 1.5,
-                    ),
+                    border: Border.all(color: Colors.grey.shade300, width: 1.5),
                   ),
                   child: const Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.add_photo_alternate_outlined,
-                        size: 48,
-                      ),
+                      Icon(Icons.add_photo_alternate_outlined, size: 48),
                       SizedBox(height: 10),
                       Text(
                         'Tap to select product images',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: TextStyle(fontWeight: FontWeight.w600),
                       ),
                       SizedBox(height: 5),
                       Text(
                         'You can select multiple images',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
-                        ),
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                     ],
                   ),
@@ -1148,8 +1058,7 @@ class _AddProductPageState extends State<AddProductPage> {
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: _pickedImages.length,
-                      separatorBuilder: (_, __) =>
-                          const SizedBox(width: 10),
+                      separatorBuilder: (_, __) => const SizedBox(width: 10),
                       itemBuilder: (context, index) {
                         final XFile image = _pickedImages[index];
 
@@ -1162,8 +1071,7 @@ class _AddProductPageState extends State<AddProductPage> {
                                 width: 105,
                                 height: 105,
                                 fit: BoxFit.cover,
-                                errorBuilder:
-                                    (context, error, stackTrace) {
+                                errorBuilder: (context, error, stackTrace) {
                                   return Container(
                                     width: 105,
                                     height: 105,
@@ -1180,8 +1088,7 @@ class _AddProductPageState extends State<AddProductPage> {
                               right: 5,
                               child: InkWell(
                                 onTap: () => _removeImage(index),
-                                borderRadius:
-                                    BorderRadius.circular(20),
+                                borderRadius: BorderRadius.circular(20),
                                 child: Container(
                                   width: 30,
                                   height: 30,
@@ -1208,8 +1115,7 @@ class _AddProductPageState extends State<AddProductPage> {
                                   ),
                                   decoration: BoxDecoration(
                                     color: Colors.black54,
-                                    borderRadius:
-                                        BorderRadius.circular(8),
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: const Text(
                                     'Main',
@@ -1230,12 +1136,9 @@ class _AddProductPageState extends State<AddProductPage> {
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
-                      onPressed: _pickedImages.length >= _maxImages
-                          ? null
-                          : _pickImages,
-                      icon: const Icon(
-                        Icons.add_photo_alternate_outlined,
-                      ),
+                      onPressed:
+                          _pickedImages.length >= _maxImages ? null : _pickImages,
+                      icon: const Icon(Icons.add_photo_alternate_outlined),
                       label: Text(
                         _pickedImages.length >= _maxImages
                             ? 'Maximum images reached'
@@ -1266,35 +1169,24 @@ class _AddProductPageState extends State<AddProductPage> {
           children: [
             const Row(
               children: [
-                Icon(
-                  Icons.video_library_outlined,
-                ),
+                Icon(Icons.video_library_outlined),
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Product Video',
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
                   ),
                 ),
                 Text(
                   'Optional',
-                  style: TextStyle(
-                    color: Colors.grey,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
                 ),
               ],
             ),
             const SizedBox(height: 8),
             Text(
               'Add one short product video. Maximum $_maxVideoSeconds seconds.',
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontSize: 13,
-              ),
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
             ),
             const SizedBox(height: 14),
             if (_pickedVideo == null)
@@ -1306,32 +1198,21 @@ class _AddProductPageState extends State<AddProductPage> {
                   height: 125,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: Colors.grey.shade300,
-                      width: 1.5,
-                    ),
+                    border: Border.all(color: Colors.grey.shade300, width: 1.5),
                   ),
                   child: const Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.video_call_outlined,
-                        size: 42,
-                      ),
+                      Icon(Icons.video_call_outlined, size: 42),
                       SizedBox(height: 8),
                       Text(
                         'Select Product Video',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: TextStyle(fontWeight: FontWeight.w600),
                       ),
                       SizedBox(height: 4),
                       Text(
                         'Optional',
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: 12,
-                        ),
+                        style: TextStyle(color: Colors.grey, fontSize: 12),
                       ),
                     ],
                   ),
@@ -1353,10 +1234,7 @@ class _AddProductPageState extends State<AddProductPage> {
                         color: Colors.black12,
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(
-                        Icons.play_circle_outline,
-                        size: 34,
-                      ),
+                      child: const Icon(Icons.play_circle_outline, size: 34),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -1364,17 +1242,12 @@ class _AddProductPageState extends State<AddProductPage> {
                         _pickedVideo!.name,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                     ),
                     IconButton(
                       onPressed: _removeVideo,
-                      icon: const Icon(
-                        Icons.delete_outline,
-                        color: Colors.red,
-                      ),
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
                     ),
                   ],
                 ),
@@ -1418,17 +1291,13 @@ class _AddProductPageState extends State<AddProductPage> {
         labelText: label,
         hintText: hint,
         prefixIcon: Icon(icon),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(
-            width: 2,
-          ),
+          borderSide: const BorderSide(width: 2),
         ),
       ),
     );
@@ -1443,12 +1312,8 @@ class _AddProductPageState extends State<AddProductPage> {
       initialValue: _selectedCategory,
       decoration: InputDecoration(
         labelText: 'Category',
-        prefixIcon: const Icon(
-          Icons.category_outlined,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        prefixIcon: const Icon(Icons.category_outlined),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
         ),
@@ -1487,9 +1352,7 @@ class _AddProductPageState extends State<AddProductPage> {
           children: [
             const CircleAvatar(
               radius: 24,
-              child: Icon(
-                Icons.storefront_outlined,
-              ),
+              child: Icon(Icons.storefront_outlined),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -1498,10 +1361,7 @@ class _AddProductPageState extends State<AddProductPage> {
                 children: [
                   const Text(
                     'Seller',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey,
-                    ),
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   const SizedBox(height: 3),
                   Text(
@@ -1510,9 +1370,7 @@ class _AddProductPageState extends State<AddProductPage> {
                         : (user?.email ?? 'Seller'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   if (_shopName?.isNotEmpty == true) ...[
                     const SizedBox(height: 2),
@@ -1520,20 +1378,14 @@ class _AddProductPageState extends State<AddProductPage> {
                       _shopName!,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey,
-                      ),
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   ],
                 ],
               ),
             ),
             Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 9,
-                vertical: 5,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
               decoration: BoxDecoration(
                 color: Colors.green.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
@@ -1561,46 +1413,32 @@ class _AddProductPageState extends State<AddProductPage> {
   Widget build(BuildContext context) {
     if (_isCheckingSeller) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Add Product'),
-        ),
-        body: const Center(
-          child: CircularProgressIndicator(),
-        ),
+        appBar: AppBar(title: const Text('Add Product')),
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     if (!_isApprovedSeller) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Add Product'),
-        ),
+        appBar: AppBar(title: const Text('Add Product')),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(
-                  Icons.lock_outline,
-                  size: 70,
-                ),
+                const Icon(Icons.lock_outline, size: 70),
                 const SizedBox(height: 20),
                 const Text(
                   'Seller Approval Required',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 21,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 10),
                 Text(
                   'Only approved BuyNova sellers can add products.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.grey.shade700,
-                  ),
+                  style: TextStyle(color: Colors.grey.shade700),
                 ),
                 const SizedBox(height: 25),
                 ElevatedButton.icon(
@@ -1621,9 +1459,7 @@ class _AddProductPageState extends State<AddProductPage> {
       appBar: AppBar(
         title: const Text(
           'Add Product',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
       body: SafeArea(
@@ -1633,17 +1469,11 @@ class _AddProductPageState extends State<AddProductPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _buildSellerInfo(),
-
               const SizedBox(height: 16),
-
               _buildImageSection(),
-
               const SizedBox(height: 16),
-
               _buildVideoSection(),
-
               const SizedBox(height: 16),
-
               Card(
                 elevation: 1,
                 margin: EdgeInsets.zero,
@@ -1657,26 +1487,20 @@ class _AddProductPageState extends State<AddProductPage> {
                         hint: 'Enter product name',
                         icon: Icons.shopping_bag_outlined,
                       ),
-
                       const SizedBox(height: 14),
 
-                      _buildTextField(
-                        controller: _priceController,
-                        label: 'Price (BDT)',
-                        hint: 'Enter price',
-                        icon: Icons.payments_outlined,
-                        keyboardType:
-                            const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
+                      // TOTAL PRICE + DISCOUNT % + DISCOUNT AMOUNT
+                      DiscountPriceInput(
+                        key: ValueKey<int>(_priceFormVersion),
+                        originalLabel: 'Total Price (BDT)',
+                        enabled: !busy,
+                        onChanged: (DiscountResult value) {
+                          _priceResult = value;
+                        },
                       ),
-
                       const SizedBox(height: 14),
-
                       _buildCategoryDropdown(),
-
                       const SizedBox(height: 14),
-
                       _buildTextField(
                         controller: _descriptionController,
                         label: 'Description',
@@ -1688,13 +1512,9 @@ class _AddProductPageState extends State<AddProductPage> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 16),
-
               _buildVariantSection(),
-
               const SizedBox(height: 22),
-
               if (_uploadedImageUrls.isNotEmpty)
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -1704,10 +1524,7 @@ class _AddProductPageState extends State<AddProductPage> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(
-                        Icons.cloud_done_outlined,
-                        color: Colors.green,
-                      ),
+                      const Icon(Icons.cloud_done_outlined, color: Colors.green),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -1722,9 +1539,7 @@ class _AddProductPageState extends State<AddProductPage> {
                     ],
                   ),
                 ),
-
               const SizedBox(height: 16),
-
               SizedBox(
                 height: 54,
                 child: ElevatedButton.icon(
@@ -1738,9 +1553,7 @@ class _AddProductPageState extends State<AddProductPage> {
                             color: Colors.white,
                           ),
                         )
-                      : const Icon(
-                          Icons.cloud_upload_outlined,
-                        ),
+                      : const Icon(Icons.cloud_upload_outlined),
                   label: Text(
                     _isUploading
                         ? 'Uploading Media...'
@@ -1750,20 +1563,14 @@ class _AddProductPageState extends State<AddProductPage> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 10),
-
               Text(
                 'Your first image will be used as the main product image. '
                 'All selected images and the optional video will be '
                 'available on the product details page.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
               ),
-
               const SizedBox(height: 20),
             ],
           ),
