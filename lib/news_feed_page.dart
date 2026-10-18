@@ -12,6 +12,7 @@ import 'add_seller_video_page.dart';
 import 'watch_earn_page.dart';
 import 'categories_page.dart';
 import 'user_profile_page.dart';
+import 'product_details_page.dart';
 
 class NewsFeedPage extends StatefulWidget {
   const NewsFeedPage({super.key});
@@ -1077,75 +1078,22 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
     });
 
     try {
-      final videoRef = FirebaseFirestore.instance
+      // Only the like document is written here. The counters
+      // (likeCount / totalLikes) are updated by Cloud Functions.
+      final likeRef = FirebaseFirestore.instance
           .collection('sellerVideos')
-          .doc(widget.videoId);
-
-      final likeRef = videoRef
+          .doc(widget.videoId)
           .collection('likes')
           .doc(user.uid);
 
-      final sellerId = _sellerId;
-
-      final sellerRef = sellerId.isEmpty
-          ? null
-          : FirebaseFirestore.instance
-              .collection('users')
-              .doc(sellerId);
-
-      await FirebaseFirestore.instance.runTransaction(
-        (transaction) async {
-          final likeSnapshot = await transaction.get(likeRef);
-          final videoSnapshot = await transaction.get(videoRef);
-
-          final data = videoSnapshot.data() ?? {};
-
-          int count = 0;
-
-          if (data['likeCount'] is num) {
-            count = (data['likeCount'] as num).toInt();
-          } else if (data['likesCount'] is num) {
-            count = (data['likesCount'] as num).toInt();
-          }
-
-          bool isLiking = true;
-
-          if (likeSnapshot.exists) {
-            transaction.delete(likeRef);
-
-            if (count > 0) {
-              count--;
-            }
-
-            isLiking = false;
-          } else {
-            transaction.set(likeRef, {
-              'userId': user.uid,
-              'createdAt': FieldValue.serverTimestamp(),
-            });
-
-            count++;
-          }
-
-          transaction.update(videoRef, {
-            'likeCount': count,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-
-          if (sellerRef != null) {
-            transaction.set(
-              sellerRef,
-              {
-                'totalLikes': FieldValue.increment(
-                  isLiking ? 1 : -1,
-                ),
-                'updatedAt': FieldValue.serverTimestamp(),
-              },
-              SetOptions(merge: true),
-            );
-          }
-        },
-      );
+      if (_isLiked) {
+        await likeRef.delete();
+      } else {
+        await likeRef.set({
+          'userId': user.uid,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
 
       if (!mounted) {
         return;
@@ -1178,21 +1126,21 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
       return;
     }
 
-    _viewRecorded = true;
-
     final user = currentUser;
 
+    // Guests are not counted (one view per signed-in user).
+    if (user == null) {
+      return;
+    }
+
+    _viewRecorded = true;
+
     try {
-      final videoRef = FirebaseFirestore.instance
+      final viewRef = FirebaseFirestore.instance
           .collection('sellerVideos')
-          .doc(widget.videoId);
-
-      final viewId = user?.uid ??
-          'guest_${DateTime.now().millisecondsSinceEpoch}';
-
-      final viewRef = videoRef
+          .doc(widget.videoId)
           .collection('views')
-          .doc(viewId);
+          .doc(user.uid);
 
       final viewSnapshot = await viewRef.get();
 
@@ -1200,54 +1148,11 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
         return;
       }
 
-      final sellerId = _sellerId;
-
-      final sellerRef = sellerId.isEmpty
-          ? null
-          : FirebaseFirestore.instance
-              .collection('users')
-              .doc(sellerId);
-
-      await FirebaseFirestore.instance.runTransaction(
-        (transaction) async {
-          final videoSnapshot = await transaction.get(videoRef);
-
-          if (!videoSnapshot.exists) {
-            return;
-          }
-
-          final data = videoSnapshot.data() ?? {};
-
-          int count = 0;
-
-          if (data['viewCount'] is num) {
-            count = (data['viewCount'] as num).toInt();
-          } else if (data['viewsCount'] is num) {
-            count = (data['viewsCount'] as num).toInt();
-          }
-
-          transaction.set(viewRef, {
-            'userId': user?.uid,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-
-          transaction.update(videoRef, {
-            'viewCount': count + 1,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-
-          if (sellerRef != null) {
-            transaction.set(
-              sellerRef,
-              {
-                'totalViews': FieldValue.increment(1),
-                'updatedAt': FieldValue.serverTimestamp(),
-              },
-              SetOptions(merge: true),
-            );
-          }
-        },
-      );
+      // The Cloud Function increases viewCount / totalViews.
+      await viewRef.set({
+        'userId': user.uid,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
 
       if (mounted) {
         setState(() {
@@ -1266,29 +1171,28 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
       await Share.share(
         'Check out this video on BuyNova:\n$_videoUrl',
       );
+    } catch (_) {
+      return;
+    }
 
+    final user = currentUser;
+
+    if (user == null) {
+      return;
+    }
+
+    try {
+      // One share record per user. A second share by the same
+      // user is rejected by the rules, so it is not counted twice.
       await FirebaseFirestore.instance
           .collection('sellerVideos')
           .doc(widget.videoId)
-          .update({
-        'shareCount': FieldValue.increment(1),
-        'updatedAt': FieldValue.serverTimestamp(),
+          .collection('shares')
+          .doc(user.uid)
+          .set({
+        'userId': user.uid,
+        'createdAt': FieldValue.serverTimestamp(),
       });
-
-      final sellerId = _sellerId;
-
-      if (sellerId.isNotEmpty) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(sellerId)
-            .set(
-          {
-            'totalShares': FieldValue.increment(1),
-            'updatedAt': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
-      }
 
       if (mounted) {
         setState(() {
@@ -1368,12 +1272,36 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
       return;
     }
 
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const CartPage(),
-      ),
-    );
+    try {
+      // Open the real product page (add to cart / buy is there).
+      final productDoc = await FirebaseFirestore.instance
+          .collection('products')
+          .doc(_productId)
+          .get();
+
+      final product = productDoc.data();
+
+      if (!mounted) {
+        return;
+      }
+
+      if (product == null) {
+        _showMessage('This product is no longer available.');
+        return;
+      }
+
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ProductDetailsPage(
+            productId: _productId,
+            product: product,
+          ),
+        ),
+      );
+    } catch (_) {
+      _showMessage('Could not open this product.');
+    }
   }
 
   void _showMessage(String message) {
@@ -1599,7 +1527,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
                             padding:
                                 const EdgeInsets.only(top: 3),
                             child: Text(
-                              'à§³${_productPrice!.toStringAsFixed(0)}',
+                              '৳${_productPrice!.toStringAsFixed(0)}',
                               style: const TextStyle(
                                 color: Colors.white70,
                                 fontSize: 12,
@@ -1610,11 +1538,28 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
                     ),
                   ),
                   const SizedBox(width: 5),
-                  const Icon(
-                    Icons.chevron_right,
-                    color: Colors.white,
-                    size: 22,
-                  ),
+
+                  // "Add to Cart" button: everyone except the owner of
+                  // the video/product (nobody buys their own product).
+                  if (currentUser?.uid != _sellerId)
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Icon(
+                        Icons.add_shopping_cart,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    )
+                  else
+                    const Icon(
+                      Icons.chevron_right,
+                      color: Colors.white,
+                      size: 22,
+                    ),
                 ],
               ),
             ),
@@ -1907,69 +1852,23 @@ class _CommentsSheetState extends State<_CommentsSheet> {
       final profileImageUrl =
           (userData['profileImageUrl'] ?? '').toString();
 
-      final videoRef = FirebaseFirestore.instance
+      final commentRef = FirebaseFirestore.instance
           .collection('sellerVideos')
-          .doc(widget.videoId);
+          .doc(widget.videoId)
+          .collection('comments')
+          .doc();
 
-      final commentRef =
-          videoRef.collection('comments').doc();
-
-      final sellerId = widget.sellerId;
-
-      final sellerRef = sellerId.isEmpty
-          ? null
-          : FirebaseFirestore.instance
-              .collection('users')
-              .doc(sellerId);
-
-      await FirebaseFirestore.instance.runTransaction(
-        (transaction) async {
-          final videoSnapshot =
-              await transaction.get(videoRef);
-
-          if (!videoSnapshot.exists) {
-            throw Exception('Video not found');
-          }
-
-          final data = videoSnapshot.data() ?? {};
-
-          int count = 0;
-
-          if (data['commentCount'] is num) {
-            count =
-                (data['commentCount'] as num).toInt();
-          } else if (data['commentsCount'] is num) {
-            count =
-                (data['commentsCount'] as num).toInt();
-          }
-
-          transaction.set(commentRef, {
-            'commentId': commentRef.id,
-            'userId': user.uid,
-            'userName': name,
-            'userEmail': user.email ?? '',
-            'profileImageUrl': profileImageUrl,
-            'text': text,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-
-          transaction.update(videoRef, {
-            'commentCount': count + 1,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-
-          if (sellerRef != null) {
-            transaction.set(
-              sellerRef,
-              {
-                'totalComments': FieldValue.increment(1),
-                'updatedAt': FieldValue.serverTimestamp(),
-              },
-              SetOptions(merge: true),
-            );
-          }
-        },
-      );
+      // Only the comment is written here. commentCount /
+      // totalComments are updated by Cloud Functions.
+      await commentRef.set({
+        'commentId': commentRef.id,
+        'userId': user.uid,
+        'userName': name,
+        'userEmail': user.email ?? '',
+        'profileImageUrl': profileImageUrl,
+        'text': text,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
 
       _commentController.clear();
 
