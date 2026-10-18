@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'cart_page.dart';
+import 'price_discount.dart';
 
 class MyStorePage extends StatefulWidget {
   const MyStorePage({super.key});
@@ -12,11 +13,9 @@ class MyStorePage extends StatefulWidget {
 }
 
 class _MyStorePageState extends State<MyStorePage> {
-  final FirebaseFirestore _firestore =
-      FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  final FirebaseAuth _auth =
-      FirebaseAuth.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // =========================================================
   // MONEY FORMAT
@@ -39,19 +38,14 @@ class _MyStorePageState extends State<MyStorePage> {
       return value.toDouble();
     }
 
-    return double.tryParse(
-          value?.toString() ?? '',
-        ) ??
-        0;
+    return double.tryParse(value?.toString() ?? '') ?? 0;
   }
 
   // =========================================================
   // ADD RESELLER PRODUCT TO COMMON BUYNOVA CART
   // =========================================================
 
-  Future<void> _addToCart(
-    DocumentSnapshot product,
-  ) async {
+  Future<void> _addToCart(DocumentSnapshot product) async {
     final user = _auth.currentUser;
 
     if (user == null) {
@@ -59,111 +53,71 @@ class _MyStorePageState extends State<MyStorePage> {
       return;
     }
 
-    final data =
-        product.data() as Map<String, dynamic>;
+    final data = product.data() as Map<String, dynamic>;
 
-    final productName =
-        data['productName']?.toString() ??
-            data['name']?.toString() ??
-            'Product';
+    final productName = data['productName']?.toString() ??
+        data['name']?.toString() ??
+        'Product';
 
-    final imageUrl =
-        data['imageUrl']?.toString() ?? '';
+    final imageUrl = data['imageUrl']?.toString() ?? '';
 
-    final sellingPrice =
-        _toDouble(data['sellingPrice']);
+    // `sellingPrice` is the price after the reseller's discount.
+    final sellingPrice = _toDouble(data['sellingPrice']);
 
-    final supplierPrice =
-        _toDouble(data['supplierPrice']);
+    final supplierPrice = _toDouble(data['supplierPrice']);
 
-    final sellerId =
-        data['sellerId']?.toString() ?? '';
+    final sellerId = data['sellerId']?.toString() ?? '';
 
-    final entrepreneurUid =
-        data['entrepreneurUid']?.toString() ?? '';
+    final entrepreneurUid = data['entrepreneurUid']?.toString() ?? '';
 
-    final sourceProductId =
-        data['sourceProductId']?.toString() ?? '';
+    final sourceProductId = data['sourceProductId']?.toString() ?? '';
 
-    final active =
-        data['active'] == true;
-
-    // ---------------------------------------------------------
-    // VALIDATION
-    // ---------------------------------------------------------
+    final active = data['active'] == true;
 
     if (!active) {
-      _showMessage(
-        'This product is currently inactive.',
-      );
+      _showMessage('This product is currently inactive.');
       return;
     }
 
     if (sellingPrice <= 0) {
-      _showMessage(
-        'This product has an invalid selling price.',
-      );
+      _showMessage('This product has an invalid selling price.');
       return;
     }
 
     if (supplierPrice <= 0) {
-      _showMessage(
-        'Supplier price is missing.',
-      );
+      _showMessage('Supplier price is missing.');
       return;
     }
 
     if (sellerId.isEmpty) {
-      _showMessage(
-        'Seller information is missing.',
-      );
+      _showMessage('Seller information is missing.');
       return;
     }
 
-    if (entrepreneurUid.isEmpty ||
-        entrepreneurUid != user.uid) {
-      _showMessage(
-        'This reseller product does not belong to your account.',
-      );
+    if (entrepreneurUid.isEmpty || entrepreneurUid != user.uid) {
+      _showMessage('This reseller product does not belong to your account.');
       return;
     }
 
     if (sourceProductId.isEmpty) {
-      _showMessage(
-        'Original product information is missing.',
-      );
+      _showMessage('Original product information is missing.');
       return;
     }
 
-    final calculatedProfit =
-        sellingPrice - supplierPrice;
+    final calculatedProfit = sellingPrice - supplierPrice;
 
     if (calculatedProfit <= 0) {
-      _showMessage(
-        'Selling price must be higher than supplier price.',
-      );
+      _showMessage('Selling price must be higher than supplier price.');
       return;
     }
 
     try {
-      // =======================================================
-      // IMPORTANT:
-      // CartService.addItem IS STATIC.
-      //
-      // Quantity is NOT passed here because CartService
-      // automatically adds quantity = 1 for a new item and
-      // increases the existing quantity by 1.
-      //
-      // All reseller information is preserved.
-      // =======================================================
-
+      // CartService.addItem IS STATIC. Quantity is handled by the service.
       await CartService.addItem(
         id: product.id,
         name: productName,
         price: sellingPrice,
-        imageUrl: imageUrl.isNotEmpty
-            ? imageUrl
-            : null,
+        imageUrl: imageUrl.isNotEmpty ? imageUrl : null,
 
         // Reseller information
         isResellerProduct: true,
@@ -176,15 +130,11 @@ class _MyStorePageState extends State<MyStorePage> {
 
       if (!mounted) return;
 
-      _showMessage(
-        '$productName added to cart.',
-      );
+      _showMessage('$productName added to cart.');
     } catch (e) {
       if (!mounted) return;
 
-      _showMessage(
-        'Could not add product to cart: $e',
-      );
+      _showMessage('Could not add product to cart: $e');
     }
   }
 
@@ -207,49 +157,31 @@ class _MyStorePageState extends State<MyStorePage> {
   // DELETE PRODUCT
   // =========================================================
 
-  Future<void> _deleteProduct(
-    DocumentSnapshot product,
-  ) async {
-    final data =
-        product.data() as Map<String, dynamic>;
+  Future<void> _deleteProduct(DocumentSnapshot product) async {
+    final data = product.data() as Map<String, dynamic>;
 
-    final productName =
-        data['productName']?.toString() ??
-            data['name']?.toString() ??
-            'Product';
+    final productName = data['productName']?.toString() ??
+        data['name']?.toString() ??
+        'Product';
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text(
-            'Remove Product?',
-          ),
-          content: Text(
-            'Remove "$productName" from your store?',
-          ),
+          title: const Text('Remove Product?'),
+          content: Text('Remove "$productName" from your store?'),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                  false,
-                );
+                Navigator.pop(dialogContext, false);
               },
-              child: const Text(
-                'Cancel',
-              ),
+              child: const Text('Cancel'),
             ),
             FilledButton(
               onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                  true,
-                );
+                Navigator.pop(dialogContext, true);
               },
-              child: const Text(
-                'Remove',
-              ),
+              child: const Text('Remove'),
             ),
           ],
         );
@@ -261,22 +193,15 @@ class _MyStorePageState extends State<MyStorePage> {
     }
 
     try {
-      await _firestore
-          .collection('reseller_products')
-          .doc(product.id)
-          .delete();
+      await _firestore.collection('reseller_products').doc(product.id).delete();
 
       if (!mounted) return;
 
-      _showMessage(
-        'Product removed from your store.',
-      );
+      _showMessage('Product removed from your store.');
     } catch (e) {
       if (!mounted) return;
 
-      _showMessage(
-        'Could not remove product: $e',
-      );
+      _showMessage('Could not remove product: $e');
     }
   }
 
@@ -284,253 +209,220 @@ class _MyStorePageState extends State<MyStorePage> {
   // TOGGLE PRODUCT STATUS
   // =========================================================
 
-  Future<void> _toggleProductStatus(
-    DocumentSnapshot product,
-  ) async {
-    final data =
-        product.data() as Map<String, dynamic>;
+  Future<void> _toggleProductStatus(DocumentSnapshot product) async {
+    final data = product.data() as Map<String, dynamic>;
 
-    final active =
-        data['active'] == true;
+    final active = data['active'] == true;
 
     try {
-      await _firestore
-          .collection('reseller_products')
-          .doc(product.id)
-          .update({
+      await _firestore.collection('reseller_products').doc(product.id).update({
         'active': !active,
-        'status': !active
-            ? 'active'
-            : 'inactive',
-        'updatedAt':
-            FieldValue.serverTimestamp(),
+        'status': !active ? 'active' : 'inactive',
+        'updatedAt': FieldValue.serverTimestamp(),
       });
 
       if (!mounted) return;
 
       _showMessage(
-        !active
-            ? 'Product is now active.'
-            : 'Product is now inactive.',
+        !active ? 'Product is now active.' : 'Product is now inactive.',
       );
     } catch (e) {
       if (!mounted) return;
 
-      _showMessage(
-        'Could not update product: $e',
-      );
+      _showMessage('Could not update product: $e');
     }
   }
 
   // =========================================================
-  // EDIT SELLING PRICE
+  // EDIT PRICE + DISCOUNT
   // =========================================================
 
-  Future<void> _editSellingPrice(
-    DocumentSnapshot product,
-  ) async {
-    final data =
-        product.data() as Map<String, dynamic>;
+  Future<void> _editSellingPrice(DocumentSnapshot product) async {
+    final data = product.data() as Map<String, dynamic>;
 
-    final supplierPrice =
-        _toDouble(data['supplierPrice']);
+    final supplierPrice = _toDouble(data['supplierPrice']);
 
-    final currentSellingPrice =
-        _toDouble(data['sellingPrice']);
+    final currentSellingPrice = _toDouble(data['sellingPrice']);
 
-    final productName =
-        data['productName']?.toString() ??
-            data['name']?.toString() ??
-            'Product';
+    final storedOriginal = _toDouble(data['originalPrice']);
 
-    final controller = TextEditingController(
-      text: currentSellingPrice
-          .toStringAsFixed(0),
+    // Total price before discount (same as selling price when no discount).
+    final double original = storedOriginal > currentSellingPrice
+        ? storedOriginal
+        : currentSellingPrice;
+
+    final double currentDiscount = original - currentSellingPrice;
+
+    final productName = data['productName']?.toString() ??
+        data['name']?.toString() ??
+        'Product';
+
+    DiscountResult result = DiscountResult(
+      original: original,
+      finalPrice: currentSellingPrice,
     );
 
-    await showDialog(
+    await showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text(
-            'Edit Selling Price',
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
-            children: [
-              Text(
-                productName,
-                style: const TextStyle(
-                  fontWeight:
-                      FontWeight.bold,
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final double profit = result.finalPrice - supplierPrice;
+
+            return AlertDialog(
+              title: const Text('Edit Price & Discount'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      productName,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 10),
+                    Text('Supplier Price: ${_money(supplierPrice)}'),
+                    const SizedBox(height: 14),
+                    DiscountPriceInput(
+                      originalLabel: 'Your Total Price',
+                      initialOriginal: original,
+                      initialDiscountAmount: currentDiscount,
+                      onChanged: (value) {
+                        setDialogState(() {
+                          result = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: profit > 0 ? Colors.green : Colors.red,
+                        ),
+                      ),
+                      child: Text(
+                        profit > 0
+                            ? 'Your profit: ${_money(profit)}'
+                            : 'Customer price must stay above the supplier price.',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: profit > 0 ? Colors.green : Colors.red,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 14),
-              Text(
-                'Supplier Price: ${_money(supplierPrice)}',
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: controller,
-                keyboardType:
-                    const TextInputType.numberWithOptions(
-                  decimal: true,
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                  },
+                  child: const Text('Cancel'),
                 ),
-                decoration:
-                    const InputDecoration(
-                  labelText:
-                      'Your Selling Price',
-                  prefixText: '৳ ',
-                  border:
-                      OutlineInputBorder(),
+                FilledButton(
+                  onPressed: () async {
+                    if (!result.isValid) {
+                      _showMessage('Enter a valid price.');
+                      return;
+                    }
+
+                    if (result.finalPrice <= supplierPrice) {
+                      _showMessage(
+                        'Customer price (after discount) must be '
+                        'higher than the supplier price.',
+                      );
+                      return;
+                    }
+
+                    final bool hasDiscount = result.hasDiscount;
+
+                    try {
+                      await _firestore
+                          .collection('reseller_products')
+                          .doc(product.id)
+                          .update({
+                        // What the customer pays
+                        'sellingPrice': result.finalPrice,
+                        'profit': result.finalPrice - supplierPrice,
+
+                        // Discount information (display only)
+                        'originalPrice':
+                            hasDiscount ? result.original : result.finalPrice,
+                        'discountAmount': hasDiscount ? result.amount : 0,
+                        'discountPercent': hasDiscount ? result.percent : 0,
+                        'hasDiscount': hasDiscount,
+
+                        'updatedAt': FieldValue.serverTimestamp(),
+                      });
+
+                      if (!dialogContext.mounted) {
+                        return;
+                      }
+
+                      Navigator.pop(dialogContext);
+
+                      if (!mounted) return;
+
+                      _showMessage('Price updated.');
+                    } catch (e) {
+                      if (!mounted) return;
+
+                      _showMessage('Could not update price: $e');
+                    }
+                  },
+                  child: const Text('Save'),
                 ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                );
-              },
-              child: const Text(
-                'Cancel',
-              ),
-            ),
-            FilledButton(
-              onPressed: () async {
-                final price =
-                    double.tryParse(
-                      controller.text.trim(),
-                    ) ??
-                    0;
-
-                if (price <= 0) {
-                  _showMessage(
-                    'Enter a valid price.',
-                  );
-                  return;
-                }
-
-                if (price <= supplierPrice) {
-                  _showMessage(
-                    'Selling price must be higher than supplier price.',
-                  );
-                  return;
-                }
-
-                try {
-                  await _firestore
-                      .collection(
-                        'reseller_products',
-                      )
-                      .doc(product.id)
-                      .update({
-                    'sellingPrice': price,
-                    'profit':
-                        price - supplierPrice,
-                    'updatedAt':
-                        FieldValue
-                            .serverTimestamp(),
-                  });
-
-                  if (!dialogContext
-                      .mounted) {
-                    return;
-                  }
-
-                  Navigator.pop(
-                    dialogContext,
-                  );
-
-                  if (!mounted) return;
-
-                  _showMessage(
-                    'Selling price updated.',
-                  );
-                } catch (e) {
-                  if (!mounted) return;
-
-                  _showMessage(
-                    'Could not update price: $e',
-                  );
-                }
-              },
-              child: const Text(
-                'Save',
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         );
       },
     );
-
-    controller.dispose();
   }
 
   // =========================================================
   // PRODUCT CARD
   // =========================================================
 
-  Widget _productCard(
-    DocumentSnapshot product,
-  ) {
-    final data =
-        product.data() as Map<String, dynamic>;
+  Widget _productCard(DocumentSnapshot product) {
+    final data = product.data() as Map<String, dynamic>;
 
-    final productName =
-        data['productName']?.toString() ??
-            data['name']?.toString() ??
-            'Unnamed Product';
+    final productName = data['productName']?.toString() ??
+        data['name']?.toString() ??
+        'Unnamed Product';
 
-    final imageUrl =
-        data['imageUrl']?.toString() ?? '';
+    final imageUrl = data['imageUrl']?.toString() ?? '';
 
-    final category =
-        data['category']?.toString() ??
-            'General';
+    final category = data['category']?.toString() ?? 'General';
 
-    final sellerCode =
-        data['sellerCode']?.toString() ?? '';
+    final sellerCode = data['sellerCode']?.toString() ?? '';
 
-    final supplierPrice =
-        _toDouble(data['supplierPrice']);
+    final supplierPrice = _toDouble(data['supplierPrice']);
 
-    final sellingPrice =
-        _toDouble(data['sellingPrice']);
+    final sellingPrice = _toDouble(data['sellingPrice']);
 
-    final profit =
-        _toDouble(data['profit']);
+    final originalPrice = _toDouble(data['originalPrice']);
 
-    final active =
-        data['active'] == true;
+    final profit = _toDouble(data['profit']);
+
+    final active = data['active'] == true;
 
     final salesCount =
-        data['salesCount'] is num
-            ? (data['salesCount'] as num)
-                .toInt()
-            : 0;
+        data['salesCount'] is num ? (data['salesCount'] as num).toInt() : 0;
 
-    final views =
-        data['views'] is num
-            ? (data['views'] as num).toInt()
-            : 0;
+    final views = data['views'] is num ? (data['views'] as num).toInt() : 0;
 
     return Card(
-      clipBehavior:
-          Clip.antiAlias,
+      clipBehavior: Clip.antiAlias,
       elevation: 2,
       child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // =====================================================
           // IMAGE
-          // =====================================================
-
           Stack(
             children: [
               SizedBox(
@@ -540,20 +432,12 @@ class _MyStorePageState extends State<MyStorePage> {
                     ? Image.network(
                         imageUrl,
                         fit: BoxFit.cover,
-                        errorBuilder:
-                            (
-                          context,
-                          error,
-                          stackTrace,
-                        ) {
+                        errorBuilder: (context, error, stackTrace) {
                           return Container(
-                            color:
-                                Colors.grey.shade200,
-                            child:
-                                const Center(
+                            color: Colors.grey.shade200,
+                            child: const Center(
                               child: Icon(
-                                Icons
-                                    .image_not_supported_outlined,
+                                Icons.image_not_supported_outlined,
                                 size: 42,
                               ),
                             ),
@@ -561,15 +445,9 @@ class _MyStorePageState extends State<MyStorePage> {
                         },
                       )
                     : Container(
-                        color:
-                            Colors.grey.shade200,
-                        child:
-                            const Center(
-                          child: Icon(
-                            Icons
-                                .image_outlined,
-                            size: 42,
-                          ),
+                        color: Colors.grey.shade200,
+                        child: const Center(
+                          child: Icon(Icons.image_outlined, size: 42),
                         ),
                       ),
               ),
@@ -579,31 +457,20 @@ class _MyStorePageState extends State<MyStorePage> {
                 top: 10,
                 left: 10,
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(
+                  padding: const EdgeInsets.symmetric(
                     horizontal: 9,
                     vertical: 5,
                   ),
-                  decoration:
-                      BoxDecoration(
-                    color: active
-                        ? Colors.green
-                        : Colors.grey,
-                    borderRadius:
-                        BorderRadius.circular(
-                      20,
-                    ),
+                  decoration: BoxDecoration(
+                    color: active ? Colors.green : Colors.grey,
+                    borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    active
-                        ? 'ACTIVE'
-                        : 'INACTIVE',
-                    style:
-                        const TextStyle(
+                    active ? 'ACTIVE' : 'INACTIVE',
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 11,
-                      fontWeight:
-                          FontWeight.bold,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
@@ -614,42 +481,24 @@ class _MyStorePageState extends State<MyStorePage> {
                 top: 4,
                 right: 4,
                 child: PopupMenuButton<String>(
-                  onSelected:
-                      (value) {
-                    if (value ==
-                        'price') {
-                      _editSellingPrice(
-                        product,
-                      );
-                    } else if (value ==
-                        'status') {
-                      _toggleProductStatus(
-                        product,
-                      );
-                    } else if (value ==
-                        'delete') {
-                      _deleteProduct(
-                        product,
-                      );
+                  onSelected: (value) {
+                    if (value == 'price') {
+                      _editSellingPrice(product);
+                    } else if (value == 'status') {
+                      _toggleProductStatus(product);
+                    } else if (value == 'delete') {
+                      _deleteProduct(product);
                     }
                   },
-                  itemBuilder:
-                      (context) {
+                  itemBuilder: (context) {
                     return [
                       const PopupMenuItem(
                         value: 'price',
                         child: Row(
                           children: [
-                            Icon(
-                              Icons
-                                  .edit_rounded,
-                            ),
-                            SizedBox(
-                              width: 10,
-                            ),
-                            Text(
-                              'Edit Price',
-                            ),
+                            Icon(Icons.edit_rounded),
+                            SizedBox(width: 10),
+                            Text('Edit Price & Discount'),
                           ],
                         ),
                       ),
@@ -659,19 +508,11 @@ class _MyStorePageState extends State<MyStorePage> {
                           children: [
                             Icon(
                               active
-                                  ? Icons
-                                      .visibility_off_rounded
-                                  : Icons
-                                      .visibility_rounded,
+                                  ? Icons.visibility_off_rounded
+                                  : Icons.visibility_rounded,
                             ),
-                            const SizedBox(
-                              width: 10,
-                            ),
-                            Text(
-                              active
-                                  ? 'Deactivate'
-                                  : 'Activate',
-                            ),
+                            const SizedBox(width: 10),
+                            Text(active ? 'Deactivate' : 'Activate'),
                           ],
                         ),
                       ),
@@ -680,22 +521,11 @@ class _MyStorePageState extends State<MyStorePage> {
                         child: Row(
                           children: [
                             Icon(
-                              Icons
-                                  .delete_outline_rounded,
-                              color:
-                                  Colors.red,
+                              Icons.delete_outline_rounded,
+                              color: Colors.red,
                             ),
-                            SizedBox(
-                              width: 10,
-                            ),
-                            Text(
-                              'Remove',
-                              style:
-                                  TextStyle(
-                                color:
-                                    Colors.red,
-                              ),
-                            ),
+                            SizedBox(width: 10),
+                            Text('Remove', style: TextStyle(color: Colors.red)),
                           ],
                         ),
                       ),
@@ -706,179 +536,111 @@ class _MyStorePageState extends State<MyStorePage> {
             ],
           ),
 
-          // =====================================================
           // DETAILS
-          // =====================================================
-
           Padding(
-            padding:
-                const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(12),
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   productName,
                   maxLines: 2,
-                  overflow:
-                      TextOverflow.ellipsis,
-                  style:
-                      const TextStyle(
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
                     fontSize: 16,
-                    fontWeight:
-                        FontWeight.bold,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-
                 const SizedBox(height: 5),
-
                 Text(
                   category,
                   style: TextStyle(
-                    color:
-                        Colors.grey.shade600,
+                    color: Colors.grey.shade600,
                     fontSize: 12,
                   ),
                 ),
-
                 const SizedBox(height: 9),
-
-                if (sellerCode
-                    .isNotEmpty)
+                if (sellerCode.isNotEmpty)
                   Row(
                     children: [
-                      const Icon(
-                        Icons
-                            .storefront_outlined,
-                        size: 15,
-                      ),
-                      const SizedBox(
-                        width: 5,
-                      ),
+                      const Icon(Icons.storefront_outlined, size: 15),
+                      const SizedBox(width: 5),
                       Expanded(
                         child: Text(
                           sellerCode,
-                          style:
-                              TextStyle(
-                            fontSize:
-                                12,
-                            color: Colors
-                                .grey
-                                .shade700,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade700,
                           ),
                         ),
                       ),
                     ],
                   ),
-
                 const SizedBox(height: 10),
 
                 // SUPPLIER PRICE
                 Row(
-                  mainAxisAlignment:
-                      MainAxisAlignment
-                          .spaceBetween,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Supplier',
-                      style:
-                          TextStyle(
-                        fontSize: 12,
-                      ),
-                    ),
+                    const Text('Supplier', style: TextStyle(fontSize: 12)),
                     Text(
-                      _money(
-                        supplierPrice,
-                      ),
-                      style:
-                          const TextStyle(
+                      _money(supplierPrice),
+                      style: const TextStyle(
                         fontSize: 13,
-                        fontWeight:
-                            FontWeight
-                                .w600,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 5),
 
-                // SELLING PRICE
+                // SELLING PRICE (with red struck total price + % badge)
                 Row(
-                  mainAxisAlignment:
-                      MainAxisAlignment
-                          .spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Selling',
-                      style:
-                          TextStyle(
-                        fontSize: 12,
-                      ),
-                    ),
-                    Text(
-                      _money(
-                        sellingPrice,
-                      ),
-                      style:
-                          const TextStyle(
+                    const Text('Selling', style: TextStyle(fontSize: 12)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: PriceTag(
+                        price: sellingPrice,
+                        originalPrice:
+                            originalPrice > sellingPrice ? originalPrice : null,
                         fontSize: 14,
-                        fontWeight:
-                            FontWeight.bold,
+                        align: WrapAlignment.end,
                       ),
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 8),
 
                 // PROFIT
                 Container(
                   width: double.infinity,
-                  padding:
-                      const EdgeInsets
-                          .symmetric(
+                  padding: const EdgeInsets.symmetric(
                     horizontal: 9,
                     vertical: 7,
                   ),
-                  decoration:
-                      BoxDecoration(
-                    color: Colors.green
-                        .withValues(
-                      alpha: 0.08,
-                    ),
-                    borderRadius:
-                        BorderRadius.circular(
-                      8,
-                    ),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
-                    mainAxisAlignment:
-                        MainAxisAlignment
-                            .spaceBetween,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
                         'Profit',
-                        style:
-                            TextStyle(
-                          fontWeight:
-                              FontWeight.w600,
-                        ),
+                        style: TextStyle(fontWeight: FontWeight.w600),
                       ),
                       Text(
                         _money(profit),
-                        style:
-                            const TextStyle(
-                          color:
-                              Colors.green,
-                          fontWeight:
-                              FontWeight.bold,
+                        style: const TextStyle(
+                          color: Colors.green,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ],
                   ),
                 ),
-
                 const SizedBox(height: 9),
 
                 // STATS
@@ -887,34 +649,24 @@ class _MyStorePageState extends State<MyStorePage> {
                     Expanded(
                       child: Text(
                         'Views: $views',
-                        style:
-                            TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
-                          color: Colors
-                              .grey
-                              .shade600,
+                          color: Colors.grey.shade600,
                         ),
                       ),
                     ),
                     Text(
                       'Sales: $salesCount',
-                      style:
-                          TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
-                        color: Colors
-                            .grey
-                            .shade600,
+                        color: Colors.grey.shade600,
                       ),
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 10),
 
-                // =================================================
                 // ADD TO CART
-                // =================================================
-
                 SizedBox(
                   width: double.infinity,
                   height: 42,
@@ -924,13 +676,8 @@ class _MyStorePageState extends State<MyStorePage> {
                             _addToCart(product);
                           }
                         : null,
-                    icon: const Icon(
-                      Icons.shopping_cart_outlined,
-                      size: 19,
-                    ),
-                    label: const Text(
-                      'Add to Cart',
-                    ),
+                    icon: const Icon(Icons.shopping_cart_outlined, size: 19),
+                    label: const Text('Add to Cart'),
                   ),
                 ),
               ],
@@ -948,43 +695,26 @@ class _MyStorePageState extends State<MyStorePage> {
   Widget _emptyView() {
     return Center(
       child: SingleChildScrollView(
-        padding:
-            const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(24),
         child: Column(
-          mainAxisAlignment:
-              MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               Icons.storefront_outlined,
               size: 80,
-              color:
-                  Colors.grey.shade500,
+              color: Colors.grey.shade500,
             ),
-            const SizedBox(
-              height: 18,
-            ),
+            const SizedBox(height: 18),
             const Text(
               'Your Store Is Empty',
-              textAlign:
-                  TextAlign.center,
-              style: TextStyle(
-                fontSize: 23,
-                fontWeight:
-                    FontWeight.bold,
-              ),
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(
-              height: 10,
-            ),
+            const SizedBox(height: 10),
             Text(
               'Go to Available Products and add products from approved sellers to start your store.',
-              textAlign:
-                  TextAlign.center,
-              style: TextStyle(
-                color:
-                    Colors.grey.shade600,
-                height: 1.5,
-              ),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade600, height: 1.5),
             ),
           ],
         ),
@@ -997,196 +727,110 @@ class _MyStorePageState extends State<MyStorePage> {
   // =========================================================
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
-    final user =
-        _auth.currentUser;
+  Widget build(BuildContext context) {
+    final user = _auth.currentUser;
 
     if (user == null) {
       return Scaffold(
-        appBar: AppBar(
-          title:
-              const Text('My Store'),
-        ),
-        body:
-            const Center(
-          child: Text(
-            'Please login first.',
-          ),
-        ),
+        appBar: AppBar(title: const Text('My Store')),
+        body: const Center(child: Text('Please login first.')),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title:
-            const Text('My Store'),
-      ),
-      body:
-          StreamBuilder<QuerySnapshot>(
+      appBar: AppBar(title: const Text('My Store')),
+      body: StreamBuilder<QuerySnapshot>(
         stream: _firestore
-            .collection(
-              'reseller_products',
-            )
-            .where(
-              'entrepreneurUid',
-              isEqualTo: user.uid,
-            )
+            .collection('reseller_products')
+            .where('entrepreneurUid', isEqualTo: user.uid)
             .snapshots(),
-        builder: (
-          context,
-          snapshot,
-        ) {
+        builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Center(
               child: Padding(
-                padding:
-                    const EdgeInsets.all(
-                  24,
-                ),
+                padding: const EdgeInsets.all(24),
                 child: Text(
                   'Could not load your store.\n\n${snapshot.error}',
-                  textAlign:
-                      TextAlign.center,
+                  textAlign: TextAlign.center,
                 ),
               ),
             );
           }
 
-          if (snapshot.connectionState ==
-              ConnectionState.waiting) {
-            return const Center(
-              child:
-                  CircularProgressIndicator(),
-            );
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
           }
 
-          final docs =
-              snapshot.data?.docs ??
-                  [];
+          final docs = snapshot.data?.docs ?? [];
 
           if (docs.isEmpty) {
             return _emptyView();
           }
 
-          // =====================================================
           // SUMMARY
-          // =====================================================
-
           double totalProfit = 0;
           int activeProducts = 0;
 
           for (final doc in docs) {
-            final data =
-                doc.data()
-                    as Map<String, dynamic>;
+            final data = doc.data() as Map<String, dynamic>;
 
-            totalProfit +=
-                _toDouble(
-              data['profit'],
-            );
+            totalProfit += _toDouble(data['profit']);
 
-            if (data['active'] ==
-                true) {
+            if (data['active'] == true) {
               activeProducts++;
             }
           }
 
           return Column(
             children: [
-              // =================================================
-              // STORE SUMMARY
-              // =================================================
-
               Padding(
-                padding:
-                    const EdgeInsets.fromLTRB(
-                  12,
-                  12,
-                  12,
-                  4,
-                ),
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
                 child: Row(
                   children: [
                     Expanded(
                       child: _summaryCard(
-                        icon: Icons
-                            .inventory_2_outlined,
-                        title:
-                            'Products',
-                        value:
-                            '${docs.length}',
+                        icon: Icons.inventory_2_outlined,
+                        title: 'Products',
+                        value: '${docs.length}',
                       ),
                     ),
-                    const SizedBox(
-                      width: 8,
-                    ),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: _summaryCard(
-                        icon: Icons
-                            .check_circle_outline,
-                        title:
-                            'Active',
-                        value:
-                            '$activeProducts',
+                        icon: Icons.check_circle_outline,
+                        title: 'Active',
+                        value: '$activeProducts',
                       ),
                     ),
-                    const SizedBox(
-                      width: 8,
-                    ),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: _summaryCard(
-                        icon: Icons
-                            .trending_up_rounded,
-                        title:
-                            'Profit',
-                        value:
-                            _money(
-                          totalProfit,
-                        ),
+                        icon: Icons.trending_up_rounded,
+                        title: 'Profit',
+                        value: _money(totalProfit),
                       ),
                     ),
                   ],
                 ),
               ),
-
-              // =================================================
-              // PRODUCT GRID
-              // =================================================
-
               Expanded(
-                child:
-                    RefreshIndicator(
+                child: RefreshIndicator(
                   onRefresh: () async {
                     setState(() {});
                   },
-                  child:
-                      GridView.builder(
-                    padding:
-                        const EdgeInsets.all(
-                      12,
-                    ),
-                    physics:
-                        const AlwaysScrollableScrollPhysics(),
+                  child: GridView.builder(
+                    padding: const EdgeInsets.all(12),
+                    physics: const AlwaysScrollableScrollPhysics(),
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
                       crossAxisSpacing: 10,
                       mainAxisSpacing: 10,
-                      childAspectRatio:
-                          0.50,
+                      mainAxisExtent: 500,
                     ),
-                    itemCount:
-                        docs.length,
-                    itemBuilder:
-                        (
-                      context,
-                      index,
-                    ) {
-                      return _productCard(
-                        docs[index],
-                      );
+                    itemCount: docs.length,
+                    itemBuilder: (context, index) {
+                      return _productCard(docs[index]);
                     },
                   ),
                 ),
@@ -1208,48 +852,25 @@ class _MyStorePageState extends State<MyStorePage> {
     required String value,
   }) {
     return Container(
-      padding:
-          const EdgeInsets.all(10),
-      decoration:
-          BoxDecoration(
-        color: Theme.of(context)
-            .colorScheme
-            .surfaceContainerHighest,
-        borderRadius:
-            BorderRadius.circular(12),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         children: [
-          Icon(
-            icon,
-            size: 21,
-          ),
-          const SizedBox(
-            height: 5,
-          ),
+          Icon(icon, size: 21),
+          const SizedBox(height: 5),
           Text(
             title,
-            style:
-                TextStyle(
-              fontSize: 11,
-              color: Colors
-                  .grey.shade700,
-            ),
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
           ),
-          const SizedBox(
-            height: 3,
-          ),
+          const SizedBox(height: 3),
           Text(
             value,
             maxLines: 1,
-            overflow:
-                TextOverflow.ellipsis,
-            style:
-                const TextStyle(
-              fontSize: 14,
-              fontWeight:
-                  FontWeight.bold,
-            ),
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
           ),
         ],
       ),
