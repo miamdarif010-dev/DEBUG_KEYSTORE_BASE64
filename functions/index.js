@@ -46,6 +46,13 @@ exports.downloadApp = listing.downloadApp;
 Object.assign(exports, require("./counters"));
 
 // ============================================================
+// WATCH & EARN (reward claims -> points)
+// File name in the repo: functions/rewards.js
+// ============================================================
+
+Object.assign(exports, require("./rewards"));
+
+// ============================================================
 // CLOUDINARY SECRETS
 // ============================================================
 
