@@ -39,6 +39,13 @@ exports.getProductListing = listing.getProductListing;
 exports.downloadApp = listing.downloadApp;
 
 // ============================================================
+// VIDEO COUNTERS + PUBLIC PROFILES (likes, views, comments, shares)
+// File name in the repo: functions/counters.js
+// ============================================================
+
+Object.assign(exports, require("./counters"));
+
+// ============================================================
 // CLOUDINARY SECRETS
 // ============================================================
 
