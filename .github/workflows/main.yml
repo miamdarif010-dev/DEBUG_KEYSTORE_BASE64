@@ -90,3 +90,24 @@ jobs:
         with:
           name: BuyNova-APK
           path: build/app/outputs/flutter-apk/app-release.apk
+
+      # ------------------------------------------------------------
+      # Publish the new APK to Firebase Storage so the web page's
+      # "অ্যাপ ডাউনলোড" button always gives the latest app.
+      # (Only on pushes to main; pull requests have no secrets.)
+      # ------------------------------------------------------------
+      - name: Authenticate with Google Cloud
+        if: github.event_name != 'pull_request'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
+
+      - name: Publish APK to Firebase Storage
+        if: github.event_name != 'pull_request'
+        run: |
+          gcloud storage cp build/app/outputs/flutter-apk/app-release.apk \
+            gs://buynova-cc5dd.firebasestorage.app/app-release.apk \
+            --content-type=application/vnd.android.package-archive \
+            --cache-control="no-cache"
+          echo "### APK published to Firebase Storage" >> "$GITHUB_STEP_SUMMARY"
+          echo "gs://buynova-cc5dd.firebasestorage.app/app-release.apk" >> "$GITHUB_STEP_SUMMARY"
