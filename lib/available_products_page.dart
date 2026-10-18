@@ -2,21 +2,18 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'price_discount.dart';
+
 class AvailableProductsPage extends StatefulWidget {
   const AvailableProductsPage({super.key});
 
   @override
-  State<AvailableProductsPage> createState() =>
-      _AvailableProductsPageState();
+  State<AvailableProductsPage> createState() => _AvailableProductsPageState();
 }
 
-class _AvailableProductsPageState
-    extends State<AvailableProductsPage> {
-  final FirebaseFirestore _firestore =
-      FirebaseFirestore.instance;
-
-  final FirebaseAuth _auth =
-      FirebaseAuth.instance;
+class _AvailableProductsPageState extends State<AvailableProductsPage> {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   bool _isCheckingEntrepreneur = true;
   bool _isApprovedEntrepreneur = false;
@@ -48,27 +45,20 @@ class _AvailableProductsPageState
     }
 
     try {
-      final snapshot = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .get();
+      final snapshot =
+          await _firestore.collection('users').doc(user.uid).get();
 
       final data = snapshot.data();
 
-      final status =
-          data?['entrepreneurStatus']?.toString();
+      final status = data?['entrepreneurStatus']?.toString();
 
-      final code =
-          data?['entrepreneurCode']?.toString();
+      final code = data?['entrepreneurCode']?.toString();
 
       if (!mounted) return;
 
       setState(() {
-        _isApprovedEntrepreneur =
-            status == 'approved';
-
+        _isApprovedEntrepreneur = status == 'approved';
         _entrepreneurCode = code;
-
         _isCheckingEntrepreneur = false;
       });
     } catch (e) {
@@ -79,14 +69,12 @@ class _AvailableProductsPageState
         _isCheckingEntrepreneur = false;
       });
 
-      _showMessage(
-        'Could not check entrepreneur status.',
-      );
+      _showMessage('Could not check entrepreneur status.');
     }
   }
 
   // =========================================================
-  // MONEY
+  // MONEY / DOUBLE / MESSAGE
   // =========================================================
 
   String _money(double value) {
@@ -97,32 +85,19 @@ class _AvailableProductsPageState
     return '৳${value.toStringAsFixed(2)}';
   }
 
-  // =========================================================
-  // DOUBLE CONVERTER
-  // =========================================================
-
   double _toDouble(dynamic value) {
     if (value is num) {
       return value.toDouble();
     }
 
-    return double.tryParse(
-          value?.toString() ?? '',
-        ) ??
-        0;
+    return double.tryParse(value?.toString() ?? '') ?? 0;
   }
-
-  // =========================================================
-  // SHOW MESSAGE
-  // =========================================================
 
   void _showMessage(String message) {
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-      ),
+      SnackBar(content: Text(message)),
     );
   }
 
@@ -130,9 +105,7 @@ class _AvailableProductsPageState
   // ADD TO MY STORE DIALOG
   // =========================================================
 
-  Future<void> _showAddToStoreDialog(
-    DocumentSnapshot product,
-  ) async {
+  Future<void> _showAddToStoreDialog(DocumentSnapshot product) async {
     final user = _auth.currentUser;
 
     if (user == null) {
@@ -141,134 +114,92 @@ class _AvailableProductsPageState
     }
 
     if (!_isApprovedEntrepreneur) {
-      _showMessage(
-        'Only approved entrepreneurs can resell products.',
-      );
+      _showMessage('Only approved entrepreneurs can resell products.');
       return;
     }
 
-    final data =
-        product.data() as Map<String, dynamic>;
+    final data = product.data() as Map<String, dynamic>;
 
     final productId = product.id;
 
-    final productName =
-        data['name']?.toString() ?? 'Product';
+    final productName = data['name']?.toString() ?? 'Product';
 
-    final supplierPrice =
-        _toDouble(data['price']);
+    // Supplier price = what the supplier's buyers pay now (after the
+    // supplier's own discount, if any).
+    final supplierPrice = _toDouble(data['price']);
 
-    final imageUrl =
-        data['imageUrl']?.toString() ?? '';
+    final imageUrl = data['imageUrl']?.toString() ?? '';
 
-    final category =
-        data['category']?.toString() ?? 'General';
+    final category = data['category']?.toString() ?? 'General';
 
-    final description =
-        data['description']?.toString() ?? '';
+    final description = data['description']?.toString() ?? '';
 
-    final sellerId =
-        data['sellerId']?.toString() ?? '';
+    final sellerId = data['sellerId']?.toString() ?? '';
 
-    final sellerCode =
-        data['sellerCode']?.toString() ?? '';
+    final sellerCode = data['sellerCode']?.toString() ?? '';
 
-    final sellerEmail =
-        data['sellerEmail']?.toString() ?? '';
+    final sellerEmail = data['sellerEmail']?.toString() ?? '';
 
-    final sellerApproved =
-        data['sellerApproved'] == true;
-
-    // ---------------------------------------------------------
-    // SELLER VALIDATION
-    // ---------------------------------------------------------
+    final sellerApproved = data['sellerApproved'] == true;
 
     if (sellerId.isEmpty) {
-      _showMessage(
-        'Seller information is missing.',
-      );
+      _showMessage('Seller information is missing.');
       return;
     }
 
     if (!sellerApproved) {
-      _showMessage(
-        'This product is not available from an approved seller.',
-      );
+      _showMessage('This product is not available from an approved seller.');
       return;
     }
 
     if (supplierPrice <= 0) {
-      _showMessage(
-        'This product has an invalid supplier price.',
-      );
+      _showMessage('This product has an invalid supplier price.');
       return;
     }
 
-    // ---------------------------------------------------------
-    // DEFAULT SELLING PRICE
-    // ---------------------------------------------------------
+    // Default total price = supplier price + 1000 (reseller can change it).
+    final double defaultTotal = supplierPrice + 1000;
 
-    final defaultSellingPrice =
-        supplierPrice + 1000;
-
-    final controller = TextEditingController(
-      text: defaultSellingPrice.toStringAsFixed(0),
+    // What the reseller typed (total price, discount %, discount amount).
+    DiscountResult result = DiscountResult(
+      original: defaultTotal,
+      finalPrice: defaultTotal,
     );
-
-    double sellingPrice =
-        defaultSellingPrice;
-
-    double profit =
-        sellingPrice - supplierPrice;
 
     bool isSaving = false;
 
-    await showDialog(
+    await showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
         return StatefulBuilder(
-          builder: (
-            context,
-            setDialogState,
-          ) {
+          builder: (context, setDialogState) {
+            // The price the customer pays and the reseller profit.
+            final double finalPrice = result.finalPrice;
+            final double profit = finalPrice - supplierPrice;
+
             return AlertDialog(
-              title: const Text(
-                'Add to My Store',
-              ),
+              title: const Text('Add to My Store'),
               content: SingleChildScrollView(
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // -------------------------------------------------
-                    // IMAGE
-                    // -------------------------------------------------
-
                     if (imageUrl.isNotEmpty)
                       ClipRRect(
-                        borderRadius:
-                            BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(12),
                         child: Image.network(
                           imageUrl,
                           height: 150,
                           width: double.infinity,
                           fit: BoxFit.cover,
-                          errorBuilder:
-                              (
-                            context,
-                            error,
-                            stackTrace,
-                          ) {
+                          errorBuilder: (context, error, stackTrace) {
                             return Container(
                               height: 150,
                               width: double.infinity,
-                              color:
-                                  Colors.grey.shade200,
+                              color: Colors.grey.shade200,
                               child: const Center(
                                 child: Icon(
-                                  Icons
-                                      .image_not_supported_outlined,
+                                  Icons.image_not_supported_outlined,
                                   size: 42,
                                 ),
                               ),
@@ -276,56 +207,32 @@ class _AvailableProductsPageState
                           },
                         ),
                       ),
-
                     const SizedBox(height: 14),
-
-                    // -------------------------------------------------
-                    // PRODUCT NAME
-                    // -------------------------------------------------
-
                     Text(
                       productName,
                       style: const TextStyle(
                         fontSize: 18,
-                        fontWeight:
-                            FontWeight.bold,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-
                     const SizedBox(height: 6),
-
                     Text(
                       category,
-                      style: TextStyle(
-                        color:
-                            Colors.grey.shade600,
-                      ),
+                      style: TextStyle(color: Colors.grey.shade600),
                     ),
-
                     const SizedBox(height: 12),
-
-                    // -------------------------------------------------
-                    // SELLER
-                    // -------------------------------------------------
-
                     if (sellerCode.isNotEmpty)
                       Container(
                         width: double.infinity,
-                        padding:
-                            const EdgeInsets.all(10),
+                        padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: Colors.blue
-                              .withValues(alpha: 0.08),
-                          borderRadius:
-                              BorderRadius.circular(
-                            10,
-                          ),
+                          color: Colors.blue.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(10),
                         ),
                         child: Row(
                           children: [
                             const Icon(
-                              Icons
-                                  .storefront_rounded,
+                              Icons.storefront_rounded,
                               size: 20,
                               color: Colors.blue,
                             ),
@@ -333,187 +240,126 @@ class _AvailableProductsPageState
                             Expanded(
                               child: Text(
                                 'Supplier: $sellerCode',
-                                style:
-                                    const TextStyle(
-                                  fontWeight:
-                                      FontWeight.w600,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ),
                           ],
                         ),
                       ),
-
                     const SizedBox(height: 14),
 
-                    // -------------------------------------------------
                     // SUPPLIER PRICE
-                    // -------------------------------------------------
-
                     Container(
                       width: double.infinity,
-                      padding:
-                          const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: Theme.of(context)
                             .colorScheme
                             .surfaceContainerHighest,
-                        borderRadius:
-                            BorderRadius.circular(
-                          12,
-                        ),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       child: Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
                             'Supplier Price',
-                            style: TextStyle(
-                              fontWeight:
-                                  FontWeight.w600,
-                            ),
+                            style: TextStyle(fontWeight: FontWeight.w600),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             _money(supplierPrice),
                             style: const TextStyle(
                               fontSize: 21,
-                              fontWeight:
-                                  FontWeight.bold,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ],
                       ),
                     ),
-
                     const SizedBox(height: 16),
 
-                    // -------------------------------------------------
-                    // SELLING PRICE
-                    // -------------------------------------------------
-
-                    TextField(
-                      controller: controller,
-                      keyboardType:
-                          const TextInputType
-                              .numberWithOptions(
-                        decimal: true,
-                      ),
-                      decoration:
-                          const InputDecoration(
-                        labelText:
-                            'Your Selling Price',
-                        prefixText: '৳ ',
-                        border:
-                            OutlineInputBorder(),
-                        helperText:
-                            'This is the price your customers will pay.',
-                      ),
+                    // TOTAL PRICE + DISCOUNT (same input the seller uses)
+                    DiscountPriceInput(
+                      originalLabel: 'Your Total Price',
+                      helperText: 'Price before discount. Customers pay '
+                          'this minus your discount.',
+                      initialOriginal: defaultTotal,
+                      enabled: !isSaving,
                       onChanged: (value) {
-                        final parsed =
-                            double.tryParse(
-                          value.trim(),
-                        );
-
                         setDialogState(() {
-                          sellingPrice =
-                              parsed ?? 0;
-
-                          profit =
-                              sellingPrice -
-                                  supplierPrice;
+                          result = value;
                         });
                       },
                     ),
-
                     const SizedBox(height: 14),
 
-                    // -------------------------------------------------
                     // PROFIT
-                    // -------------------------------------------------
-
                     Container(
                       width: double.infinity,
-                      padding:
-                          const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        borderRadius:
-                            BorderRadius.circular(
-                          12,
-                        ),
+                        borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: profit > 0
-                              ? Colors.green
-                              : Colors.red,
+                          color: profit > 0 ? Colors.green : Colors.red,
                         ),
                       ),
                       child: Row(
                         children: [
                           Icon(
                             profit > 0
-                                ? Icons
-                                    .trending_up_rounded
-                                : Icons
-                                    .warning_amber_rounded,
-                            color: profit > 0
-                                ? Colors.green
-                                : Colors.red,
+                                ? Icons.trending_up_rounded
+                                : Icons.warning_amber_rounded,
+                            color: profit > 0 ? Colors.green : Colors.red,
                           ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment
-                                      .start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text(
-                                  'Your Profit',
+                                  'Your Profit (after discount)',
                                   style: TextStyle(
-                                    fontWeight:
-                                        FontWeight.w600,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
-                                const SizedBox(
-                                  height: 3,
-                                ),
+                                const SizedBox(height: 3),
                                 Text(
                                   _money(profit),
                                   style: TextStyle(
                                     fontSize: 19,
-                                    fontWeight:
-                                        FontWeight.bold,
+                                    fontWeight: FontWeight.bold,
                                     color: profit > 0
                                         ? Colors.green
                                         : Colors.red,
                                   ),
                                 ),
+                                if (profit <= 0)
+                                  const Text(
+                                    'The customer price must stay above the supplier price.',
+                                    style: TextStyle(
+                                      color: Colors.red,
+                                      fontSize: 11.5,
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
                         ],
                       ),
                     ),
-
-                    // -------------------------------------------------
-                    // DESCRIPTION
-                    // -------------------------------------------------
-
                     if (description.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       const Text(
                         'Product Description',
-                        style: TextStyle(
-                          fontWeight:
-                              FontWeight.bold,
-                        ),
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 5),
                       Text(
                         description,
                         maxLines: 5,
-                        overflow:
-                            TextOverflow.ellipsis,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ],
@@ -524,29 +370,23 @@ class _AvailableProductsPageState
                   onPressed: isSaving
                       ? null
                       : () {
-                          Navigator.pop(
-                            dialogContext,
-                          );
+                          Navigator.pop(dialogContext);
                         },
-                  child: const Text(
-                    'Cancel',
-                  ),
+                  child: const Text('Cancel'),
                 ),
                 FilledButton.icon(
                   onPressed: isSaving
                       ? null
                       : () async {
-                          if (sellingPrice <= 0) {
-                            _showMessage(
-                              'Enter a valid selling price.',
-                            );
+                          if (!result.isValid) {
+                            _showMessage('Enter a valid price.');
                             return;
                           }
 
-                          if (sellingPrice <=
-                              supplierPrice) {
+                          if (result.finalPrice <= supplierPrice) {
                             _showMessage(
-                              'Selling price must be higher than supplier price.',
+                              'Customer price (after discount) must be '
+                              'higher than the supplier price.',
                             );
                             return;
                           }
@@ -555,35 +395,25 @@ class _AvailableProductsPageState
                             isSaving = true;
                           });
 
-                          final success =
-                              await _addProductToMyStore(
+                          final success = await _addProductToMyStore(
                             productId: productId,
-                            productName:
-                                productName,
-                            supplierPrice:
-                                supplierPrice,
-                            sellingPrice:
-                                sellingPrice,
+                            productName: productName,
+                            supplierPrice: supplierPrice,
+                            discount: result,
                             imageUrl: imageUrl,
                             category: category,
-                            description:
-                                description,
+                            description: description,
                             sellerId: sellerId,
-                            sellerCode:
-                                sellerCode,
-                            sellerEmail:
-                                sellerEmail,
+                            sellerCode: sellerCode,
+                            sellerEmail: sellerEmail,
                           );
 
-                          if (!dialogContext
-                              .mounted) {
+                          if (!dialogContext.mounted) {
                             return;
                           }
 
                           if (success) {
-                            Navigator.pop(
-                              dialogContext,
-                            );
+                            Navigator.pop(dialogContext);
                           } else {
                             setDialogState(() {
                               isSaving = false;
@@ -594,20 +424,10 @@ class _AvailableProductsPageState
                       ? const SizedBox(
                           width: 18,
                           height: 18,
-                          child:
-                              CircularProgressIndicator(
-                            strokeWidth: 2,
-                          ),
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Icon(
-                          Icons
-                              .add_business_rounded,
-                        ),
-                  label: Text(
-                    isSaving
-                        ? 'Adding...'
-                        : 'Add to My Store',
-                  ),
+                      : const Icon(Icons.add_business_rounded),
+                  label: Text(isSaving ? 'Adding...' : 'Add to My Store'),
                 ),
               ],
             );
@@ -615,8 +435,6 @@ class _AvailableProductsPageState
         );
       },
     );
-
-    controller.dispose();
   }
 
   // =========================================================
@@ -627,7 +445,7 @@ class _AvailableProductsPageState
     required String productId,
     required String productName,
     required double supplierPrice,
-    required double sellingPrice,
+    required DiscountResult discount,
     required String imageUrl,
     required String category,
     required String description,
@@ -643,35 +461,21 @@ class _AvailableProductsPageState
     }
 
     try {
-      // -------------------------------------------------------
       // CHECK ENTREPRENEUR AGAIN
-      // -------------------------------------------------------
-
       final entrepreneurSnapshot =
-          await _firestore
-              .collection('users')
-              .doc(user.uid)
-              .get();
+          await _firestore.collection('users').doc(user.uid).get();
 
-      final entrepreneurData =
-          entrepreneurSnapshot.data();
+      final entrepreneurData = entrepreneurSnapshot.data();
 
-      final status =
-          entrepreneurData?[
-                  'entrepreneurStatus']
-              ?.toString();
+      final status = entrepreneurData?['entrepreneurStatus']?.toString();
 
       if (status != 'approved') {
-        _showMessage(
-          'Your entrepreneur account is not approved.',
-        );
+        _showMessage('Your entrepreneur account is not approved.');
         return false;
       }
 
       final entrepreneurCode =
-          entrepreneurData?[
-                      'entrepreneurCode']
-                  ?.toString() ??
+          entrepreneurData?['entrepreneurCode']?.toString() ??
               _entrepreneurCode ??
               '';
 
@@ -682,79 +486,64 @@ class _AvailableProductsPageState
         return false;
       }
 
-      // -------------------------------------------------------
       // VERIFY ORIGINAL PRODUCT STILL EXISTS
-      // -------------------------------------------------------
-
       final originalProduct =
-          await _firestore
-              .collection('products')
-              .doc(productId)
-              .get();
+          await _firestore.collection('products').doc(productId).get();
 
       if (!originalProduct.exists) {
-        _showMessage(
-          'This product is no longer available.',
-        );
+        _showMessage('This product is no longer available.');
         return false;
       }
 
-      final originalData =
-          originalProduct.data();
+      final originalData = originalProduct.data();
 
       if (originalData == null) {
-        _showMessage(
-          'Product information is unavailable.',
-        );
+        _showMessage('Product information is unavailable.');
         return false;
       }
 
       if (originalData['active'] != true) {
-        _showMessage(
-          'This product is no longer active.',
-        );
+        _showMessage('This product is no longer active.');
         return false;
       }
 
       if (originalData['sellerApproved'] != true) {
+        _showMessage('This seller is no longer approved.');
+        return false;
+      }
+
+      // The supplier may have changed the price while the dialog was open.
+      final double currentSupplierPrice = _toDouble(originalData['price']);
+
+      if (currentSupplierPrice <= 0 ||
+          discount.finalPrice <= currentSupplierPrice) {
         _showMessage(
-          'This seller is no longer approved.',
+          'The supplier price changed. Please open the product again.',
         );
         return false;
       }
 
-      // -------------------------------------------------------
       // PREVENT DUPLICATE
-      // -------------------------------------------------------
-
-      final existingQuery =
-          await _firestore
-              .collection('reseller_products')
-              .where(
-                'entrepreneurUid',
-                isEqualTo: user.uid,
-              )
-              .where(
-                'sourceProductId',
-                isEqualTo: productId,
-              )
-              .limit(1)
-              .get();
+      final existingQuery = await _firestore
+          .collection('reseller_products')
+          .where('entrepreneurUid', isEqualTo: user.uid)
+          .where('sourceProductId', isEqualTo: productId)
+          .limit(1)
+          .get();
 
       if (existingQuery.docs.isNotEmpty) {
-        _showMessage(
-          'This product is already in your store.',
-        );
+        _showMessage('This product is already in your store.');
         return false;
       }
 
-      // -------------------------------------------------------
-      // CREATE RESELLER PRODUCT
-      // -------------------------------------------------------
+      // `sellingPrice` is what the customer pays (after discount).
+      // `originalPrice` is the total price before the discount.
+      // Cart, checkout and orders use `sellingPrice`, so they stay correct.
+      final bool hasDiscount = discount.hasDiscount;
 
-      await _firestore
-          .collection('reseller_products')
-          .add({
+      final double sellingPrice = discount.finalPrice;
+
+      await _firestore.collection('reseller_products').add({
         // Original Seller Product
         'sourceProductId': productId,
         'productName': productName,
@@ -766,18 +555,22 @@ class _AvailableProductsPageState
         'sellerId': sellerId,
         'sellerCode': sellerCode,
         'sellerEmail': sellerEmail,
-        'supplierPrice': supplierPrice,
+        'supplierPrice': currentSupplierPrice,
 
         // Entrepreneur
         'entrepreneurUid': user.uid,
         'entrepreneurCode': entrepreneurCode,
-        'entrepreneurEmail':
-            user.email ?? '',
+        'entrepreneurEmail': user.email ?? '',
 
         // Entrepreneur pricing
         'sellingPrice': sellingPrice,
-        'profit':
-            sellingPrice - supplierPrice,
+        'profit': sellingPrice - currentSupplierPrice,
+
+        // Discount information (display only)
+        'originalPrice': hasDiscount ? discount.original : sellingPrice,
+        'discountAmount': hasDiscount ? discount.amount : 0,
+        'discountPercent': hasDiscount ? discount.percent : 0,
+        'hasDiscount': hasDiscount,
 
         // Status
         'active': true,
@@ -788,19 +581,15 @@ class _AvailableProductsPageState
         'salesCount': 0,
 
         // Dates
-        'createdAt':
-            FieldValue.serverTimestamp(),
-        'updatedAt':
-            FieldValue.serverTimestamp(),
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
       });
 
       if (!mounted) return true;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Product added to your store successfully!',
-          ),
+          content: Text('Product added to your store successfully!'),
         ),
       );
 
@@ -808,9 +597,7 @@ class _AvailableProductsPageState
     } catch (e) {
       if (!mounted) return false;
 
-      _showMessage(
-        'Could not add product: $e',
-      );
+      _showMessage('Could not add product: $e');
 
       return false;
     }
@@ -825,8 +612,7 @@ class _AvailableProductsPageState
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
-          mainAxisAlignment:
-              MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               Icons.business_center_rounded,
@@ -837,10 +623,7 @@ class _AvailableProductsPageState
             const Text(
               'Entrepreneur Approval Required',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 23,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             Text(
@@ -854,14 +637,9 @@ class _AvailableProductsPageState
             ),
             const SizedBox(height: 24),
             FilledButton.icon(
-              onPressed:
-                  _checkEntrepreneurApproval,
-              icon: const Icon(
-                Icons.refresh_rounded,
-              ),
-              label: const Text(
-                'Check Again',
-              ),
+              onPressed: _checkEntrepreneurApproval,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Check Again'),
             ),
           ],
         ),
@@ -873,35 +651,24 @@ class _AvailableProductsPageState
   // PRODUCT CARD
   // =========================================================
 
-  Widget _productCard(
-    DocumentSnapshot product,
-  ) {
-    final data =
-        product.data() as Map<String, dynamic>;
+  Widget _productCard(DocumentSnapshot product) {
+    final data = product.data() as Map<String, dynamic>;
 
-    final name =
-        data['name']?.toString() ??
-            'Unnamed Product';
+    final name = data['name']?.toString() ?? 'Unnamed Product';
 
-    final imageUrl =
-        data['imageUrl']?.toString() ?? '';
+    final imageUrl = data['imageUrl']?.toString() ?? '';
 
-    final category =
-        data['category']?.toString() ??
-            'General';
+    final category = data['category']?.toString() ?? 'General';
 
-    final description =
-        data['description']?.toString() ?? '';
+    final description = data['description']?.toString() ?? '';
 
-    final price =
-        _toDouble(data['price']);
+    final price = _toDouble(data['price']);
 
-    final sellerCode =
-        data['sellerCode']?.toString() ??
-            '';
+    final originalPrice = _toDouble(data['originalPrice']);
 
-    final sellerApproved =
-        data['sellerApproved'] == true;
+    final sellerCode = data['sellerCode']?.toString() ?? '';
+
+    final sellerApproved = data['sellerApproved'] == true;
 
     // Only approved seller products
     if (!sellerApproved) {
@@ -912,13 +679,8 @@ class _AvailableProductsPageState
       clipBehavior: Clip.antiAlias,
       elevation: 2,
       child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // -----------------------------------------------------
-          // IMAGE
-          // -----------------------------------------------------
-
           SizedBox(
             height: 190,
             width: double.infinity,
@@ -926,19 +688,12 @@ class _AvailableProductsPageState
                 ? Image.network(
                     imageUrl,
                     fit: BoxFit.cover,
-                    errorBuilder:
-                        (
-                      context,
-                      error,
-                      stackTrace,
-                    ) {
+                    errorBuilder: (context, error, stackTrace) {
                       return Container(
-                        color:
-                            Colors.grey.shade200,
+                        color: Colors.grey.shade200,
                         child: const Center(
                           child: Icon(
-                            Icons
-                                .image_not_supported_outlined,
+                            Icons.image_not_supported_outlined,
                             size: 45,
                           ),
                         ),
@@ -946,118 +701,77 @@ class _AvailableProductsPageState
                     },
                   )
                 : Container(
-                    color:
-                        Colors.grey.shade200,
+                    color: Colors.grey.shade200,
                     child: const Center(
-                      child: Icon(
-                        Icons.image_outlined,
-                        size: 45,
-                      ),
+                      child: Icon(Icons.image_outlined, size: 45),
                     ),
                   ),
           ),
-
-          // -----------------------------------------------------
-          // DETAILS
-          // -----------------------------------------------------
-
           Padding(
-            padding:
-                const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(14),
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   name,
                   maxLines: 2,
-                  overflow:
-                      TextOverflow.ellipsis,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 17,
-                    fontWeight:
-                        FontWeight.bold,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-
                 const SizedBox(height: 6),
-
                 Text(
                   category,
                   style: TextStyle(
-                    color:
-                        Colors.grey.shade600,
+                    color: Colors.grey.shade600,
                     fontSize: 13,
                   ),
                 ),
-
                 const SizedBox(height: 10),
-
-                Row(
-                  children: [
-                    const Text(
-                      'Supplier:',
-                      style: TextStyle(
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(width: 5),
-                    Text(
-                      _money(price),
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight:
-                            FontWeight.bold,
-                      ),
-                    ),
-                  ],
+                const Text(
+                  'Supplier price',
+                  style: TextStyle(fontSize: 12),
                 ),
-
+                const SizedBox(height: 2),
+                PriceTag(
+                  price: price,
+                  originalPrice: originalPrice > price ? originalPrice : null,
+                  fontSize: 17,
+                ),
                 if (sellerCode.isNotEmpty) ...[
                   const SizedBox(height: 5),
                   Text(
                     'Seller: $sellerCode',
                     style: TextStyle(
                       fontSize: 12,
-                      color:
-                          Colors.grey.shade600,
+                      color: Colors.grey.shade600,
                     ),
                   ),
                 ],
-
                 if (description.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Text(
                     description,
                     maxLines: 2,
-                    overflow:
-                        TextOverflow.ellipsis,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 13,
-                      color:
-                          Colors.grey.shade700,
+                      color: Colors.grey.shade700,
                     ),
                   ),
                 ],
-
                 const SizedBox(height: 14),
-
                 SizedBox(
                   width: double.infinity,
                   height: 46,
                   child: FilledButton.icon(
                     onPressed: () {
-                      _showAddToStoreDialog(
-                        product,
-                      );
+                      _showAddToStoreDialog(product);
                     },
-                    icon: const Icon(
-                      Icons
-                          .add_business_rounded,
-                    ),
-                    label: const Text(
-                      'Add to My Store',
-                    ),
+                    icon: const Icon(Icons.add_business_rounded),
+                    label: const Text('Add to My Store'),
                   ),
                 ),
               ],
@@ -1076,24 +790,17 @@ class _AvailableProductsPageState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Available Products',
-        ),
+        title: const Text('Available Products'),
         actions: [
-          if (_entrepreneurCode != null &&
-              _entrepreneurCode!.isNotEmpty)
+          if (_entrepreneurCode != null && _entrepreneurCode!.isNotEmpty)
             Center(
               child: Padding(
-                padding:
-                    const EdgeInsets.only(
-                  right: 14,
-                ),
+                padding: const EdgeInsets.only(right: 14),
                 child: Text(
                   _entrepreneurCode!,
                   style: const TextStyle(
                     fontSize: 12,
-                    fontWeight:
-                        FontWeight.w600,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
@@ -1101,117 +808,67 @@ class _AvailableProductsPageState
         ],
       ),
       body: _isCheckingEntrepreneur
-          ? const Center(
-              child:
-                  CircularProgressIndicator(),
-            )
+          ? const Center(child: CircularProgressIndicator())
           : !_isApprovedEntrepreneur
               ? _notApprovedView()
               : StreamBuilder<QuerySnapshot>(
                   stream: _firestore
                       .collection('products')
-                      .where(
-                        'active',
-                        isEqualTo: true,
-                      )
+                      .where('active', isEqualTo: true)
                       .snapshots(),
-                  builder: (
-                    context,
-                    snapshot,
-                  ) {
+                  builder: (context, snapshot) {
                     if (snapshot.hasError) {
                       return Center(
                         child: Padding(
-                          padding:
-                              const EdgeInsets.all(
-                            24,
-                          ),
+                          padding: const EdgeInsets.all(24),
                           child: Text(
                             'Could not load products.\n\n${snapshot.error}',
-                            textAlign:
-                                TextAlign.center,
+                            textAlign: TextAlign.center,
                           ),
                         ),
                       );
                     }
 
-                    if (snapshot.connectionState ==
-                        ConnectionState.waiting) {
-                      return const Center(
-                        child:
-                            CircularProgressIndicator(),
-                      );
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
                     }
 
-                    final allDocs =
-                        snapshot.data?.docs ??
-                            [];
+                    final allDocs = snapshot.data?.docs ?? [];
 
-                    // -------------------------------------------------
                     // ONLY APPROVED SELLER PRODUCTS
-                    // -------------------------------------------------
+                    final docs = allDocs.where((doc) {
+                      final data = doc.data() as Map<String, dynamic>;
 
-                    final docs =
-                        allDocs.where((doc) {
-                      final data =
-                          doc.data()
-                              as Map<String, dynamic>;
-
-                      return data['sellerApproved'] ==
-                              true &&
+                      return data['sellerApproved'] == true &&
                           data['sellerId'] != null &&
-                          data['sellerId']
-                              .toString()
-                              .isNotEmpty;
+                          data['sellerId'].toString().isNotEmpty;
                     }).toList();
 
                     if (docs.isEmpty) {
                       return Center(
-                        child:
-                            SingleChildScrollView(
-                          padding:
-                              const EdgeInsets.all(
-                            24,
-                          ),
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(24),
                           child: Column(
-                            mainAxisAlignment:
-                                MainAxisAlignment
-                                    .center,
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
-                                Icons
-                                    .inventory_2_outlined,
+                                Icons.inventory_2_outlined,
                                 size: 80,
-                                color: Colors
-                                    .grey
-                                    .shade500,
+                                color: Colors.grey.shade500,
                               ),
-                              const SizedBox(
-                                height: 18,
-                              ),
+                              const SizedBox(height: 18),
                               const Text(
                                 'No Products Available',
-                                style:
-                                    TextStyle(
+                                style: TextStyle(
                                   fontSize: 21,
-                                  fontWeight:
-                                      FontWeight
-                                          .bold,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              const SizedBox(
-                                height: 8,
-                              ),
+                              const SizedBox(height: 8),
                               Text(
                                 'Approved sellers have not added any active products yet.',
-                                textAlign:
-                                    TextAlign.center,
-                                style:
-                                    TextStyle(
-                                  color: Colors
-                                      .grey
-                                      .shade600,
-                                ),
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.grey.shade600),
                               ),
                             ],
                           ),
@@ -1220,32 +877,20 @@ class _AvailableProductsPageState
                     }
 
                     return RefreshIndicator(
-                      onRefresh:
-                          _checkEntrepreneurApproval,
+                      onRefresh: _checkEntrepreneurApproval,
                       child: GridView.builder(
-                        padding:
-                            const EdgeInsets.all(
-                          12,
-                        ),
-                        physics:
-                            const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(12),
+                        physics: const AlwaysScrollableScrollPhysics(),
                         gridDelegate:
                             const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2,
                           crossAxisSpacing: 10,
                           mainAxisSpacing: 10,
-                          childAspectRatio:
-                              0.63,
+                          childAspectRatio: 0.58,
                         ),
                         itemCount: docs.length,
-                        itemBuilder:
-                            (
-                          context,
-                          index,
-                        ) {
-                          return _productCard(
-                            docs[index],
-                          );
+                        itemBuilder: (context, index) {
+                          return _productCard(docs[index]);
                         },
                       ),
                     );
