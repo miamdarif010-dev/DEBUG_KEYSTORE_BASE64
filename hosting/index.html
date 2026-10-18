@@ -201,10 +201,15 @@ var IN_APP = /FBAN|FBAV|FB_IAB|Messenger|Instagram|Line\/|TikTok|Snapchat|; wv\)
 var SCHEME_URL = listingId
   ? 'buynova://' + kind + '/' + encodeURIComponent(listingId)
   : 'buynova://r';
+// If the phone cannot open the app, Chrome comes back to this page
+// (instead of the Play Store "Item not found" page).
+var BACK_URL = encodeURIComponent(location.href.split('#')[0] + '#noapp');
 var INTENT_URL = listingId
   ? 'intent://' + kind + '/' + encodeURIComponent(listingId) +
-    '#Intent;scheme=buynova;package=' + PACKAGE + ';end'
-  : 'intent:#Intent;package=' + PACKAGE + ';end';
+    '#Intent;scheme=buynova;package=' + PACKAGE +
+    ';S.browser_fallback_url=' + BACK_URL + ';end'
+  : 'intent:#Intent;package=' + PACKAGE +
+    ';S.browser_fallback_url=' + BACK_URL + ';end';
 
 $('openApp').href = SCHEME_URL;
 
@@ -245,6 +250,10 @@ $('openApp').addEventListener('click', function (e) {
     }
   }, 1800);
 });
+
+if (location.hash === '#noapp') {
+  showHint('অ্যাপ খোলেনি। অ্যাপ ইনস্টল না থাকলে বা <b>পুরনো ভার্সন</b> হলে নিচের <b>অ্যাপ ডাউনলোড</b> চেপে নতুন অ্যাপ ইনস্টল করুন (পুরনোটা মুছতে হবে না), তারপর আবার <b>অ্যাপে খুলুন</b> চাপুন।', false);
+}
 
 if (!listingId) {
   // Home page (no product link)
