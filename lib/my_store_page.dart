@@ -1,9 +1,14 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'cart_page.dart';
 import 'price_discount.dart';
+import 'product_details_page.dart';
+import 'product_share.dart';
 
 class MyStorePage extends StatefulWidget {
   const MyStorePage({super.key});
@@ -388,7 +393,103 @@ class _MyStorePageState extends State<MyStorePage> {
   // PRODUCT CARD
   // =========================================================
 
+  // =========================================================
+  // OPEN PRODUCT DETAILS (exactly what a customer sees)
+  // =========================================================
+  // The public listing is loaded from the server: it never contains the
+  // supplier price or your profit.
+
+  Future<void> _openDetails(DocumentSnapshot product) async {
+    final data = product.data() as Map<String, dynamic>;
+
+    Map<String, dynamic> listing;
+
+    try {
+      final result = await FirebaseFunctions.instanceFor(
+        region: 'asia-northeast3',
+      ).httpsCallable('getResellerListing').call({'listingId': product.id});
+
+      final json = jsonDecode(jsonEncode(result.data)) as Map<String, dynamic>;
+
+      listing = Map<String, dynamic>.from(json['listing'] as Map);
+    } catch (_) {
+      // Fallback: build the public view from the store product itself
+      // (still without supplier price and profit).
+      final imageUrl = data['imageUrl']?.toString() ?? '';
+
+      listing = <String, dynamic>{
+        'name': data['productName'] ?? data['name'] ?? '',
+        'description': data['description'] ?? '',
+        'imageUrl': imageUrl,
+        'images': imageUrl.isEmpty ? <String>[] : <String>[imageUrl],
+        'category': data['category'] ?? '',
+        'price': _toDouble(data['sellingPrice']),
+        'originalPrice': _toDouble(data['originalPrice']),
+        'currency': 'BDT',
+        'isResellerProduct': true,
+        'entrepreneurUid': data['entrepreneurUid'] ?? '',
+        'sellerId': data['sellerId'] ?? '',
+      };
+    }
+
+    if (!mounted) return;
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProductDetailsPage(
+          productId: product.id,
+          product: listing,
+        ),
+      ),
+    );
+  }
+
+  // =========================================================
+  // SHARE (Facebook, WhatsApp, Messenger, ...)
+  // The link and text never contain supplier price or profit.
+  // =========================================================
+
+  Future<void> _shareListing(DocumentSnapshot product) async {
+    final data = product.data() as Map<String, dynamic>;
+
+    final name = data['productName']?.toString() ??
+        data['name']?.toString() ??
+        'Product';
+
+    final selling = _toDouble(data['sellingPrice']);
+    final original = _toDouble(data['originalPrice']);
+
+    final String priceText = original > selling
+        ? '${_money(selling)} (was ${_money(original)})'
+        : _money(selling);
+
+    try {
+      await ProductShare.share(
+        productId: product.id,
+        product: <String, dynamic>{
+          'isResellerProduct': true,
+          'listingId': product.id,
+          'entrepreneurUid': data['entrepreneurUid'] ?? '',
+        },
+        name: name,
+        formattedPrice: priceText,
+      );
+    } catch (e) {
+      _showMessage('Could not share: $e');
+    }
+  }
+
   Widget _productCard(DocumentSnapshot product) {
+    return GestureDetector(
+      onTap: () {
+        _openDetails(product);
+      },
+      child: _productCardBody(product),
+    );
+  }
+
+  Widget _productCardBody(DocumentSnapshot product) {
     final data = product.data() as Map<String, dynamic>;
 
     final productName = data['productName']?.toString() ??
@@ -482,7 +583,9 @@ class _MyStorePageState extends State<MyStorePage> {
                 right: 4,
                 child: PopupMenuButton<String>(
                   onSelected: (value) {
-                    if (value == 'price') {
+                    if (value == 'share') {
+                      _shareListing(product);
+                    } else if (value == 'price') {
                       _editSellingPrice(product);
                     } else if (value == 'status') {
                       _toggleProductStatus(product);
@@ -492,6 +595,16 @@ class _MyStorePageState extends State<MyStorePage> {
                   },
                   itemBuilder: (context) {
                     return [
+                      const PopupMenuItem(
+                        value: 'share',
+                        child: Row(
+                          children: [
+                            Icon(Icons.share_outlined),
+                            SizedBox(width: 10),
+                            Text('Share'),
+                          ],
+                        ),
+                      ),
                       const PopupMenuItem(
                         value: 'price',
                         child: Row(
@@ -666,6 +779,20 @@ class _MyStorePageState extends State<MyStorePage> {
                 ),
                 const SizedBox(height: 10),
 
+                // SHARE
+                SizedBox(
+                  width: double.infinity,
+                  height: 42,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      _shareListing(product);
+                    },
+                    icon: const Icon(Icons.share_outlined, size: 19),
+                    label: const Text('Share to Sell'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+
                 // ADD TO CART
                 SizedBox(
                   width: double.infinity,
@@ -826,7 +953,7 @@ class _MyStorePageState extends State<MyStorePage> {
                       crossAxisCount: 2,
                       crossAxisSpacing: 10,
                       mainAxisSpacing: 10,
-                      mainAxisExtent: 500,
+                      mainAxisExtent: 560,
                     ),
                     itemCount: docs.length,
                     itemBuilder: (context, index) {
