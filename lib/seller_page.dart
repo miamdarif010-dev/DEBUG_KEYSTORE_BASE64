@@ -7,7 +7,7 @@ import 'add_product_page.dart';
 import 'my_products_page.dart';
 import 'seller_orders_page.dart';
 import 'seller_return_refund_page.dart';
-import 'news_feed_page.dart';
+import 'my_videos_page.dart';
 import 'seller_information_page.dart';
 import 'seller_stock_page.dart';
 import 'seller_views_page.dart';
@@ -413,7 +413,7 @@ class SellerPage extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const NewsFeedPage(),
+        builder: (context) => const MyVideosPage(),
       ),
     );
   }
