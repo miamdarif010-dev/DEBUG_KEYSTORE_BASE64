@@ -4,33 +4,39 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'buyer_chat_page.dart';
 import 'buyer_page.dart';
 import 'edit_profile_page.dart';
 import 'settings_page.dart';
 import 'admin_panel_page.dart';
 import 'entrepreneur_page.dart';
+import 'login_page.dart';
+import 'public_store_products.dart';
 import 'watch_earn_page.dart';
 import 'seller_page.dart';
 import 'add_seller_video_page.dart';
 import 'my_videos_page.dart';
 import 'user_videos_page.dart';
-import 'admin_slider_products_page.dart';
 
 class UserProfilePage extends StatefulWidget {
   final String? userId;
   final String? initialName;
   final String? initialProfileImageUrl;
 
+  /// True when the profile was opened from a reseller product
+  /// (used for the chat with the reseller).
+  final bool isResellerStore;
+
   const UserProfilePage({
     super.key,
     this.userId,
     this.initialName,
     this.initialProfileImageUrl,
+    this.isResellerStore = false,
   });
 
   @override
-  State<UserProfilePage> createState() =>
-      _UserProfilePageState();
+  State<UserProfilePage> createState() => _UserProfilePageState();
 }
 
 class _UserProfilePageState extends State<UserProfilePage> {
@@ -50,11 +56,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
   int _totalShares = 0;
   int _totalComments = 0;
 
-  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
-      _userSub;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userSub;
 
-  User? get currentUser =>
-      FirebaseAuth.instance.currentUser;
+  User? get currentUser => FirebaseAuth.instance.currentUser;
 
   String? get _targetUserId {
     final id = widget.userId?.trim();
@@ -83,12 +87,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
 
     return _role.toLowerCase() == 'admin' ||
-        currentUser?.email?.toLowerCase() ==
-            'miamdarif010@gmail.com';
+        currentUser?.email?.toLowerCase() == 'miamdarif010@gmail.com';
   }
 
-  bool get _isSellerApproved =>
-      _sellerStatus.toLowerCase() == 'approved';
+  bool get _isSellerApproved => _sellerStatus.toLowerCase() == 'approved';
 
   bool get _isEntrepreneurApproved =>
       _entrepreneurStatus.toLowerCase() == 'approved';
@@ -132,9 +134,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
         _applyUserData(doc.data());
       },
       onError: (error) {
-        debugPrint(
-          'User profile stream error: $error',
-        );
+        debugPrint('User profile stream error: $error');
 
         if (!mounted) return;
 
@@ -150,13 +150,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
     if (mounted) {
       setState(() {
-        _name =
-            widget.initialName?.trim().isNotEmpty == true
-                ? widget.initialName!.trim()
-                : 'BuyNova User';
+        _name = widget.initialName?.trim().isNotEmpty == true
+            ? widget.initialName!.trim()
+            : 'BuyNova User';
 
-        _profileImageUrl =
-            widget.initialProfileImageUrl?.trim() ?? '';
+        _profileImageUrl = widget.initialProfileImageUrl?.trim() ?? '';
 
         _isLoading = false;
       });
@@ -167,8 +165,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
 
     try {
+      // Other people's profiles are read from publicProfiles
+      // (safe copy: no email / phone). /users is owner-only.
       final doc = await FirebaseFirestore.instance
-          .collection('users')
+          .collection('publicProfiles')
           .doc(uid)
           .get();
 
@@ -181,9 +181,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
         );
       }
     } catch (e) {
-      debugPrint(
-        'Public profile read skipped: $e',
-      );
+      debugPrint('Public profile read skipped: $e');
 
       if (!mounted) return;
 
@@ -207,16 +205,12 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
 
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
+      final doc =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
 
       _applyUserData(doc.data());
     } catch (e) {
-      debugPrint(
-        'Load user profile error: $e',
-      );
+      debugPrint('Load user profile error: $e');
 
       if (!mounted) return;
 
@@ -242,17 +236,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }) {
     final map = data ?? <String, dynamic>{};
 
-    final firestoreName =
-        map['name']?.toString().trim() ?? '';
+    final firestoreName = map['name']?.toString().trim() ?? '';
 
-    final firestorePhone =
-        map['phone']?.toString().trim() ?? '';
+    final firestorePhone = map['phone']?.toString().trim() ?? '';
 
-    final firestoreEmail =
-        map['email']?.toString().trim() ?? '';
+    final firestoreEmail = map['email']?.toString().trim() ?? '';
 
-    final firestoreImage =
-        map['profileImageUrl']?.toString().trim() ?? '';
+    final firestoreImage = map['profileImageUrl']?.toString().trim() ?? '';
 
     if (!mounted) return;
 
@@ -276,15 +266,12 @@ class _UserProfilePageState extends State<UserProfilePage> {
       if (firestoreImage.isNotEmpty) {
         _profileImageUrl = firestoreImage;
       } else if (_profileImageUrl.isEmpty) {
-        _profileImageUrl =
-            widget.initialProfileImageUrl?.trim() ?? '';
+        _profileImageUrl = widget.initialProfileImageUrl?.trim() ?? '';
       }
 
-      _sellerStatus =
-          map['sellerStatus']?.toString() ?? '';
+      _sellerStatus = map['sellerStatus']?.toString() ?? '';
 
-      _entrepreneurStatus =
-          map['entrepreneurStatus']?.toString() ?? '';
+      _entrepreneurStatus = map['entrepreneurStatus']?.toString() ?? '';
 
       _role = map['role']?.toString() ?? '';
 
@@ -311,9 +298,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   void _push(Widget page) {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => page,
-      ),
+      MaterialPageRoute(builder: (_) => page),
     );
   }
 
@@ -341,10 +326,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
     _push(const WatchEarnPage());
   }
 
-  void _openSliderAdmin() {
-    _push(const AdminSliderProductsPage());
-  }
-
   void _openSettings() {
     _push(const SettingsPage());
   }
@@ -355,6 +336,62 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   void _openMyVideos() {
     _push(const MyVideosPage());
+  }
+
+  // =========================================================
+  // MESSAGE THIS SELLER / RESELLER
+  // =========================================================
+
+  Future<void> _openMessage() async {
+    User? user = currentUser;
+
+    if (user == null) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+      );
+
+      user = currentUser;
+
+      if (user == null) return;
+    }
+
+    final String? target = _targetUserId;
+
+    if (target == null || target.isEmpty || target == user.uid) {
+      return;
+    }
+
+    String conversationId = '';
+
+    try {
+      final existing = await FirebaseFirestore.instance
+          .collection('conversations')
+          .where('buyerId', isEqualTo: user.uid)
+          .where('sellerId', isEqualTo: target)
+          .limit(1)
+          .get();
+
+      if (existing.docs.isNotEmpty) {
+        conversationId = existing.docs.first.id;
+      }
+    } catch (e) {
+      debugPrint('Conversation lookup failed: $e');
+    }
+
+    if (conversationId.isEmpty) {
+      conversationId = 'chat_${user.uid}_$target';
+    }
+
+    if (!mounted) return;
+
+    _push(
+      BuyerChatPage(
+        conversationId: conversationId,
+        sellerId: target,
+        sellerName: _name.isEmpty ? 'Seller' : _name,
+        isReseller: widget.isResellerStore,
+      ),
+    );
   }
 
   Future<void> _logout() async {
@@ -370,9 +407,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
       return null;
     }
 
-    return NetworkImage(
-      _profileImageUrl.trim(),
-    );
+    return NetworkImage(_profileImageUrl.trim());
   }
 
   Widget _statItem({
@@ -384,26 +419,16 @@ class _UserProfilePageState extends State<UserProfilePage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            color: Colors.redAccent,
-            size: 20,
-          ),
+          Icon(icon, color: Colors.redAccent, size: 20),
           const SizedBox(height: 4),
           Text(
             _formatCount(value),
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 2),
           Text(
             label,
-            style: const TextStyle(
-              fontSize: 11,
-              color: Colors.grey,
-            ),
+            style: const TextStyle(fontSize: 11, color: Colors.grey),
           ),
         ],
       ),
@@ -413,9 +438,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   Widget _statsRow() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        vertical: 14,
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
@@ -460,9 +483,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     required List<Widget> children,
   }) {
     return Container(
-      margin: const EdgeInsets.only(
-        bottom: 14,
-      ),
+      margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
@@ -477,15 +498,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(
-                  icon,
-                  color: Colors.redAccent,
-                ),
+                Icon(icon, color: Colors.redAccent),
                 const SizedBox(width: 8),
                 Text(
                   title,
@@ -517,23 +534,14 @@ class _UserProfilePageState extends State<UserProfilePage> {
       contentPadding: EdgeInsets.zero,
       leading: CircleAvatar(
         backgroundColor: color.withValues(alpha: 0.10),
-        child: Icon(
-          icon,
-          color: color,
-        ),
+        child: Icon(icon, color: color),
       ),
       title: Text(
         title,
-        style: const TextStyle(
-          fontWeight: FontWeight.w600,
-        ),
+        style: const TextStyle(fontWeight: FontWeight.w600),
       ),
-      subtitle: subtitle == null
-          ? null
-          : Text(subtitle),
-      trailing: const Icon(
-        Icons.chevron_right,
-      ),
+      subtitle: subtitle == null ? null : Text(subtitle),
+      trailing: const Icon(Icons.chevron_right),
       onTap: onTap,
     );
   }
@@ -543,28 +551,20 @@ class _UserProfilePageState extends State<UserProfilePage> {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text(
-            'Logout',
-          ),
-          content: const Text(
-            'Are you sure you want to logout?',
-          ),
+          title: const Text('Logout'),
+          content: const Text('Are you sure you want to logout?'),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop(false);
               },
-              child: const Text(
-                'Cancel',
-              ),
+              child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop(true);
               },
-              child: const Text(
-                'Logout',
-              ),
+              child: const Text('Logout'),
             ),
           ],
         );
@@ -582,15 +582,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
     return Scaffold(
       backgroundColor: const Color(0xfff6f6f6),
       appBar: AppBar(
-        title: const Text(
-          'Profile',
-        ),
+        title: const Text('Profile'),
         centerTitle: true,
       ),
       body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(),
-            )
+          ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -600,8 +596,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     padding: const EdgeInsets.all(22),
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius:
-                          BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.05),
@@ -614,8 +609,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       children: [
                         CircleAvatar(
                           radius: 58,
-                          backgroundColor:
-                              Colors.grey.shade200,
+                          backgroundColor: Colors.grey.shade200,
                           backgroundImage: image,
                           child: image == null
                               ? const Icon(
@@ -627,9 +621,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                         ),
                         const SizedBox(height: 14),
                         Text(
-                          _name.isEmpty
-                              ? 'BuyNova User'
-                              : _name,
+                          _name.isEmpty ? 'BuyNova User' : _name,
                           textAlign: TextAlign.center,
                           style: const TextStyle(
                             fontSize: 22,
@@ -639,27 +631,21 @@ class _UserProfilePageState extends State<UserProfilePage> {
                         const SizedBox(height: 6),
                         const Text(
                           'BuyNova Member',
-                          style: TextStyle(
-                            color: Colors.grey,
-                          ),
+                          style: TextStyle(color: Colors.grey),
                         ),
                         const SizedBox(height: 15),
                         if (_isSellerApproved)
                           Container(
-                            padding:
-                                const EdgeInsets.symmetric(
+                            padding: const EdgeInsets.symmetric(
                               horizontal: 12,
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color:
-                                  Colors.green.withValues(alpha: 0.10),
-                              borderRadius:
-                                  BorderRadius.circular(20),
+                              color: Colors.green.withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(20),
                             ),
                             child: const Row(
-                              mainAxisSize:
-                                  MainAxisSize.min,
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
                                   Icons.verified,
@@ -671,8 +657,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                                   'Seller',
                                   style: TextStyle(
                                     color: Colors.green,
-                                    fontWeight:
-                                        FontWeight.bold,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
                               ],
@@ -680,23 +665,18 @@ class _UserProfilePageState extends State<UserProfilePage> {
                           ),
                         if (_isEntrepreneurApproved)
                           Padding(
-                            padding:
-                                const EdgeInsets.only(top: 8),
+                            padding: const EdgeInsets.only(top: 8),
                             child: Container(
-                              padding:
-                                  const EdgeInsets.symmetric(
+                              padding: const EdgeInsets.symmetric(
                                 horizontal: 12,
                                 vertical: 6,
                               ),
                               decoration: BoxDecoration(
-                                color:
-                                    Colors.blue.withValues(alpha: 0.10),
-                                borderRadius:
-                                    BorderRadius.circular(20),
+                                color: Colors.blue.withValues(alpha: 0.10),
+                                borderRadius: BorderRadius.circular(20),
                               ),
                               child: const Row(
-                                mainAxisSize:
-                                    MainAxisSize.min,
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Icon(
                                     Icons.business_center,
@@ -708,20 +688,33 @@ class _UserProfilePageState extends State<UserProfilePage> {
                                     'Entrepreneur',
                                     style: TextStyle(
                                       color: Colors.blue,
-                                      fontWeight:
-                                          FontWeight.bold,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                 ],
                               ),
                             ),
                           ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: _openMessage,
+                            icon: const Icon(Icons.chat_bubble_outline),
+                            label: const Text('Message'),
+                          ),
+                        ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 14),
                   _statsRow(),
                   const SizedBox(height: 14),
+
+                  // PRODUCTS (seller products / reseller store)
+                  if (_targetUserId != null)
+                    PublicStoreProducts(userId: _targetUserId!),
+
                   if (_targetUserId != null)
                     _sectionCard(
                       title: 'Videos',
@@ -745,22 +738,16 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius:
-                          BorderRadius.circular(18),
+                      borderRadius: BorderRadius.circular(18),
                     ),
                     child: const Row(
                       children: [
-                        Icon(
-                          Icons.info_outline,
-                          color: Colors.redAccent,
-                        ),
+                        Icon(Icons.info_outline, color: Colors.redAccent),
                         SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             'This is a BuyNova user profile.',
-                            style: TextStyle(
-                              color: Colors.black87,
-                            ),
+                            style: TextStyle(color: Colors.black87),
                           ),
                         ),
                       ],
@@ -777,8 +764,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
     // Seller menu changes only according to the current seller status.
     // All other profile sections remain unchanged.
-    final sellerStatus =
-        _sellerStatus.trim().toLowerCase();
+    final sellerStatus = _sellerStatus.trim().toLowerCase();
 
     final String sellerTitle;
     final String sellerSubtitle;
@@ -792,16 +778,14 @@ class _UserProfilePageState extends State<UserProfilePage> {
       sellerIconColor = Colors.green;
     } else if (sellerStatus == 'pending') {
       sellerTitle = 'Seller Request Pending';
-      sellerSubtitle =
-          'Your seller request is waiting for approval';
+      sellerSubtitle = 'Your seller request is waiting for approval';
       sellerIcon = Icons.hourglass_top;
       sellerIconColor = Colors.orange;
     } else {
       sellerTitle = 'Become a Seller';
-      sellerSubtitle =
-          sellerStatus == 'rejected'
-              ? 'Your previous request was rejected. Apply again'
-              : 'Apply to become a BuyNova seller';
+      sellerSubtitle = sellerStatus == 'rejected'
+          ? 'Your previous request was rejected. Apply again'
+          : 'Apply to become a BuyNova seller';
       sellerIcon = Icons.storefront;
       sellerIconColor = Colors.redAccent;
     }
@@ -809,20 +793,15 @@ class _UserProfilePageState extends State<UserProfilePage> {
     return Scaffold(
       backgroundColor: const Color(0xfff6f6f6),
       appBar: AppBar(
-        title: const Text(
-          'My Profile',
-        ),
+        title: const Text('My Profile'),
         centerTitle: true,
       ),
       body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(),
-            )
+          ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _loadUserData,
               child: SingleChildScrollView(
-                physics:
-                    const AlwaysScrollableScrollPhysics(),
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
@@ -831,8 +810,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius:
-                            BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.05),
@@ -846,30 +824,23 @@ class _UserProfilePageState extends State<UserProfilePage> {
                           GestureDetector(
                             onTap: _openEditProfile,
                             child: Stack(
-                              alignment:
-                                  Alignment.bottomRight,
+                              alignment: Alignment.bottomRight,
                               children: [
                                 CircleAvatar(
                                   radius: 58,
-                                  backgroundColor:
-                                      Colors.grey.shade200,
-                                  backgroundImage:
-                                      _profileImage(),
-                                  child:
-                                      _profileImage() == null
-                                          ? const Icon(
-                                              Icons.person,
-                                              size: 55,
-                                              color:
-                                                  Colors.grey,
-                                            )
-                                          : null,
+                                  backgroundColor: Colors.grey.shade200,
+                                  backgroundImage: _profileImage(),
+                                  child: _profileImage() == null
+                                      ? const Icon(
+                                          Icons.person,
+                                          size: 55,
+                                          color: Colors.grey,
+                                        )
+                                      : null,
                                 ),
                                 Container(
-                                  padding:
-                                      const EdgeInsets.all(8),
-                                  decoration:
-                                      const BoxDecoration(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: const BoxDecoration(
                                     color: Colors.redAccent,
                                     shape: BoxShape.circle,
                                   ),
@@ -884,9 +855,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                           ),
                           const SizedBox(height: 14),
                           Text(
-                            _name.isEmpty
-                                ? 'BuyNova User'
-                                : _name,
+                            _name.isEmpty ? 'BuyNova User' : _name,
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                               fontSize: 22,
@@ -895,35 +864,24 @@ class _UserProfilePageState extends State<UserProfilePage> {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            _email.isEmpty
-                                ? (user?.email ?? '')
-                                : _email,
+                            _email.isEmpty ? (user?.email ?? '') : _email,
                             textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Colors.grey,
-                            ),
+                            style: const TextStyle(color: Colors.grey),
                           ),
                           if (_phone.isNotEmpty) ...[
                             const SizedBox(height: 5),
                             Text(
                               _phone,
-                              style: const TextStyle(
-                                color: Colors.grey,
-                              ),
+                              style: const TextStyle(color: Colors.grey),
                             ),
                           ],
                           const SizedBox(height: 15),
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton.icon(
-                              onPressed:
-                                  _openEditProfile,
-                              icon: const Icon(
-                                Icons.edit,
-                              ),
-                              label: const Text(
-                                'Edit Profile',
-                              ),
+                              onPressed: _openEditProfile,
+                              icon: const Icon(Icons.edit),
+                              label: const Text('Edit Profile'),
                             ),
                           ),
                         ],
@@ -955,22 +913,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     if (_isAdmin)
                       _sectionCard(
                         title: 'Admin',
-                        icon:
-                            Icons.admin_panel_settings,
+                        icon: Icons.admin_panel_settings,
                         children: [
                           _menuItem(
                             icon: Icons.dashboard,
                             title: 'Admin Panel',
-                            subtitle:
-                                'Manage BuyNova',
+                            subtitle: 'Manage BuyNova',
                             onTap: _openAdmin,
-                          ),
-                          _menuItem(
-                            icon: Icons.view_carousel,
-                            title: 'Home Slider Products',
-                            subtitle:
-                                'Choose the products shown at the top of Home',
-                            onTap: _openSliderAdmin,
                           ),
                         ],
                       ),
@@ -981,8 +930,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                         _menuItem(
                           icon: Icons.shopping_cart,
                           title: 'Buyer',
-                          subtitle:
-                              'Browse and shop products',
+                          subtitle: 'Browse and shop products',
                           onTap: _openBuyer,
                         ),
                       ],
@@ -992,14 +940,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       icon: Icons.business_center,
                       children: [
                         _menuItem(
-                          icon:
-                              Icons.business_center,
-                          title:
-                              'Entrepreneur / Reseller',
-                          subtitle:
-                              _isEntrepreneurApproved
-                                  ? 'Approved'
-                                  : 'Manage reseller account',
+                          icon: Icons.business_center,
+                          title: 'Entrepreneur / Reseller',
+                          subtitle: _isEntrepreneurApproved
+                              ? 'Approved'
+                              : 'Manage reseller account',
                           onTap: _openReseller,
                         ),
                       ],
@@ -1024,8 +969,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                         _menuItem(
                           icon: Icons.play_circle_fill,
                           title: 'Watch & Earn',
-                          subtitle:
-                              'Watch videos and earn',
+                          subtitle: 'Watch videos and earn',
                           onTap: _openEarn,
                         ),
                       ],
@@ -1037,8 +981,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                         _menuItem(
                           icon: Icons.settings,
                           title: 'Settings',
-                          subtitle:
-                              'Manage your account settings',
+                          subtitle: 'Manage your account settings',
                           onTap: _openSettings,
                         ),
                       ],
@@ -1047,17 +990,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
-                        onPressed:
-                            _showLogoutDialog,
-                        icon: const Icon(
-                          Icons.logout,
-                          color: Colors.red,
-                        ),
+                        onPressed: _showLogoutDialog,
+                        icon: const Icon(Icons.logout, color: Colors.red),
                         label: const Text(
                           'Logout',
-                          style: TextStyle(
-                            color: Colors.red,
-                          ),
+                          style: TextStyle(color: Colors.red),
                         ),
                       ),
                     ),
@@ -1073,14 +1010,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
   Widget build(BuildContext context) {
     if (currentUser == null && !_isOwnProfile) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Profile'),
-        ),
-        body: const Center(
-          child: Text(
-            'Profile is unavailable.',
-          ),
-        ),
+        appBar: AppBar(title: const Text('Profile')),
+        body: const Center(child: Text('Profile is unavailable.')),
       );
     }
 
@@ -1090,13 +1021,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
     if (currentUser == null) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('My Profile'),
-        ),
+        appBar: AppBar(title: const Text('My Profile')),
         body: const Center(
-          child: Text(
-            'Please log in to view your profile.',
-          ),
+          child: Text('Please log in to view your profile.'),
         ),
       );
     }
