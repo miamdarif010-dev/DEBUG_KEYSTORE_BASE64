@@ -10,6 +10,7 @@ import 'buyer_chat_page.dart';
 import 'price_discount.dart';
 import 'product_variants.dart';
 import 'product_share.dart';
+import 'user_profile_page.dart';
 
 class ProductDetailsPage extends StatefulWidget {
   final String productId;
@@ -1995,6 +1996,36 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
     );
   }
 
+  // Profile that opens when the seller / reseller card is tapped.
+  // For a reseller product it is the RESELLER (never the supplier).
+  String get _profileUserId =>
+      isResellerProduct ? entrepreneurUid : sellerId;
+
+  void _openSellerProfile() {
+    final String uid = _profileUserId;
+
+    if (uid.isEmpty) {
+      _showInfoDialog(
+        'Profile Not Available',
+        'This profile is not available.',
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => UserProfilePage(
+          userId: uid,
+          isResellerStore: isResellerProduct,
+          initialName: isResellerProduct
+              ? entrepreneurName
+              : sellerNameFromProduct,
+        ),
+      ),
+    );
+  }
+
   Widget _buildSellerCard() {
     final show = sellerCode.isNotEmpty ||
         sellerId.isNotEmpty ||
@@ -2003,32 +2034,82 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
 
     if (!show) return const SizedBox.shrink();
 
+    final String displayName = isResellerProduct
+        ? entrepreneurName
+        : sellerNameFromProduct;
+
     return Card(
       margin: const EdgeInsets.only(top: 22),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              isResellerProduct ? 'Reseller Information' : 'Seller Information',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: _openSellerProfile,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: kAccent.withValues(alpha: 0.12),
+                child: Icon(
+                  isResellerProduct
+                      ? Icons.business_center
+                      : Icons.storefront,
+                  color: kAccent,
+                ),
               ),
-            ),
-            const SizedBox(height: 10),
-            // For a reseller product only the reseller is shown.
-            // The supplier (and the supplier price / profit) stay hidden.
-            if (isResellerProduct && entrepreneurName.isNotEmpty)
-              Text('Reseller Name: $entrepreneurName'),
-            if (!isResellerProduct && sellerCode.isNotEmpty)
-              Text('Seller ID: $sellerCode'),
-            if (!isResellerProduct && sellerId.isNotEmpty)
-              Text('Seller UID: $sellerId'),
-            if (!isResellerProduct && sellerEmail.isNotEmpty)
-              Text('Seller Email: $sellerEmail'),
-          ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isResellerProduct
+                          ? 'Reseller Information'
+                          : 'Seller Information',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      displayName.isNotEmpty
+                          ? displayName
+                          : (isResellerProduct ? 'Reseller' : 'Seller'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    // The supplier (seller) code stays hidden for reseller
+                    // products. Email and UID are never shown.
+                    if (!isResellerProduct && sellerCode.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        'Seller ID: $sellerCode',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 4),
+                    const Text(
+                      'View profile',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: kAccent,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
         ),
       ),
     );
