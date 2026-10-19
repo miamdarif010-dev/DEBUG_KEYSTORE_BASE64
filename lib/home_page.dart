@@ -1487,7 +1487,8 @@ class _HomePageState extends State<HomePage>
                     return const SizedBox.shrink();
                   }
 
-                  final sliderDocs = [...(sliderSnapshot.data?.docs ?? [])];
+                  final List<QueryDocumentSnapshot<Map<String, dynamic>>> sliderDocs =
+                      List.of(sliderSnapshot.data?.docs ?? []);
 
                   // Keep the order the Admin added them in.
                   sliderDocs.sort((a, b) {
