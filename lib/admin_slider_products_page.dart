@@ -246,7 +246,8 @@ class _AdminSliderProductsPageState extends State<AdminSliderProductsPage> {
                 return const Center(child: CircularProgressIndicator());
               }
 
-              final docs = [...(sliderSnapshot.data?.docs ?? [])];
+              final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs =
+                  List.of(sliderSnapshot.data?.docs ?? []);
 
               docs.sort((a, b) {
                 final oa = a.data()['order'];
