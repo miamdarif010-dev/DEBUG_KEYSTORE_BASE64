@@ -7,7 +7,6 @@ import 'add_product_page.dart';
 import 'my_products_page.dart';
 import 'seller_orders_page.dart';
 import 'seller_return_refund_page.dart';
-import 'my_videos_page.dart';
 import 'seller_information_page.dart';
 import 'seller_stock_page.dart';
 import 'seller_views_page.dart';
@@ -401,19 +400,6 @@ class SellerPage extends StatelessWidget {
       MaterialPageRoute(
         builder: (context) =>
             const SellerReturnRefundPage(),
-      ),
-    );
-  }
-
-  // =========================================================
-  // OPEN VIDEOS
-  // =========================================================
-
-  void _openVideos(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const MyVideosPage(),
       ),
     );
   }
@@ -921,19 +907,6 @@ class SellerPage extends StatelessWidget {
                       enabled: isApproved,
                       onTap: () {
                         _openReturnRefundRequests(context);
-                      },
-                    ),
-
-                    _menuCard(
-                      context: context,
-                      icon:
-                          Icons.video_library_outlined,
-                      title: 'Videos',
-                      subtitle:
-                          'Watch, upload and manage your BuyNova videos.',
-                      enabled: isApproved,
-                      onTap: () {
-                        _openVideos(context);
                       },
                     ),
 
