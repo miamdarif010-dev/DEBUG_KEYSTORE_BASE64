@@ -7,7 +7,6 @@ import 'available_products_page.dart';
 import 'my_store_page.dart';
 import 'reseller_orders_page.dart';
 import 'my_profit_page.dart';
-import 'my_videos_page.dart';
 import 'wallet_page.dart';
 
 class EntrepreneurPage extends StatefulWidget {
@@ -136,20 +135,6 @@ class _EntrepreneurPageState
       MaterialPageRoute(
         builder: (_) =>
             const ResellerOrdersPage(),
-      ),
-    );
-  }
-
-  // =========================================================
-  // VIDEOS
-  // =========================================================
-
-  Future<void> _openVideos() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) =>
-            const MyVideosPage(),
       ),
     );
   }
@@ -634,17 +619,6 @@ class _EntrepreneurPageState
               'Browse products from BuyNova sellers.',
           onTap:
               _openAvailableProducts,
-        ),
-
-        _businessBox(
-          icon:
-              Icons.video_library_outlined,
-          title:
-              'Videos',
-          subtitle:
-              'Watch, upload and manage your BuyNova videos.',
-          onTap:
-              _openVideos,
         ),
 
         _businessBox(
