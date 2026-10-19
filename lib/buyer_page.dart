@@ -6,23 +6,9 @@ import 'my_orders_page.dart';
 import 'buyer_support_page.dart';
 import 'notifications_page.dart';
 import 'buyer_messages_page.dart';
-import 'my_videos_page.dart';
 
 class BuyerPage extends StatelessWidget {
   const BuyerPage({super.key});
-
-  // =========================================================
-  // OPEN VIDEOS
-  // =========================================================
-
-  void _openVideos(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const MyVideosPage(),
-      ),
-    );
-  }
 
   // =========================================================
   // OPEN PAGE
@@ -213,16 +199,6 @@ class BuyerPage extends StatelessWidget {
                   context,
                   const BuyerMessagesPage(),
                 );
-              },
-            ),
-
-            _largeBox(
-              icon: Icons.video_library_outlined,
-              title: 'Videos',
-              subtitle:
-                  'Watch, upload and manage your BuyNova videos.',
-              onTap: () {
-                _openVideos(context);
               },
             ),
 
