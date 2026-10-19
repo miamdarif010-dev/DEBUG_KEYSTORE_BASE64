@@ -211,3 +211,120 @@ exports.downloadApp = onRequest(
     }
   }
 );
+
+// ============================================================
+// getPublicStore
+// Public profile data for a seller / reseller (opened from the
+// product page). Anyone logged in can call it, it returns ONLY
+// safe fields: no email, phone, wallet, supplier price or profit.
+// A reseller's store lists only the reseller's own listings; the
+// supplier behind them is never shown.
+// ============================================================
+const PUBLIC_STORE_LIMIT = 60;
+
+const toBdt = (value, currency) => {
+  const cur = String(currency || '').trim().toUpperCase();
+  const factor = cur === 'BDT' || cur === '৳' ? 1 : 0.09;
+  return Math.round((Number(value) || 0) * factor * 100) / 100;
+};
+
+exports.getPublicStore = onCall({ region: REGION }, async (request) => {
+  const userId = safeId(request.data?.userId);
+  if (!userId) throw new HttpsError('invalid-argument', 'Invalid user.');
+
+  const userSnap = await db.doc(`users/${userId}`).get();
+  if (!userSnap.exists) throw new HttpsError('not-found', 'User not found.');
+  const user = userSnap.data() || {};
+
+  const isSeller = String(user.sellerStatus || 'none') === 'approved';
+  const isEntrepreneur = String(user.entrepreneurStatus || 'none') === 'approved';
+
+  // ---------- seller products ----------
+  const sellerProducts = [];
+
+  if (isSeller) {
+    const snap = await db
+      .collection('products')
+      .where('sellerId', '==', userId)
+      .limit(PUBLIC_STORE_LIMIT)
+      .get();
+
+    for (const doc of snap.docs) {
+      const p = doc.data();
+      if (p.isActive === false || p.active === false) continue;
+      if (p.sellerApproved === false) continue;
+
+      const price = toBdt(pick(p.price, p.sellingPrice), p.currency);
+      const original = toBdt(p.originalPrice, p.currency);
+
+      sellerProducts.push({
+        id: doc.id,
+        name: String(pick(p.name, p.productName, p.title) ?? ''),
+        imageUrl: String(collectImages(p.imageUrl, p.imageUrls, p.images)[0] ?? ''),
+        price,
+        originalPrice: original > price ? original : null,
+        category: String(p.category ?? ''),
+      });
+    }
+  }
+
+  // ---------- reseller store ----------
+  const resellerProducts = [];
+
+  if (isEntrepreneur) {
+    const snap = await db
+      .collection('reseller_products')
+      .where('entrepreneurUid', '==', userId)
+      .limit(PUBLIC_STORE_LIMIT)
+      .get();
+
+    const listings = snap.docs.filter((d) => {
+      const l = d.data();
+      return l.active !== false && l.isActive !== false;
+    });
+
+    // Hide listings whose original product was removed or switched off.
+    const sourceRefs = listings.map((d) => {
+      const l = d.data();
+      const id = safeId(l.supplierProductId ?? l.sourceProductId);
+      return db.collection('products').doc(id || '_missing_');
+    });
+
+    const sourceSnaps = sourceRefs.length ? await db.getAll(...sourceRefs) : [];
+
+    listings.forEach((doc, i) => {
+      const l = doc.data();
+      const source = sourceSnaps[i];
+
+      if (!source || !source.exists) return;
+
+      const s = source.data() || {};
+      if (s.isActive === false || s.active === false) return;
+
+      const price = Number(pick(l.sellingPrice, l.price)) || 0;
+      if (!(price > 0)) return;
+
+      resellerProducts.push({
+        id: doc.id,
+        name: String(pick(l.productName, l.name, s.name) ?? ''),
+        imageUrl: String(pick(l.imageUrl, collectImages(s.imageUrl, s.imageUrls, s.images)[0]) ?? ''),
+        price,
+        originalPrice: resellerOriginalPrice(l),
+        category: String(pick(l.category, s.category) ?? ''),
+      });
+    });
+  }
+
+  return {
+    profile: {
+      userId,
+      name: String(pick(user.name, user.displayName) ?? ''),
+      shopName: String(pick(user.shopName, user.storeName) ?? ''),
+      profileImageUrl: String(user.profileImageUrl ?? ''),
+      isSeller,
+      isEntrepreneur,
+    },
+    sellerProducts,
+    resellerProducts,
+  };
+});
