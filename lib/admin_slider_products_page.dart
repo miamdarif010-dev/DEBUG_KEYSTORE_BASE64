@@ -258,7 +258,7 @@ class _AdminSliderProductsPageState extends State<AdminSliderProductsPage> {
                 return na.compareTo(nb);
               });
 
-              _sliderIds = docs.map((d) => d.id).toList();
+              _sliderIds = docs.map<String>((d) => d.id).toList();
 
               return ListView(
                 padding: const EdgeInsets.fromLTRB(14, 14, 14, 100),
