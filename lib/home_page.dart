@@ -1475,10 +1475,10 @@ class _HomePageState extends State<HomePage>
                 ),
               ),
 
-              // 10 PRODUCT AUTO SLIDER
-              StreamBuilder<QuerySnapshot>(
+              // PRODUCT AUTO SLIDER (products chosen by the Admin only)
+              StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: FirebaseFirestore.instance
-                    .collection('products')
+                    .collection('homeSlider')
                     .snapshots(),
                 builder: (context, sliderSnapshot) {
                   if (sliderSnapshot.hasError) {
@@ -1487,16 +1487,59 @@ class _HomePageState extends State<HomePage>
                     return const SizedBox.shrink();
                   }
 
-                  final sliderProducts = (sliderSnapshot.data?.docs ?? [])
-                      .where(
-                        (d) => !_isOwnProduct(
-                          d.data() as Map<String, dynamic>,
-                        ),
-                      )
-                      .take(10)
-                      .toList();
+                  final sliderDocs = [...(sliderSnapshot.data?.docs ?? [])];
 
-                  return _buildProductAutoSlider(sliderProducts);
+                  // Keep the order the Admin added them in.
+                  sliderDocs.sort((a, b) {
+                    final oa = a.data()['order'];
+                    final ob = b.data()['order'];
+
+                    final na = oa is num ? oa.toInt() : 0;
+                    final nb = ob is num ? ob.toInt() : 0;
+
+                    return na.compareTo(nb);
+                  });
+
+                  final sliderIds = sliderDocs.map((d) => d.id).toList();
+
+                  if (sliderIds.isEmpty) {
+                    _productSliderCount = 0;
+
+                    return const SizedBox.shrink();
+                  }
+
+                  return StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('products')
+                        .snapshots(),
+                    builder: (context, productSnapshot) {
+                      final Map<String, QueryDocumentSnapshot> byId = {
+                        for (final d in productSnapshot.data?.docs ??
+                            <QueryDocumentSnapshot>[])
+                          d.id: d,
+                      };
+
+                      final sliderProducts = <QueryDocumentSnapshot>[];
+
+                      for (final id in sliderIds) {
+                        final doc = byId[id];
+
+                        // Skip products that were deleted.
+                        if (doc == null) continue;
+
+                        // Nobody sees their own product.
+                        if (_isOwnProduct(
+                          doc.data() as Map<String, dynamic>,
+                        )) {
+                          continue;
+                        }
+
+                        sliderProducts.add(doc);
+                      }
+
+                      return _buildProductAutoSlider(sliderProducts);
+                    },
+                  );
                 },
               ),
 
