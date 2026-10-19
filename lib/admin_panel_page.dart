@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import 'admin_coupon_page.dart';
 import 'admin_wallet_page.dart';
+import 'admin_slider_products_page.dart';
 
 const String kAdminEmail = 'miamdarif010@gmail.com';
 
@@ -392,6 +393,25 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                                 .snapshots(),
                             notificationLabel: 'Wallet Transactions',
                             page: const AdminWalletPage(),
+                          );
+                        },
+                      ),
+
+                      // ==================================================
+                      // HOME SLIDER PRODUCTS (admin chooses them)
+                      // ==================================================
+
+                      _adminMenuBox(
+                        icon: Icons.view_carousel_outlined,
+                        title: 'Home Slider Products',
+                        subtitle:
+                            'Choose the products shown at the top of Home',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  const AdminSliderProductsPage(),
+                            ),
                           );
                         },
                       ),
@@ -1747,7 +1767,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
     );
   }
 
-  // ============================================================
+// ============================================================
   // USER PRODUCTS
   // ============================================================
 
@@ -3429,4 +3449,3 @@ class _AdminSectionPage extends StatelessWidget {
     );
   }
 }
-                    
