@@ -13,6 +13,7 @@ import 'add_product_page.dart';
 import 'settings_page.dart';
 import 'cart_page.dart';
 import 'categories_page.dart';
+import 'category_service.dart';
 import 'news_feed_page.dart';
 import 'product_details_page.dart';
 import 'global_notifications_page.dart';
@@ -49,25 +50,44 @@ class _HomePageState extends State<HomePage>
   int _productSliderIndex = 0;
   int _productSliderCount = 0;
 
-  final List<String> categories = [
-    'All',
-    'Phones',
-    'Laptops',
-    'Watches',
-    'Earbuds',
-    'Cameras',
-    'Fashion',
-    'Shoes',
-    'Bags',
-    'Beauty',
-    'Sports',
-    'Toys',
-    'Grocery',
-  ];
+  // CATEGORIES (managed by the Admin from Admin Panel > Categories).
+  // "All" is always first. The rest come from Firestore.
+  List<String> categories = [CategoryService.allName];
+
+  Map<String, CategoryItem> _categoryItems = {};
+
+  StreamSubscription<List<CategoryItem>>? _categorySubscription;
 
   @override
   void initState() {
     super.initState();
+
+    _categorySubscription = CategoryService.stream().listen(
+      (items) {
+        if (!mounted) return;
+
+        final selectedName = _selectedCategory < categories.length
+            ? categories[_selectedCategory]
+            : CategoryService.allName;
+
+        setState(() {
+          _categoryItems = {for (final item in items) item.name: item};
+
+          categories = [
+            CategoryService.allName,
+            ...items.map((item) => item.name),
+          ];
+
+          final newIndex = categories.indexOf(selectedName);
+
+          // If the selected category was deleted, go back to "All".
+          _selectedCategory = newIndex == -1 ? 0 : newIndex;
+        });
+      },
+      onError: (Object error) {
+        debugPrint('Category stream error: $error');
+      },
+    );
 
     _couponAnimationController = AnimationController(
       vsync: this,
@@ -119,6 +139,8 @@ class _HomePageState extends State<HomePage>
 
   @override
   void dispose() {
+    _categorySubscription?.cancel();
+
     _productSliderTimer?.cancel();
     _productSliderController.dispose();
 
@@ -164,6 +186,13 @@ class _HomePageState extends State<HomePage>
   }
 
   IconData _categoryIcon(String category) {
+    // Icon chosen by the Admin for this category.
+    final item = _categoryItems[category];
+
+    if (item != null) {
+      return item.icon;
+    }
+
     switch (category.toLowerCase()) {
       case 'all':
         return Icons.apps_rounded;
