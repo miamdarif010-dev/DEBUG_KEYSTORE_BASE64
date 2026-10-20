@@ -33,11 +33,20 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
     try {
       final controller =
           VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
-      await controller.initialize();
+      try {
+        await controller.initialize();
+      } catch (_) {
+        await controller.dispose();
+        rethrow;
+      }
+
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+
       controller.setLooping(true);
       controller.play();
-
-      if (!mounted) return;
 
       setState(() {
         _controller = controller;
@@ -92,7 +101,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
                         Icon(Icons.broken_image, color: Colors.white54, size: 60),
                         SizedBox(height: 12),
                         Text(
-                          'à¦­à¦¿à¦¡à¦¿à¦“ à¦²à§‹à¦¡ à¦•à¦°à¦¾ à¦¯à¦¾à¦¯à¦¼à¦¨à¦¿',
+                          'ভিডিও লোড করা যায়নি',
                           style: TextStyle(color: Colors.white54),
                         ),
                       ],
