@@ -50,11 +50,16 @@ class _HomePageState extends State<HomePage>
   int _productSliderIndex = 0;
   int _productSliderCount = 0;
 
-  // CATEGORIES (managed by the Admin from Admin Panel > Categories).
-  // "All" is always first. The rest come from Firestore.
-  List<String> categories = [CategoryService.allName];
+  // CATEGORIES (managed by the Admin, loaded from Firestore).
+  // "All" is always first. The default list is shown until the
+  // Firestore list arrives, so the bar is never empty.
+  List<String> categories = [
+    CategoryService.allName,
+    ...CategoryService.defaults.map((d) => d['name']!),
+  ];
 
-  Map<String, CategoryItem> _categoryItems = {};
+  // category name (lowercase) -> item with the icon the Admin chose
+  Map<String, CategoryItem> _categoryItemMap = {};
 
   StreamSubscription<List<CategoryItem>>? _categorySubscription;
 
@@ -62,6 +67,7 @@ class _HomePageState extends State<HomePage>
   void initState() {
     super.initState();
 
+    // LOAD CATEGORIES FROM ADMIN
     _categorySubscription = CategoryService.stream().listen(
       (items) {
         if (!mounted) return;
@@ -71,7 +77,9 @@ class _HomePageState extends State<HomePage>
             : CategoryService.allName;
 
         setState(() {
-          _categoryItems = {for (final item in items) item.name: item};
+          _categoryItemMap = {
+            for (final item in items) item.name.toLowerCase(): item,
+          };
 
           categories = [
             CategoryService.allName,
@@ -80,12 +88,11 @@ class _HomePageState extends State<HomePage>
 
           final newIndex = categories.indexOf(selectedName);
 
-          // If the selected category was deleted, go back to "All".
           _selectedCategory = newIndex == -1 ? 0 : newIndex;
         });
       },
-      onError: (Object error) {
-        debugPrint('Category stream error: $error');
+      onError: (_) {
+        // Keep the current list if categories cannot load.
       },
     );
 
@@ -186,43 +193,20 @@ class _HomePageState extends State<HomePage>
   }
 
   IconData _categoryIcon(String category) {
-    // Icon chosen by the Admin for this category.
-    final item = _categoryItems[category];
+    final lower = category.toLowerCase();
 
-    if (item != null) {
-      return item.icon;
+    if (lower == 'all') {
+      return Icons.apps_rounded;
     }
 
-    switch (category.toLowerCase()) {
-      case 'all':
-        return Icons.apps_rounded;
-      case 'phones':
-        return Icons.phone_iphone;
-      case 'laptops':
-        return Icons.laptop_mac;
-      case 'watches':
-        return Icons.watch;
-      case 'earbuds':
-        return Icons.headphones;
-      case 'cameras':
-        return Icons.camera_alt;
-      case 'fashion':
-        return Icons.checkroom;
-      case 'shoes':
-        return Icons.directions_run;
-      case 'bags':
-        return Icons.shopping_bag;
-      case 'beauty':
-        return Icons.face_retouching_natural;
-      case 'sports':
-        return Icons.sports_soccer;
-      case 'toys':
-        return Icons.toys;
-      case 'grocery':
-        return Icons.local_grocery_store;
-      default:
-        return Icons.category;
+    // Icon chosen by the Admin
+    final adminItem = _categoryItemMap[lower];
+
+    if (adminItem != null) {
+      return adminItem.icon;
     }
+
+    return Icons.category;
   }
 
   String? _getCategoryImageUrl(
