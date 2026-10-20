@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -6,7 +7,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:video_player/video_player.dart';
 
+import 'category_service.dart';
 import 'price_discount.dart';
 import 'product_variants.dart';
 
@@ -95,23 +98,14 @@ class _AddProductPageState extends State<AddProductPage> {
   String? _shopName;
 
   // ============================================================
-  // CATEGORIES
+  // CATEGORIES (managed by the Admin, loaded from Firestore)
+  // The default list is shown until the Firestore list arrives.
   // ============================================================
 
-  final List<String> _categories = const [
-    'Phones',
-    'Laptops',
-    'Watches',
-    'Earbuds',
-    'Cameras',
-    'Fashion',
-    'Shoes',
-    'Bags',
-    'Beauty',
-    'Sports',
-    'Toys',
-    'Grocery',
-  ];
+  List<String> _categories =
+      CategoryService.defaults.map((d) => d['name']!).toList();
+
+  StreamSubscription<List<CategoryItem>>? _categorySub;
 
   // ============================================================
   // INIT
@@ -121,10 +115,30 @@ class _AddProductPageState extends State<AddProductPage> {
   void initState() {
     super.initState();
     _loadSellerInformation();
+
+    _categorySub = CategoryService.stream().listen(
+      (items) {
+        if (!mounted || items.isEmpty) return;
+
+        final names = items.map((i) => i.name).toList();
+
+        setState(() {
+          _categories = names;
+
+          if (!names.contains(_selectedCategory)) {
+            _selectedCategory = names.first;
+          }
+        });
+      },
+      onError: (_) {
+        // Keep the current list if categories cannot load.
+      },
+    );
   }
 
   @override
   void dispose() {
+    _categorySub?.cancel();
     _nameController.dispose();
     _descriptionController.dispose();
     for (final draft in _colorDrafts) {
@@ -257,12 +271,40 @@ class _AddProductPageState extends State<AddProductPage> {
 
       if (video == null) return;
 
+      if (await _isVideoTooLong(video)) {
+        _showSnackBar(
+          'Video must be $_maxVideoSeconds seconds or less.',
+          isError: true,
+        );
+        return;
+      }
+
       setState(() {
         _pickedVideo = video;
         _uploadedVideoUrl = null;
       });
     } catch (e) {
       _showSnackBar('Video selection failed: $e', isError: true);
+    }
+  }
+
+  // ============================================================
+  // CHECK VIDEO LENGTH
+  // (pickVideo's maxDuration only works for the camera, not the gallery)
+  // ============================================================
+
+  Future<bool> _isVideoTooLong(XFile video) async {
+    final VideoPlayerController controller =
+        VideoPlayerController.file(File(video.path));
+
+    try {
+      await controller.initialize();
+      return controller.value.duration.inSeconds > _maxVideoSeconds;
+    } catch (_) {
+      // If the length cannot be read, let the upload decide.
+      return false;
+    } finally {
+      await controller.dispose();
     }
   }
 
@@ -596,6 +638,13 @@ class _AddProductPageState extends State<AddProductPage> {
               : '$name is now available on BuyNova.',
           'productId': productRef.id,
           'productName': name,
+
+          // Field names the Notifications page reads:
+          'active': true,
+          'productImageUrl': _uploadedImageUrls.first,
+          'productPrice': price,
+
+          // Kept for compatibility:
           'productImage': _uploadedImageUrls.first,
           'imageUrl': _uploadedImageUrls.first,
           'price': price,
@@ -623,7 +672,7 @@ class _AddProductPageState extends State<AddProductPage> {
         _uploadedImageUrls.clear();
         _pickedVideo = null;
         _uploadedVideoUrl = null;
-        _selectedCategory = 'Phones';
+        _selectedCategory = _categories.first;
         _priceResult = null;
         _priceFormVersion++;
       });
@@ -1309,6 +1358,8 @@ class _AddProductPageState extends State<AddProductPage> {
 
   Widget _buildCategoryDropdown() {
     return DropdownButtonFormField<String>(
+      // The key makes the dropdown rebuild when the admin's list changes.
+      key: ValueKey<String>('$_selectedCategory-${_categories.join(",")}'),
       initialValue: _selectedCategory,
       decoration: InputDecoration(
         labelText: 'Category',
