@@ -36,9 +36,7 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
   void _openLogin() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const LoginPage(),
-      ),
+      MaterialPageRoute(builder: (_) => const LoginPage()),
     );
   }
 
@@ -52,18 +50,14 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
 
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const AddSellerVideoPage(),
-      ),
+      MaterialPageRoute(builder: (_) => const AddSellerVideoPage()),
     );
   }
 
   void _openWatchEarn() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const WatchEarnPage(),
-      ),
+      MaterialPageRoute(builder: (_) => const WatchEarnPage()),
     );
   }
 
@@ -76,9 +70,7 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
       case 1:
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (_) => const CategoriesPage(),
-          ),
+          MaterialPageRoute(builder: (_) => const CategoriesPage()),
         );
         break;
 
@@ -89,9 +81,7 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
       case 3:
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (_) => const CartPage(),
-          ),
+          MaterialPageRoute(builder: (_) => const CartPage()),
         );
         break;
 
@@ -104,14 +94,22 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => UserProfilePage(
-                userId: user.uid,
-              ),
+              builder: (_) => UserProfilePage(userId: user.uid),
             ),
           );
         }
         break;
     }
+  }
+
+  // Videos without a status field (old uploads) count as published.
+  bool _isPublished(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+    final status =
+        (doc.data()['status'] ?? 'published').toString().toLowerCase();
+
+    return status == 'published' ||
+        status == 'active' ||
+        status == 'approved';
   }
 
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _sortVideos(
@@ -143,9 +141,7 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
 
   // Keeps the PageView pointed at the same video the user was watching,
   // even when the underlying (sorted) list changes order because a new
-  // video was inserted above it. Without this, the PageController stays
-  // on the same *index*, so a newly inserted video at index 0 silently
-  // replaces whatever the user was currently watching.
+  // video was inserted above it.
   void _syncPageWithCurrentVideo(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
   ) {
@@ -168,7 +164,6 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
 
     if (newIndex == -1) {
       // The video the user was watching is gone (deleted/unpublished).
-      // Fall back to clamping the current index into range.
       final fallbackIndex = _currentPage.clamp(0, docs.length - 1);
       _currentVideoId = docs[fallbackIndex].id;
       if (fallbackIndex != _currentPage) {
@@ -206,27 +201,23 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
       body: SafeArea(
         bottom: false,
         child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('sellerVideos')
-              .where('status', isEqualTo: 'published')
-              .snapshots(),
+          // No status filter in the query: old videos may not have a
+          // status field. Filtering happens in _isPublished instead.
+          stream:
+              FirebaseFirestore.instance.collection('sellerVideos').snapshots(),
           builder: (context, snapshot) {
             if (snapshot.hasError) {
-              return _buildErrorState(
-                snapshot.error.toString(),
-              );
+              return _buildErrorState(snapshot.error.toString());
             }
 
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                ),
+                child: CircularProgressIndicator(color: Colors.white),
               );
             }
 
             final docs = _sortVideos(
-              snapshot.data?.docs ?? [],
+              (snapshot.data?.docs ?? []).where(_isPublished).toList(),
             );
 
             if (docs.isEmpty) {
@@ -259,13 +250,11 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
                     );
                   },
                 ),
-
                 Positioned(
                   top: 12,
                   left: 12,
                   child: _watchEarnCircleButton(),
                 ),
-
                 Positioned(
                   top: 12,
                   right: 12,
@@ -276,7 +265,6 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
                     },
                   ),
                 ),
-
                 Positioned(
                   left: 0,
                   right: 0,
@@ -315,19 +303,12 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
               SizedBox(height: 8),
               Text(
                 'Be the first to upload a video.',
-                style: TextStyle(
-                  color: Colors.white54,
-                  fontSize: 14,
-                ),
+                style: TextStyle(color: Colors.white54, fontSize: 14),
               ),
             ],
           ),
         ),
-        Positioned(
-          top: 12,
-          left: 12,
-          child: _watchEarnCircleButton(),
-        ),
+        Positioned(top: 12, left: 12, child: _watchEarnCircleButton()),
         Positioned(
           top: 12,
           right: 12,
@@ -377,20 +358,13 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
                   textAlign: TextAlign.center,
                   maxLines: 5,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white54,
-                    fontSize: 12,
-                  ),
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
                 ),
               ],
             ),
           ),
         ),
-        Positioned(
-          top: 12,
-          left: 12,
-          child: _watchEarnCircleButton(),
-        ),
+        Positioned(top: 12, left: 12, child: _watchEarnCircleButton()),
         Positioned(
           top: 12,
           right: 12,
@@ -415,61 +389,59 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
     return SafeArea(
       top: false,
       child: Container(
-      height: 78,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.black.withValues(alpha: 0.0),
-            Colors.black.withValues(alpha: 0.72),
-            Colors.black.withValues(alpha: 0.94),
+        height: 78,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.black.withValues(alpha: 0.0),
+              Colors.black.withValues(alpha: 0.72),
+              Colors.black.withValues(alpha: 0.94),
+            ],
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: _bottomNavItem(
+                icon: Icons.home_outlined,
+                activeIcon: Icons.home,
+                label: 'Home',
+                onTap: () => _onBottomNavigationTap(0),
+              ),
+            ),
+            Expanded(
+              child: _bottomNavItem(
+                icon: Icons.grid_view_outlined,
+                activeIcon: Icons.grid_view,
+                label: 'Categories',
+                onTap: () => _onBottomNavigationTap(1),
+              ),
+            ),
+            SizedBox(
+              width: 72,
+              child: Center(child: _coloredPlusButton()),
+            ),
+            Expanded(
+              child: _bottomNavItem(
+                icon: Icons.shopping_cart_outlined,
+                activeIcon: Icons.shopping_cart,
+                label: 'Cart',
+                onTap: () => _onBottomNavigationTap(3),
+              ),
+            ),
+            Expanded(
+              child: _bottomNavItem(
+                icon: Icons.person_outline,
+                activeIcon: Icons.person,
+                label: 'Profile',
+                onTap: () => _onBottomNavigationTap(4),
+              ),
+            ),
           ],
         ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _bottomNavItem(
-              icon: Icons.home_outlined,
-              activeIcon: Icons.home,
-              label: 'Home',
-              onTap: () => _onBottomNavigationTap(0),
-            ),
-          ),
-          Expanded(
-            child: _bottomNavItem(
-              icon: Icons.grid_view_outlined,
-              activeIcon: Icons.grid_view,
-              label: 'Categories',
-              onTap: () => _onBottomNavigationTap(1),
-            ),
-          ),
-          SizedBox(
-            width: 72,
-            child: Center(
-              child: _coloredPlusButton(),
-            ),
-          ),
-          Expanded(
-            child: _bottomNavItem(
-              icon: Icons.shopping_cart_outlined,
-              activeIcon: Icons.shopping_cart,
-              label: 'Cart',
-              onTap: () => _onBottomNavigationTap(3),
-            ),
-          ),
-          Expanded(
-            child: _bottomNavItem(
-              icon: Icons.person_outline,
-              activeIcon: Icons.person,
-              label: 'Profile',
-              onTap: () => _onBottomNavigationTap(4),
-            ),
-          ),
-        ],
-      ),
       ),
     );
   }
@@ -488,11 +460,7 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            Icon(
-              icon,
-              color: Colors.white,
-              size: 24,
-            ),
+            Icon(icon, color: Colors.white, size: 24),
             const SizedBox(height: 3),
             Text(
               label,
@@ -545,11 +513,7 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
             color: Colors.black,
             borderRadius: BorderRadius.circular(9),
           ),
-          child: const Icon(
-            Icons.add,
-            color: Colors.white,
-            size: 30,
-          ),
+          child: const Icon(Icons.add, color: Colors.white, size: 30),
         ),
       ),
     );
@@ -564,19 +528,12 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.65),
           shape: BoxShape.circle,
-          border: Border.all(
-            color: Colors.white54,
-            width: 1,
-          ),
+          border: Border.all(color: Colors.white54, width: 1),
         ),
         child: const Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.card_giftcard,
-              color: Colors.white,
-              size: 21,
-            ),
+            Icon(Icons.card_giftcard, color: Colors.white, size: 21),
             SizedBox(height: 1),
             Text(
               'Earn',
@@ -605,18 +562,12 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
           color: Colors.black.withValues(alpha: 0.55),
           shape: BoxShape.circle,
         ),
-        child: Icon(
-          icon,
-          color: Colors.white,
-          size: 24,
-        ),
+        child: Icon(icon, color: Colors.white, size: 24),
       ),
     );
   }
 
-  Map<String, dynamic> _toMap(
-    Map<String, dynamic>? value,
-  ) {
+  Map<String, dynamic> _toMap(Map<String, dynamic>? value) {
     if (value == null) {
       return <String, dynamic>{};
     }
@@ -670,18 +621,14 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
   User? get currentUser => FirebaseAuth.instance.currentUser;
 
   String get _sellerId {
-    return (widget.data['sellerId'] ??
-            widget.data['userId'] ??
-            '')
-        .toString();
+    return (widget.data['sellerId'] ?? widget.data['userId'] ?? '').toString();
   }
 
   String get _sellerName {
-    final value = (widget.data['sellerName'] ??
-            widget.data['userName'] ??
-            'User')
-        .toString()
-        .trim();
+    final value =
+        (widget.data['sellerName'] ?? widget.data['userName'] ?? 'User')
+            .toString()
+            .trim();
 
     return value.isEmpty ? 'User' : value;
   }
@@ -727,10 +674,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
     return null;
   }
 
-  int _readCounter(
-    String newKey,
-    String oldKey,
-  ) {
+  int _readCounter(String newKey, String oldKey) {
     final newValue = widget.data[newKey];
 
     if (newValue is num) {
@@ -1168,9 +1112,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
     }
 
     try {
-      await Share.share(
-        'Check out this video on BuyNova:\n$_videoUrl',
-      );
+      await Share.share('Check out this video on BuyNova:\n$_videoUrl');
     } catch (_) {
       return;
     }
@@ -1210,9 +1152,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
       backgroundColor: Colors.black,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(20),
-        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (_) {
         return _CommentsSheet(
@@ -1241,8 +1181,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
 
       if (data['commentCount'] is num) {
         setState(() {
-          _commentCount =
-              (data['commentCount'] as num).toInt();
+          _commentCount = (data['commentCount'] as num).toInt();
         });
       }
     } catch (_) {}
@@ -1310,9 +1249,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-      ),
+      SnackBar(content: Text(message)),
     );
   }
 
@@ -1332,7 +1269,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
         fit: StackFit.expand,
         children: [
           _buildVideo(),
-
           Positioned(
             left: 0,
             right: 0,
@@ -1354,13 +1290,11 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
               ),
             ),
           ),
-
           Positioned(
             top: 68,
             left: 15,
             child: _buildRewardButton(),
           ),
-
           Positioned(
             right: 12,
             bottom: 150,
@@ -1368,9 +1302,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 _actionButton(
-                  icon: _isLiked
-                      ? Icons.favorite
-                      : Icons.favorite_border,
+                  icon: _isLiked ? Icons.favorite : Icons.favorite_border,
                   label: _likeCount.toString(),
                   color: _isLiked ? Colors.red : Colors.white,
                   onTap: _toggleLike,
@@ -1396,7 +1328,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
               ],
             ),
           ),
-
           Positioned(
             left: 15,
             right: 75,
@@ -1411,9 +1342,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
   Widget _buildVideo() {
     if (_isLoadingVideo) {
       return const Center(
-        child: CircularProgressIndicator(
-          color: Colors.white,
-        ),
+        child: CircularProgressIndicator(color: Colors.white),
       );
     }
 
@@ -1470,35 +1399,26 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
             ],
           ),
         ),
-
         if (_caption.isNotEmpty) ...[
           const SizedBox(height: 10),
           Text(
             _caption,
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 14),
           ),
         ],
-
         if (_productId.isNotEmpty || _productName.isNotEmpty) ...[
           const SizedBox(height: 12),
           GestureDetector(
             onTap: _openProduct,
             child: Container(
-              constraints: const BoxConstraints(
-                maxWidth: 310,
-              ),
+              constraints: const BoxConstraints(maxWidth: 310),
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Colors.white24,
-                ),
+                border: Border.all(color: Colors.white24),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -1507,13 +1427,10 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
                   const SizedBox(width: 9),
                   Flexible(
                     child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _productName.isEmpty
-                              ? 'View product'
-                              : _productName,
+                          _productName.isEmpty ? 'View product' : _productName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -1524,8 +1441,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
                         ),
                         if (_productPrice != null)
                           Padding(
-                            padding:
-                                const EdgeInsets.only(top: 3),
+                            padding: const EdgeInsets.only(top: 3),
                             child: Text(
                               '৳${_productPrice!.toStringAsFixed(0)}',
                               style: const TextStyle(
@@ -1574,19 +1490,14 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
       return const CircleAvatar(
         radius: 22,
         backgroundColor: Colors.white24,
-        child: Icon(
-          Icons.person,
-          color: Colors.white,
-        ),
+        child: Icon(Icons.person, color: Colors.white),
       );
     }
 
     return CircleAvatar(
       radius: 22,
       backgroundColor: Colors.white24,
-      backgroundImage: NetworkImage(
-        _sellerProfileImageUrl,
-      ),
+      backgroundImage: NetworkImage(_sellerProfileImageUrl),
     );
   }
 
@@ -1636,25 +1547,16 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
 
     if (_rewardClaimed) {
       return Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 13,
-          vertical: 9,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.65),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: Colors.white24,
-          ),
+          border: Border.all(color: Colors.white24),
         ),
         child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.check_circle,
-              color: Colors.greenAccent,
-              size: 18,
-            ),
+            Icon(Icons.check_circle, color: Colors.greenAccent, size: 18),
             SizedBox(width: 6),
             Text(
               'Claim Submitted',
@@ -1673,10 +1575,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
       return GestureDetector(
         onTap: _isClaimingReward ? null : _claimReward,
         child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 15,
-            vertical: 10,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(22),
@@ -1694,16 +1593,10 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
                   ),
                 )
               else
-                const Icon(
-                  Icons.card_giftcard,
-                  color: Colors.black,
-                  size: 18,
-                ),
+                const Icon(Icons.card_giftcard, color: Colors.black, size: 18),
               const SizedBox(width: 6),
               Text(
-                _isClaimingReward
-                    ? 'Submitting'
-                    : 'Claim +$_rewardPoints',
+                _isClaimingReward ? 'Submitting' : 'Claim +$_rewardPoints',
                 style: const TextStyle(
                   color: Colors.black,
                   fontSize: 12,
@@ -1717,25 +1610,16 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 13,
-        vertical: 8,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.white24,
-        ),
+        border: Border.all(color: Colors.white24),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.card_giftcard,
-            color: Colors.white,
-            size: 17,
-          ),
+          const Icon(Icons.card_giftcard, color: Colors.white, size: 17),
           const SizedBox(width: 6),
           Text(
             '$_watchSeconds/$_requiredWatchSeconds sec',
@@ -1768,8 +1652,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
               color: Colors.black.withValues(alpha: 0.38),
               shape: BoxShape.circle,
             ),
-            child: _isLoadingLike &&
-                    icon == Icons.favorite_border
+            child: _isLoadingLike && icon == Icons.favorite_border
                 ? const Padding(
                     padding: EdgeInsets.all(13),
                     child: CircularProgressIndicator(
@@ -1777,11 +1660,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
                       color: Colors.white,
                     ),
                   )
-                : Icon(
-                    icon,
-                    color: color,
-                    size: 25,
-                  ),
+                : Icon(icon, color: color, size: 25),
           ),
           const SizedBox(height: 4),
           Text(
@@ -1814,8 +1693,7 @@ class _CommentsSheet extends StatefulWidget {
 }
 
 class _CommentsSheetState extends State<_CommentsSheet> {
-  final TextEditingController _commentController =
-      TextEditingController();
+  final TextEditingController _commentController = TextEditingController();
 
   bool _sending = false;
 
@@ -1845,12 +1723,9 @@ class _CommentsSheetState extends State<_CommentsSheet> {
 
       final userData = userDoc.data() ?? {};
 
-      final name =
-          (userData['name'] ?? user.displayName ?? 'User')
-              .toString();
+      final name = (userData['name'] ?? user.displayName ?? 'User').toString();
 
-      final profileImageUrl =
-          (userData['profileImageUrl'] ?? '').toString();
+      final profileImageUrl = (userData['profileImageUrl'] ?? '').toString();
 
       final commentRef = FirebaseFirestore.instance
           .collection('sellerVideos')
@@ -1894,9 +1769,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-      ),
+      SnackBar(content: Text(message)),
     );
   }
 
@@ -1918,8 +1791,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
             Container(
               width: 45,
               height: 5,
-              margin:
-                  const EdgeInsets.only(top: 10, bottom: 12),
+              margin: const EdgeInsets.only(top: 10, bottom: 12),
               decoration: BoxDecoration(
                 color: Colors.white30,
                 borderRadius: BorderRadius.circular(10),
@@ -1935,35 +1807,26 @@ class _CommentsSheetState extends State<_CommentsSheet> {
             ),
             const SizedBox(height: 10),
             Expanded(
-              child: StreamBuilder<
-                  QuerySnapshot<Map<String, dynamic>>>(
+              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: FirebaseFirestore.instance
                     .collection('sellerVideos')
                     .doc(widget.videoId)
                     .collection('comments')
-                    .orderBy(
-                      'createdAt',
-                      descending: true,
-                    )
+                    .orderBy('createdAt', descending: true)
                     .snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.hasError) {
                     return const Center(
                       child: Text(
                         'Unable to load comments.',
-                        style: TextStyle(
-                          color: Colors.white54,
-                        ),
+                        style: TextStyle(color: Colors.white54),
                       ),
                     );
                   }
 
-                  if (snapshot.connectionState ==
-                      ConnectionState.waiting) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                      ),
+                      child: CircularProgressIndicator(color: Colors.white),
                     );
                   }
 
@@ -1973,9 +1836,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                     return const Center(
                       child: Text(
                         'No comments yet.',
-                        style: TextStyle(
-                          color: Colors.white54,
-                        ),
+                        style: TextStyle(color: Colors.white54),
                       ),
                     );
                   }
@@ -1985,57 +1846,45 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                     itemBuilder: (context, index) {
                       final data = docs[index].data();
 
-                      final name =
-                          (data['userName'] ?? 'User')
-                              .toString();
+                      final name = (data['userName'] ?? 'User').toString();
 
-                      final text =
-                          (data['text'] ?? '').toString();
+                      final text = (data['text'] ?? '').toString();
 
                       final imageUrl =
-                          (data['profileImageUrl'] ?? '')
-                              .toString();
+                          (data['profileImageUrl'] ?? '').toString();
 
                       return Padding(
-                        padding:
-                            const EdgeInsets.symmetric(
+                        padding: const EdgeInsets.symmetric(
                           horizontal: 14,
                           vertical: 8,
                         ),
                         child: Row(
-                          crossAxisAlignment:
-                              CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             _commentAvatar(imageUrl),
                             const SizedBox(width: 10),
                             Expanded(
                               child: Container(
-                                padding:
-                                    const EdgeInsets.all(10),
+                                padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
                                   color: Colors.white10,
-                                  borderRadius:
-                                      BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       name,
-                                      style:
-                                          const TextStyle(
+                                      style: const TextStyle(
                                         color: Colors.white,
-                                        fontWeight:
-                                            FontWeight.bold,
+                                        fontWeight: FontWeight.bold,
                                         fontSize: 13,
                                       ),
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
                                       text,
-                                      style:
-                                          const TextStyle(
+                                      style: const TextStyle(
                                         color: Colors.white70,
                                         fontSize: 13,
                                       ),
@@ -2061,9 +1910,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
 
                     Navigator.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => const LoginPage(),
-                      ),
+                      MaterialPageRoute(builder: (_) => const LoginPage()),
                     );
                   },
                   child: Container(
@@ -2071,8 +1918,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: Colors.white10,
-                      borderRadius:
-                          BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(14),
                     ),
                     child: const Center(
                       child: Text(
@@ -2088,36 +1934,25 @@ class _CommentsSheetState extends State<_CommentsSheet> {
               )
             else
               Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  12,
-                  8,
-                  12,
-                  12,
-                ),
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
                 child: Row(
                   children: [
                     Expanded(
                       child: TextField(
                         controller: _commentController,
-                        style: const TextStyle(
-                          color: Colors.white,
-                        ),
+                        style: const TextStyle(color: Colors.white),
                         minLines: 1,
                         maxLines: 4,
                         decoration: InputDecoration(
                           hintText: 'Write a comment...',
-                          hintStyle: const TextStyle(
-                            color: Colors.white38,
-                          ),
+                          hintStyle: const TextStyle(color: Colors.white38),
                           filled: true,
                           fillColor: Colors.white10,
                           border: OutlineInputBorder(
-                            borderRadius:
-                                BorderRadius.circular(20),
+                            borderRadius: BorderRadius.circular(20),
                             borderSide: BorderSide.none,
                           ),
-                          contentPadding:
-                              const EdgeInsets.symmetric(
+                          contentPadding: const EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 10,
                           ),
@@ -2137,8 +1972,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                         child: _sending
                             ? const Padding(
                                 padding: EdgeInsets.all(12),
-                                child:
-                                    CircularProgressIndicator(
+                                child: CircularProgressIndicator(
                                   strokeWidth: 2,
                                   color: Colors.black,
                                 ),
@@ -2164,11 +1998,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
       return const CircleAvatar(
         radius: 19,
         backgroundColor: Colors.white24,
-        child: Icon(
-          Icons.person,
-          color: Colors.white,
-          size: 20,
-        ),
+        child: Icon(Icons.person, color: Colors.white, size: 20),
       );
     }
 
