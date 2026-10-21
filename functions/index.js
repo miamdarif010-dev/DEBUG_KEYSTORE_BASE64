@@ -52,6 +52,7 @@ Object.assign(exports, require("./counters"));
 // ============================================================
 
 Object.assign(exports, require("./rewards"));
+Object.assign(exports, require("./cloudinary_functions"));
 
 // ============================================================
 // CLOUDINARY SECRETS
@@ -130,77 +131,6 @@ exports.healthCheck = onCall(async () => {
     timestamp: new Date().toISOString(),
   };
 });
-
-// ============================================================
-// DELETE CLOUDINARY VIDEO (+ thumbnail)
-// ============================================================
-
-exports.deleteCloudinaryVideo = onCall(
-  {
-    secrets: [cloudinaryApiKey, cloudinaryApiSecret],
-  },
-  async (request) => {
-    requireAuth(request);
-
-    const { videoUrl, thumbnailUrl } = request.data || {};
-
-    if (!videoUrl || typeof videoUrl !== "string") {
-      throw new HttpsError("invalid-argument", "videoUrl is required.");
-    }
-
-    cloudinary.config({
-      cloud_name: CLOUDINARY_CLOUD_NAME,
-      api_key: cloudinaryApiKey.value(),
-      api_secret: cloudinaryApiSecret.value(),
-    });
-
-    const results = {
-      video: null,
-      thumbnail: null,
-    };
-
-    const videoPublicId = extractCloudinaryPublicId(videoUrl);
-
-    if (videoPublicId) {
-      try {
-        results.video = await cloudinary.uploader.destroy(videoPublicId, {
-          resource_type: "video",
-          invalidate: true,
-        });
-      } catch (e) {
-        console.error("Failed to delete Cloudinary video:", e);
-
-        results.video = {
-          error: e.message,
-        };
-      }
-    }
-
-    if (thumbnailUrl && typeof thumbnailUrl === "string") {
-      const thumbPublicId = extractCloudinaryPublicId(thumbnailUrl);
-
-      if (thumbPublicId) {
-        try {
-          results.thumbnail = await cloudinary.uploader.destroy(
-            thumbPublicId,
-            {
-              resource_type: "image",
-              invalidate: true,
-            }
-          );
-        } catch (e) {
-          console.error("Failed to delete Cloudinary thumbnail:", e);
-
-          results.thumbnail = {
-            error: e.message,
-          };
-        }
-      }
-    }
-
-    return results;
-  }
-);
 
 // ============================================================
 // WALLET TRANSACTION LISTENER
