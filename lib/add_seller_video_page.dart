@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -19,17 +19,12 @@ class AddSellerVideoPage extends StatefulWidget {
 
 class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
   // ============================================================
-  // CLOUDINARY
+  // LIMITS
   // ============================================================
   //
-  // IMPORTANT: this cloud name must be the same as
-  // CLOUDINARY_CLOUD_NAME in functions/index.js, otherwise deleting
-  // a video will not remove the file from Cloudinary.
-  // The upload preset below must exist in this cloud as UNSIGNED.
-
-  static const String _cloudName = 'hut6g3w7';
-
-  static const String _uploadPreset = 'buynova_products';
+  // Cloudinary uploads are SIGNED by the Cloud Function
+  // `getVideoUploadSignature` (unique public_id, overwrite=false).
+  // No upload preset is needed any more.
 
   static const int _maxVideoBytes = 60 * 1024 * 1024;
 
@@ -249,143 +244,79 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
   }
 
   // ============================================================
-  // CLOUDINARY UPLOAD
+  // CLOUDINARY UPLOAD (signed, unique public_id, no overwrite)
   // ============================================================
 
   Future<String?> _uploadVideoToCloudinary(File file) async {
-    final uri = Uri.parse(
-      'https://api.cloudinary.com/v1_1/$_cloudName/video/upload',
-    );
-
-    http.Client? client;
-
     try {
-      final multipartRequest = http.MultipartRequest('POST', uri);
+      // 1) Unique signed upload parameters from the server
+      final sigResult =
+          await FirebaseFunctions.instanceFor(region: 'asia-northeast3')
+              .httpsCallable('getVideoUploadSignature')
+              .call();
 
-      multipartRequest.fields['upload_preset'] = _uploadPreset;
+      final s = Map<String, dynamic>.from(sigResult.data as Map);
 
-      // Every upload gets its OWN unique Cloudinary name.
-      // Without this, uploads can end up under the same name and
-      // a new video replaces the old one for everybody.
-      final String uploaderId =
-          FirebaseAuth.instance.currentUser?.uid ?? 'guest';
+      if (mounted) {
+        setState(() => _uploadProgress = 0.2);
+      }
 
-      final String uniqueSuffix =
-          '${DateTime.now().microsecondsSinceEpoch}_'
-          '${Random().nextInt(1 << 31)}';
-
-      multipartRequest.fields['public_id'] =
-          'buynova_videos/${uploaderId}_$uniqueSuffix';
-
-      multipartRequest.files.add(
-        await http.MultipartFile.fromPath('file', file.path),
+      // 2) Upload the file
+      final uri = Uri.parse(
+        'https://api.cloudinary.com/v1_1/${s['cloudName']}/video/upload',
       );
 
-      final streamedMultipart = multipartRequest.finalize();
+      final request = http.MultipartRequest('POST', uri)
+        ..fields['api_key'] = s['apiKey'].toString()
+        ..fields['timestamp'] = s['timestamp'].toString()
+        ..fields['signature'] = s['signature'].toString()
+        ..fields['public_id'] = s['publicId'].toString()
+        ..fields['overwrite'] = 'false'
+        ..files.add(await http.MultipartFile.fromPath('file', file.path));
 
-      final contentLength = multipartRequest.contentLength;
+      final streamed = await request.send().timeout(_uploadTimeout);
 
-      final streamedRequest = http.StreamedRequest('POST', uri);
+      final responseBody = await streamed.stream.bytesToString();
 
-      streamedRequest.headers.addAll(multipartRequest.headers);
-
-      streamedRequest.contentLength = contentLength;
-
-      int bytesSent = 0;
-
-      final completer = Completer<void>();
-
-      streamedMultipart.listen(
-        (chunk) {
-          if (chunk.isEmpty) return;
-
-          streamedRequest.sink.add(chunk);
-
-          bytesSent += chunk.length;
-
-          if (contentLength > 0 && mounted) {
-            final ratio = bytesSent / contentLength;
-
-            setState(() {
-              _uploadProgress = 0.15 + (ratio * 0.65);
-            });
-          }
-        },
-        onError: (Object error, StackTrace stackTrace) {
-          if (!completer.isCompleted) {
-            completer.completeError(error, stackTrace);
-          }
-        },
-        onDone: () {
-          streamedRequest.sink.close();
-
-          if (!completer.isCompleted) {
-            completer.complete();
-          }
-        },
-        cancelOnError: true,
-      );
-
-      await completer.future;
-
-      client = http.Client();
-
-      final response =
-          await client.send(streamedRequest).timeout(_uploadTimeout);
-
-      final responseBody = await response.stream.bytesToString();
-
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        String errorMessage = responseBody;
+      if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+        String message = responseBody;
 
         try {
-          final decoded = jsonDecode(responseBody);
+          final d = jsonDecode(responseBody);
 
-          if (decoded is Map<String, dynamic>) {
-            final error = decoded['error'];
-
-            if (error is Map<String, dynamic>) {
-              errorMessage = error['message']?.toString() ?? responseBody;
-            } else if (error != null) {
-              errorMessage = error.toString();
-            }
+          if (d is Map && d['error'] is Map) {
+            message = d['error']['message']?.toString() ?? responseBody;
           }
         } catch (_) {}
 
         throw Exception(
-          'Cloudinary upload failed '
-          '(HTTP ${response.statusCode}): '
-          '$errorMessage',
+          'Cloudinary upload failed (HTTP ${streamed.statusCode}): $message',
         );
       }
 
-      final decoded = jsonDecode(responseBody);
-
-      final secureUrl = decoded['secure_url']?.toString();
+      final secureUrl =
+          (jsonDecode(responseBody) as Map)['secure_url']?.toString();
 
       if (secureUrl == null || secureUrl.isEmpty) {
         throw Exception('Cloudinary did not return a video URL.');
       }
 
       if (mounted) {
-        setState(() {
-          _uploadProgress = 0.82;
-        });
+        setState(() => _uploadProgress = 0.82);
       }
 
       return secureUrl;
     } on TimeoutException {
       throw Exception(
-        'Video upload timed out. '
-        'Please check your internet connection '
+        'Video upload timed out. Please check your internet connection '
         'and try again.',
       );
     } on SocketException catch (e) {
       throw Exception('Network error while uploading video: $e');
+    } on FirebaseFunctionsException catch (e) {
+      throw Exception('Server error (${e.code}): ${e.message}');
     } catch (e) {
       throw Exception(e.toString().replaceFirst('Exception: ', ''));
-    } finally {
-      client?.close();
     }
   }
 
@@ -550,6 +481,8 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
       final videoRef =
           FirebaseFirestore.instance.collection('sellerVideos').doc();
 
+      // Counters (likes, views, comments, shares) are maintained by
+      // Cloud Functions, so no arrays are written here.
       final videoData = <String, dynamic>{
         // OWNER / USER INFORMATION
         'videoId': videoRef.id,
@@ -575,12 +508,6 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
         'commentCount': 0,
         'viewCount': 0,
         'shareCount': 0,
-
-        // ARRAYS
-        'likes': <String>[],
-        'comments': <String>[],
-        'views': <String>[],
-        'shares': <String>[],
 
         // REWARD
         'rewardEligible': true,
