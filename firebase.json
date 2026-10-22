@@ -13,8 +13,14 @@
     "public": "hosting",
     "ignore": ["firebase.json", "**/node_modules/**"],
     "rewrites": [
-      { "source": "/r/**", "destination": "/index.html" },
-      { "source": "/p/**", "destination": "/index.html" }
+      {
+        "source": "/r/**",
+        "function": { "functionId": "sharePage", "region": "asia-northeast3" }
+      },
+      {
+        "source": "/p/**",
+        "function": { "functionId": "sharePage", "region": "asia-northeast3" }
+      }
     ],
     "headers": [
       {
