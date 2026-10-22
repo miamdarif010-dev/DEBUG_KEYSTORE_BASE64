@@ -53,6 +53,7 @@ Object.assign(exports, require("./counters"));
 
 Object.assign(exports, require("./rewards"));
 Object.assign(exports, require("./cloudinary_functions"));
+Object.assign(exports, require("./shop"));
 
 // ============================================================
 // CLOUDINARY SECRETS
