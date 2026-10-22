@@ -38,7 +38,7 @@ exports.getResellerListing = listing.getResellerListing;
 exports.getProductListing = listing.getProductListing;
 exports.downloadApp = listing.downloadApp;
 exports.getPublicStore = listing.getPublicStore;
-
+Object.assign(exports, require("./sharePage"));
 // ============================================================
 // VIDEO COUNTERS + PUBLIC PROFILES (likes, views, comments, shares)
 // File name in the repo: functions/counters.js
