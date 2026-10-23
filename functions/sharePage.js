@@ -10,14 +10,33 @@ const esc = (s) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])
   );
 
+// Messenger/Facebook show the preview image only when it is a normal
+// JPG/PNG of a sensible size. For Cloudinary images we ask Cloudinary
+// for a 1200x630 white-padded JPG, so the whole product is visible.
+function shareImage(u) {
+  if (typeof u !== "string" || u.indexOf("https://") !== 0) {
+    return { url: "", sized: false };
+  }
+  if (u.indexOf("res.cloudinary.com") > -1 && u.indexOf("/image/upload/") > -1) {
+    const url = u
+      .replace(
+        "/image/upload/",
+        "/image/upload/c_pad,b_white,w_1200,h_630,f_jpg,q_auto/"
+      )
+      .replace(/\.(webp|png|avif|jpeg|gif)(\?.*)?$/i, ".jpg");
+    return { url, sized: true };
+  }
+  return { url: u, sized: false };
+}
+
 exports.sharePage = onRequest(
   { region: REGION, memory: "256MiB", timeoutSeconds: 30 },
   async (req, res) => {
     const parts = req.path.split("/").filter(Boolean);
     const kind = parts[0];
-    let id = parts[1] ? decodeURIComponent(parts[1]) : null;
+    const id = parts[1] ? decodeURIComponent(parts[1]) : null;
 
-    // Static index.html (the app page itself)
+    // The static landing page (hosting/index.html)
     let html;
     try {
       const r = await fetch(`${SITE}/index.html`);
@@ -43,11 +62,12 @@ exports.sharePage = onRequest(
           const name = l.name || l.title || l.productName || "BuyNova";
           const price = Number(l.price);
           const orig = Number(l.originalPrice);
-          const img =
+          const rawImg =
             (Array.isArray(l.images) && l.images[0]) ||
             l.imageUrl ||
             l.image ||
             "";
+          const img = shareImage(rawImg);
 
           let desc = "";
           if (!isNaN(price) && price > 0) {
@@ -71,15 +91,27 @@ exports.sharePage = onRequest(
             `<meta property="og:url" content="${esc(url)}">\n` +
             `<meta name="description" content="${esc(desc)}">\n`;
 
-          if (typeof img === "string" && img.indexOf("https://") === 0) {
+          if (img.url) {
             tags +=
-              `<meta property="og:image" content="${esc(img)}">\n` +
-              `<meta property="og:image:secure_url" content="${esc(img)}">\n` +
+              `<meta property="og:image" content="${esc(img.url)}">\n` +
+              `<meta property="og:image:secure_url" content="${esc(img.url)}">\n` +
+              `<meta property="og:image:alt" content="${esc(name)}">\n` +
+              (img.sized
+                ? `<meta property="og:image:type" content="image/jpeg">\n` +
+                  `<meta property="og:image:width" content="1200">\n` +
+                  `<meta property="og:image:height" content="630">\n`
+                : "") +
               `<meta name="twitter:card" content="summary_large_image">\n` +
-              `<meta name="twitter:image" content="${esc(img)}">\n`;
+              `<meta name="twitter:image" content="${esc(img.url)}">\n`;
           }
 
-          // Replace the default <title> and add the tags
+          // Remove the default og/description tags of the landing page first,
+          // otherwise crawlers read the first (default) one and ignore ours.
+          html = html.replace(
+            /<meta\s+(?:property="og:[^"]*"|name="twitter:[^"]*"|name="description")[^>]*>\s*/gi,
+            ""
+          );
+
           html = html.replace(
             /<title>[^<]*<\/title>/i,
             `<title>${esc(name)} | BuyNova</title>\n${tags}`
