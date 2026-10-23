@@ -123,7 +123,9 @@ const CUR = "৳";
 const $app = document.getElementById("app");
 const $ = (id) => document.getElementById(id);
 let user = null, authReady = false, allItems = null, search = "", activeCat = "", shown = 12, homeDraw = null;
-const IC = { "ফোন":"📱","ল্যাপটপ":"💻","ঘড়ি":"⌚","ইয়ারবাড":"🎧","ক্যামেরা":"📷","ফ্যাশন":"👕","জুতা":"👟","ব্যাগ":"👜","বিউটি":"🧴","স্পোর্টস":"⚽","টয়স":"🧸","গ্রোসারি":"🛒" };
+const IC = { "ফোন":"📱","ল্যাপটপ":"💻","ঘড়ি":"⌚","ইয়ারবাড":"🎧","ক্যামেরা":"📷","ফ্যাশন":"👕","জুতা":"👟","ব্যাগ":"👜","বিউটি":"🧴","স্পোর্টস":"⚽","টয়স":"🧸","গ্রোসারি":"🛒",
+  phone:"📱",phones:"📱",mobile:"📱",laptop:"💻",laptops:"💻",watch:"⌚",watches:"⌚",earbud:"🎧",earbuds:"🎧",headphone:"🎧",headphones:"🎧",camera:"📷",cameras:"📷",fashion:"👕",men:"👔",man:"👔",women:"👗",woman:"👗",shoes:"👟",shoe:"👟",bag:"👜",bags:"👜",beauty:"🧴",sports:"⚽",sport:"⚽",toys:"🧸",toy:"🧸",grocery:"🛒" };
+const icon = (c) => IC[c] || IC[String(c).trim().toLowerCase()] || "▦";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 const money = (n) => CUR + " " + Number(n || 0).toLocaleString("en-US");
@@ -225,7 +227,7 @@ async function viewHome() {
     <div class="b" ${go} style="background:linear-gradient(120deg,#d6ebff,#b3d6ff)"><div><h3 style="color:#1a5fb4">নিরাপদ লেনদেন</h3><p>ক্যাশ অন ডেলিভারি ও ওয়ালেট</p><em style="background:#1a5fb4">দেখুন →</em></div><span>💻</span></div>
     <div class="b" ${go} style="background:linear-gradient(120deg,#d7f5e3,#b3e8c9)"><div><h3 style="color:#1b7a43">নতুন কালেকশন</h3><p>স্টাইল আপনার, পছন্দ আমাদের</p><em style="background:#1b7a43">কিনুন →</em></div><span>👔</span></div></div>
     <div class="sh"><h2 id="allT">সব পণ্য</h2><span class="muted" id="cn"></span></div><div class="g" id="ag"></div><button class="more" id="mb">আরও দেখুন</button>`);
-  $("cr").innerHTML = [""].concat(cats).map(c => `<div class="ci ${activeCat === c ? "on" : ""}" data-c="${esc(c)}"><i>${c ? (IC[c] || "▦") : "▦"}</i>${c ? esc(c) : "সব ক্যাটাগরি"}</div>`).join("");
+  $("cr").innerHTML = [""].concat(cats).map(c => `<div class="ci ${activeCat === c ? "on" : ""}" data-c="${esc(c)}"><i>${c ? icon(c) : "▦"}</i>${c ? esc(c) : "সব ক্যাটাগরি"}</div>`).join("");
   homeDraw = () => {
     const q = search.trim().toLowerCase();
     const f = items.filter(i => (!activeCat || i.category === activeCat) && (!q || i.name.toLowerCase().includes(q)));
