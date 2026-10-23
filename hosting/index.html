@@ -4,12 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BuyNova</title>
+<meta name="description" content="BuyNova অ্যাপে সহজে কেনাকাটা করুন। পছন্দের পণ্য খুঁজুন, দেখুন এবং কেনাকাটা উপভোগ করুন।">
+<meta name="theme-color" content="#ff5252">
+<meta property="og:site_name" content="BuyNova">
+<meta property="og:type" content="website">
+<meta property="og:title" content="BuyNova - আপনার অনলাইন শপিং পার্টনার">
+<meta property="og:description" content="BuyNova অ্যাপে সহজে কেনাকাটা করুন।">
+<meta property="og:url" content="https://buynova-cc5dd.web.app/">
 <style>
-  :root { --brand:#e5233f; --brand2:#ff4d6d; --ink:#17151f; --muted:#5b5866; --pink:#ffe6ee; }
+  :root { --brand:#ff5252; --brand2:#ff7a7a; --ink:#17151f; --muted:#5b5866; --pink:#fff0f0; }
   * { box-sizing:border-box; }
   [hidden] { display:none !important; }
   body { margin:0; font-family:system-ui,-apple-system,"Noto Sans Bengali",sans-serif; color:var(--ink);
-         background:linear-gradient(180deg,#fff6f9 0%,#ffe9f0 100%) fixed; }
+         background:linear-gradient(180deg,#fff8f8 0%,#ffeaea 100%) fixed; }
   .wrap { max-width:560px; margin:0 auto; padding:14px 14px 28px; }
 
   .top { display:flex; align-items:center; gap:12px; padding:6px 2px 12px; }
@@ -19,7 +26,7 @@
   .sub { margin:2px 0 0; font-size:13px; color:var(--muted); }
 
   .hero { position:relative; overflow:hidden; border-radius:24px; padding:22px 18px;
-          background:linear-gradient(120deg,#ffe3ec 0%,#ffd0de 60%,#ffc2d4 100%); min-height:190px; }
+          background:linear-gradient(120deg,#ffe6e6 0%,#ffd2d2 60%,#ffc9c9 100%); min-height:190px; }
   .hero .in { position:relative; z-index:1; max-width:62%; }
   .hero.noimg .in { max-width:100%; }
   .badge { display:inline-block; background:linear-gradient(90deg,var(--brand),var(--brand2)); color:#fff;
@@ -31,12 +38,12 @@
 
   .feats { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:12px 0; }
   .feat { background:rgba(255,255,255,.85); border-radius:16px; padding:12px 4px; text-align:center;
-          font-size:12.5px; font-weight:600; line-height:1.3; box-shadow:0 2px 10px rgba(229,35,63,.08); }
+          font-size:12.5px; font-weight:600; line-height:1.3; box-shadow:0 2px 10px rgba(255,82,82,.1); }
   .feat i { display:flex; align-items:center; justify-content:center; width:42px; height:42px; margin:0 auto 6px;
             border-radius:50%; background:var(--pink); }
   .feat svg { width:22px; height:22px; }
 
-  .pcard { background:#fff; border-radius:24px; padding:16px; box-shadow:0 4px 18px rgba(229,35,63,.1); }
+  .pcard { background:#fff; border-radius:24px; padding:16px; box-shadow:0 4px 18px rgba(255,82,82,.12); }
   .pgrid { display:grid; grid-template-columns:1fr 1.15fr; gap:14px; align-items:start; }
   .pimgbox { position:relative; border-radius:18px; overflow:hidden; aspect-ratio:1/1.1;
              background:linear-gradient(135deg,#dcd3ff,#b9a7f5); display:flex; align-items:center; justify-content:center; }
@@ -48,7 +55,7 @@
   .pname { font-size:21px; line-height:1.25; margin:10px 0 6px; font-weight:800; word-break:break-word; }
   .pprice { font-size:30px; font-weight:800; color:var(--brand); margin:0 0 10px; }
   .chips { display:flex; flex-wrap:wrap; gap:6px; }
-  .chip { background:var(--pink); color:#8a1a2e; font-size:11px; font-weight:600; padding:6px 9px; border-radius:14px; }
+  .chip { background:var(--pink); color:#a83232; font-size:11px; font-weight:600; padding:6px 9px; border-radius:14px; }
   .dh { display:flex; align-items:center; gap:8px; font-size:17px; font-weight:800; margin:16px 0 6px; }
   .dh:before { content:""; width:4px; height:20px; background:var(--brand); border-radius:2px; }
   .pdesc { margin:0; font-size:14px; line-height:1.6; color:#3a3744; white-space:pre-line; }
@@ -57,7 +64,7 @@
   .btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:15px 10px;
          border-radius:30px; font-size:16px; font-weight:700; text-decoration:none; }
   .btn svg { width:20px; height:20px; flex:none; }
-  .primary { background:linear-gradient(90deg,var(--brand),var(--brand2)); color:#fff; box-shadow:0 6px 16px rgba(229,35,63,.3); }
+  .primary { background:linear-gradient(90deg,var(--brand),var(--brand2)); color:#fff; box-shadow:0 6px 16px rgba(255,82,82,.3); }
   .row { display:flex; gap:10px; margin-top:10px; }
   .row .btn { flex:1; background:#fff; color:var(--brand); border:2px solid var(--brand); font-size:15px; }
 
@@ -81,11 +88,11 @@
 
   <div class="top">
     <svg viewBox="0 0 48 48" aria-hidden="true">
-      <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4d6d"/><stop offset="1" stop-color="#d81b3c"/></linearGradient></defs>
+      <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7a7a"/><stop offset="1" stop-color="#ff3b3b"/></linearGradient></defs>
       <rect width="48" height="48" rx="13" fill="url(#lg)"/>
       <path d="M17.5 19v-2.5a6.5 6.5 0 0 1 13 0V19" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
       <rect x="12" y="19" width="24" height="18" rx="5" fill="#fff"/>
-      <path d="M19 27.5l5 4.5 5-4.5" fill="none" stroke="#e5233f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M19 27.5l5 4.5 5-4.5" fill="none" stroke="#ff5252" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
     <div>
       <h1 class="brand">Buy<b>Nova</b></h1>
@@ -103,10 +110,10 @@
   </section>
 
   <section class="feats">
-    <div class="feat"><i><svg viewBox="0 0 24 24" fill="none" stroke="#e5233f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.5 12h11l2-8H6"/></svg></i>সহজ<br>কেনাকাটা</div>
-    <div class="feat"><i><svg viewBox="0 0 24 24" fill="none" stroke="#e5233f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg></i>নিরাপদ<br>লেনদেন</div>
-    <div class="feat"><i><svg viewBox="0 0 24 24" fill="#e5233f"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></svg></i>দ্রুত<br>অর্ডার</div>
-    <div class="feat"><i><svg viewBox="0 0 24 24" fill="none" stroke="#e5233f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="14" width="4" height="6" rx="1.5"/><rect x="17" y="14" width="4" height="6" rx="1.5"/><path d="M19 20c0 1.5-2 2-5 2"/></svg></i>সহজ<br>সাপোর্ট</div>
+    <div class="feat"><i><svg viewBox="0 0 24 24" fill="none" stroke="#ff5252" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.5 12h11l2-8H6"/></svg></i>সহজ<br>কেনাকাটা</div>
+    <div class="feat"><i><svg viewBox="0 0 24 24" fill="none" stroke="#ff5252" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg></i>নিরাপদ<br>লেনদেন</div>
+    <div class="feat"><i><svg viewBox="0 0 24 24" fill="#ff5252"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></svg></i>দ্রুত<br>অর্ডার</div>
+    <div class="feat"><i><svg viewBox="0 0 24 24" fill="none" stroke="#ff5252" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="14" width="4" height="6" rx="1.5"/><rect x="17" y="14" width="4" height="6" rx="1.5"/><path d="M19 20c0 1.5-2 2-5 2"/></svg></i>সহজ<br>সাপোর্ট</div>
   </section>
 
   <div id="state" class="msg">লোড হচ্ছে...</div>
@@ -141,11 +148,11 @@
     </a>
     <div class="row">
       <a id="website" class="btn" href="#" hidden>
-        <svg viewBox="0 0 24 24" fill="none" stroke="#e5233f" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="#ff5252" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>
         ওয়েবসাইট
       </a>
       <a id="download" class="btn" href="#" hidden>
-        <svg viewBox="0 0 24 24" fill="none" stroke="#e5233f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="#ff5252" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg>
         অ্যাপ ডাউনলোড
       </a>
     </div>
@@ -302,11 +309,11 @@ if (!listingId) {
       var pct = Math.max(1, Math.round((1 - numPrice / numOrig) * 100));
       var old = document.createElement('s');
       old.textContent = money(numOrig);
-      old.style.cssText = 'display:block;font-size:16px;font-weight:600;color:#8a8794;text-decoration-color:#e5233f;text-decoration-thickness:2px;';
+      old.style.cssText = 'display:block;font-size:16px;font-weight:600;color:#8a8794;text-decoration-color:#ff5252;text-decoration-thickness:2px;';
       priceEl.insertBefore(old, cur);
       var badge = document.createElement('span');
       badge.textContent = ' -' + pct + '%';
-      badge.style.cssText = 'display:inline-block;margin-left:8px;background:#e5233f;color:#fff;font-size:12px;font-weight:700;padding:3px 8px;border-radius:10px;vertical-align:middle;';
+      badge.style.cssText = 'display:inline-block;margin-left:8px;background:#ff5252;color:#fff;font-size:12px;font-weight:700;padding:3px 8px;border-radius:10px;vertical-align:middle;';
       priceEl.appendChild(badge);
     }
     if (l.description) {
