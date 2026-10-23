@@ -1,12 +1,17 @@
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-/// ADMIN ONLY: choose which products appear in the auto-sliding
-/// strip at the top of the Home page (max 10).
+/// ADMIN ONLY:
+/// Manage products used by the Home page sliders.
 ///
-/// Data: collection `homeSlider`, one document per product
-/// (document id = product id). Home page reads this collection.
+/// First 10 selected products: top slider.
+/// Next 10: first feed slider.
+/// Next 10: second feed slider, and so on.
+///
+/// Firestore collection: homeSlider
+/// Document ID: product ID
 class AdminSliderProductsPage extends StatefulWidget {
   const AdminSliderProductsPage({super.key});
 
@@ -15,10 +20,8 @@ class AdminSliderProductsPage extends StatefulWidget {
       _AdminSliderProductsPageState();
 }
 
-class _AdminSliderProductsPageState extends State<AdminSliderProductsPage> {
-  static const int _maxItems = 10;
-
-  // Same admin rule as the profile page.
+class _AdminSliderProductsPageState
+    extends State<AdminSliderProductsPage> {
   static const String _adminEmail = 'miamdarif010@gmail.com';
 
   final CollectionReference<Map<String, dynamic>> _sliderRef =
@@ -27,7 +30,6 @@ class _AdminSliderProductsPageState extends State<AdminSliderProductsPage> {
   bool _checking = true;
   bool _isAdmin = false;
 
-  // Latest ids in the slider (kept so "Add" can enforce the limit).
   List<String> _sliderIds = [];
 
   @override
@@ -40,17 +42,16 @@ class _AdminSliderProductsPageState extends State<AdminSliderProductsPage> {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      if (mounted) {
-        setState(() {
-          _checking = false;
-          _isAdmin = false;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _checking = false;
+        _isAdmin = false;
+      });
       return;
     }
 
-    // Same rule as the Admin Panel: only the admin email.
-    final bool admin = (user.email ?? '').toLowerCase() == _adminEmail;
+    final bool admin =
+        (user.email ?? '').toLowerCase() == _adminEmail;
 
     if (!mounted) return;
 
@@ -65,9 +66,12 @@ class _AdminSliderProductsPageState extends State<AdminSliderProductsPage> {
   // ---------------------------------------------------------
 
   String _price(Map<String, dynamic> data) {
-    final raw = data['price'] is num ? (data['price'] as num).toDouble() : 0.0;
+    final raw = data['price'] is num
+        ? (data['price'] as num).toDouble()
+        : 0.0;
 
-    final currency = data['currency']?.toString().trim().toUpperCase();
+    final currency =
+        data['currency']?.toString().trim().toUpperCase();
 
     final bdt = currency == 'BDT' ? raw : raw * 0.09;
 
@@ -91,15 +95,20 @@ class _AdminSliderProductsPageState extends State<AdminSliderProductsPage> {
         child: url.isEmpty
             ? Container(
                 color: Colors.grey.shade200,
-                child: const Icon(Icons.image_outlined, color: Colors.grey),
+                child: const Icon(
+                  Icons.image_outlined,
+                  color: Colors.grey,
+                ),
               )
             : Image.network(
                 url,
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => Container(
                   color: Colors.grey.shade200,
-                  child: const Icon(Icons.broken_image_outlined,
-                      color: Colors.grey),
+                  child: const Icon(
+                    Icons.broken_image_outlined,
+                    color: Colors.grey,
+                  ),
                 ),
               ),
       ),
@@ -116,12 +125,7 @@ class _AdminSliderProductsPageState extends State<AdminSliderProductsPage> {
     if (user == null || !_isAdmin) return;
 
     if (_sliderIds.contains(productId)) {
-      _message('This product is already in the slider.');
-      return;
-    }
-
-    if (_sliderIds.length >= _maxItems) {
-      _message('Maximum $_maxItems products. Remove one first.');
+      _message('This product is already selected.');
       return;
     }
 
@@ -133,33 +137,34 @@ class _AdminSliderProductsPageState extends State<AdminSliderProductsPage> {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      _message('Added to Home slider.');
+      _message('Product added to sliders.');
     } catch (e) {
-      _message('Could not add: $e');
+      _message('Could not add product: $e');
     }
   }
 
   Future<void> _removeProduct(String productId) async {
+    if (!_isAdmin) return;
+
     try {
       await _sliderRef.doc(productId).delete();
 
-      _message('Removed from Home slider.');
+      _message('Product removed from sliders.');
     } catch (e) {
-      _message('Could not remove: $e');
+      _message('Could not remove product: $e');
     }
   }
 
   Future<void> _openPicker() async {
-    if (_sliderIds.length >= _maxItems) {
-      _message('Maximum $_maxItems products. Remove one first.');
-      return;
-    }
+    if (!_isAdmin) return;
 
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(20),
+        ),
       ),
       builder: (sheetContext) {
         return _ProductPickerSheet(
@@ -189,12 +194,14 @@ class _AdminSliderProductsPageState extends State<AdminSliderProductsPage> {
 
     if (!_isAdmin) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Home Slider Products')),
+        appBar: AppBar(
+          title: const Text('Home Slider Products'),
+        ),
         body: const Center(
           child: Padding(
             padding: EdgeInsets.all(24),
             child: Text(
-              'Only an Admin can manage the Home slider.',
+              'Only an Admin can manage the Home sliders.',
               textAlign: TextAlign.center,
             ),
           ),
@@ -219,7 +226,9 @@ class _AdminSliderProductsPageState extends State<AdminSliderProductsPage> {
         label: const Text('Add Product'),
       ),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance.collection('products').snapshots(),
+        stream: FirebaseFirestore.instance
+            .collection('products')
+            .snapshots(),
         builder: (context, productSnapshot) {
           final Map<String, Map<String, dynamic>> products = {};
 
@@ -235,19 +244,25 @@ class _AdminSliderProductsPageState extends State<AdminSliderProductsPage> {
                   child: Padding(
                     padding: const EdgeInsets.all(24),
                     child: Text(
-                      'Could not load slider.\n${sliderSnapshot.error}',
+                      'Could not load sliders.\n'
+                      '${sliderSnapshot.error}',
                       textAlign: TextAlign.center,
                     ),
                   ),
                 );
               }
 
-              if (sliderSnapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
+              if (sliderSnapshot.connectionState ==
+                  ConnectionState.waiting) {
+                return const Center(
+                  child: CircularProgressIndicator(),
+                );
               }
 
-              final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs =
-                  List.of(sliderSnapshot.data?.docs ?? []);
+              final docs = List<
+                  QueryDocumentSnapshot<Map<String, dynamic>>>.of(
+                sliderSnapshot.data?.docs ?? [],
+              );
 
               docs.sort((a, b) {
                 final oa = a.data()['order'];
@@ -259,10 +274,15 @@ class _AdminSliderProductsPageState extends State<AdminSliderProductsPage> {
                 return na.compareTo(nb);
               });
 
-              _sliderIds = docs.map<String>((d) => d.id).toList();
+              _sliderIds = docs.map((d) => d.id).toList();
 
               return ListView(
-                padding: const EdgeInsets.fromLTRB(14, 14, 14, 100),
+                padding: const EdgeInsets.fromLTRB(
+                  14,
+                  14,
+                  14,
+                  100,
+                ),
                 children: [
                   Container(
                     padding: const EdgeInsets.all(14),
@@ -270,21 +290,40 @@ class _AdminSliderProductsPageState extends State<AdminSliderProductsPage> {
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    child: Row(
+                    child: const Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.info_outline,
-                            color: Colors.redAccent),
-                        const SizedBox(width: 10),
+                        Icon(
+                          Icons.info_outline,
+                          color: Colors.redAccent,
+                        ),
+                        SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            'These products slide at the top of the Home '
-                            'page. Only an Admin can add or remove them.\n'
-                            '${docs.length} / $_maxItems selected.',
-                            style: const TextStyle(height: 1.4),
+                            'Products are displayed in selection order.\n'
+                            'First 10: top Home slider.\n'
+                            'Next 10: first feed slider.\n'
+                            'Following groups of 10: subsequent feed sliders.\n'
+                            'Only an Admin can manage these products.',
+                            style: TextStyle(height: 1.4),
                           ),
                         ),
                       ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${docs.length} products selected',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -293,7 +332,8 @@ class _AdminSliderProductsPageState extends State<AdminSliderProductsPage> {
                       padding: EdgeInsets.symmetric(vertical: 40),
                       child: Center(
                         child: Text(
-                          'No slider products yet.\nTap "Add Product".',
+                          'No slider products yet.\n'
+                          'Tap "Add Product".',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: Colors.grey),
                         ),
@@ -325,8 +365,13 @@ class _AdminSliderProductsPageState extends State<AdminSliderProductsPage> {
         ? 'Product removed'
         : (product['name']?.toString() ?? 'Unnamed Product');
 
-    final imageUrl =
-        missing ? '' : (product['imageUrl']?.toString().trim() ?? '');
+    final imageUrl = missing
+        ? ''
+        : (product['imageUrl']?.toString().trim() ?? '');
+
+    final sliderGroup = position <= 10
+        ? 'Top slider'
+        : 'Feed slider ${(position - 11) ~/ 10 + 1}';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -365,6 +410,14 @@ class _AdminSliderProductsPageState extends State<AdminSliderProductsPage> {
                     color: missing ? Colors.grey : Colors.black,
                   ),
                 ),
+                const SizedBox(height: 3),
+                Text(
+                  sliderGroup,
+                  style: const TextStyle(
+                    color: Colors.blueGrey,
+                    fontSize: 12,
+                  ),
+                ),
                 if (!missing)
                   Text(
                     _price(product),
@@ -379,7 +432,10 @@ class _AdminSliderProductsPageState extends State<AdminSliderProductsPage> {
           IconButton(
             tooltip: 'Remove',
             onPressed: () => _removeProduct(productId),
-            icon: const Icon(Icons.delete_outline, color: Colors.red),
+            icon: const Icon(
+              Icons.delete_outline,
+              color: Colors.red,
+            ),
           ),
         ],
       ),
@@ -405,7 +461,8 @@ class _ProductPickerSheet extends StatefulWidget {
   });
 
   @override
-  State<_ProductPickerSheet> createState() => _ProductPickerSheetState();
+  State<_ProductPickerSheet> createState() =>
+      _ProductPickerSheetState();
 }
 
 class _ProductPickerSheetState extends State<_ProductPickerSheet> {
@@ -426,7 +483,10 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
             Container(
               width: 44,
               height: 5,
-              margin: const EdgeInsets.only(top: 10, bottom: 12),
+              margin: const EdgeInsets.only(
+                top: 10,
+                bottom: 12,
+              ),
               decoration: BoxDecoration(
                 color: Colors.grey.shade300,
                 borderRadius: BorderRadius.circular(10),
@@ -434,7 +494,10 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
             ),
             const Text(
               'Choose a product',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             Padding(
               padding: const EdgeInsets.all(12),
@@ -445,7 +508,9 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                  contentPadding: const EdgeInsets.symmetric(
+                    vertical: 10,
+                  ),
                 ),
                 onChanged: (value) {
                   setState(() {
@@ -455,7 +520,8 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
               ),
             ),
             Expanded(
-              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              child: StreamBuilder<
+                  QuerySnapshot<Map<String, dynamic>>>(
                 stream: FirebaseFirestore.instance
                     .collection('products')
                     .snapshots(),
@@ -466,17 +532,24 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
                     );
                   }
 
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
+                  if (snapshot.connectionState ==
+                      ConnectionState.waiting) {
+                    return const Center(
+                      child: CircularProgressIndicator(),
+                    );
                   }
 
                   final docs = (snapshot.data?.docs ?? []).where((doc) {
-                    if (widget.existingIds.contains(doc.id)) return false;
+                    if (widget.existingIds.contains(doc.id)) {
+                      return false;
+                    }
 
                     if (_query.isEmpty) return true;
 
-                    final name =
-                        doc.data()['name']?.toString().toLowerCase() ?? '';
+                    final name = doc.data()['name']
+                            ?.toString()
+                            .toLowerCase() ??
+                        '';
 
                     return name.contains(_query);
                   }).toList();
@@ -492,7 +565,8 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
 
                   return ListView.separated(
                     itemCount: docs.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    separatorBuilder: (_, __) =>
+                        const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final doc = docs[index];
                       final data = doc.data();
@@ -502,7 +576,8 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
                           data['imageUrl']?.toString().trim() ?? '',
                         ),
                         title: Text(
-                          data['name']?.toString() ?? 'Unnamed Product',
+                          data['name']?.toString() ??
+                              'Unnamed Product',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
