@@ -57,14 +57,13 @@ class _HomePageState extends State<HomePage>
   int _productSliderCount = 0;
 
   // FEED LAYOUT
-  // First block: 4 products (2x2), then the Admin slider.
-  // Every later block: 8 products, then the Admin slider again.
-  static const int _firstBlockSize = 4;
-  static const int _nextBlockSize = 8;
-
-  // Products per Admin slider (1st slider = Admin products 1-10,
-  // 2nd slider = 11-20, and so on).
+  // Admin's first 10 products appear in the top slider.
+  // Every 8 ordinary feed products, show the next admin slider.
+  // Ads appear after 6 ordinary products, then every 8 more.
   static const int _sliderSize = 10;
+  static const int _feedSliderInterval = 8;
+  static const int _firstAdPosition = 6;
+  static const int _adInterval = 8;
 
   // CATEGORIES (managed by the Admin, loaded from Firestore).
   // "All" is always first. The default list is shown until the
@@ -982,7 +981,7 @@ class _HomePageState extends State<HomePage>
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 12),
             child: Text(
-              'Admin Picks',
+              'স্লাইডার',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
           ),
@@ -1090,9 +1089,6 @@ class _HomePageState extends State<HomePage>
 
   // =========================================================
   // FEED: products + Admin slider + native ads
-  //
-  // 4 products (2x2) -> Admin slider -> 8 products -> Admin slider
-  // -> (ad) -> 8 products -> Admin slider -> ... and so on.
   // =========================================================
 
   List<Widget> _buildFeedSlivers({
@@ -1104,20 +1100,34 @@ class _HomePageState extends State<HomePage>
     final slivers = <Widget>[];
 
     var start = 0;
-    var block = _firstBlockSize;
-    var blockNo = 0;
+    var nextAdAt = _firstAdPosition;
+    var nextSliderAt = _feedSliderInterval;
     var adNo = 0;
 
     while (start < docs.length) {
-      final end = start + block > docs.length ? docs.length : start + block;
+      // Stop at the next ad, slider, or end of the product list.
+      var end = docs.length;
 
+      if (nextAdAt > start && nextAdAt < end) {
+        end = nextAdAt;
+      }
+
+      if (nextSliderAt > start && nextSliderAt < end) {
+        end = nextSliderAt;
+      }
+
+      // Ordinary products only. Ads and sliders never count as products.
       final from = start;
 
       slivers.add(
         SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 4,
+          ),
           sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            gridDelegate:
+                const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
               childAspectRatio: 0.75,
               crossAxisSpacing: 8,
@@ -1126,8 +1136,8 @@ class _HomePageState extends State<HomePage>
             delegate: SliverChildBuilderDelegate(
               (context, i) {
                 final productDoc = docs[from + i];
-
-                final data = productDoc.data() as Map<String, dynamic>;
+                final data =
+                    productDoc.data() as Map<String, dynamic>;
 
                 return _buildProductCard(
                   user: user,
@@ -1142,44 +1152,48 @@ class _HomePageState extends State<HomePage>
         ),
       );
 
-      // Admin slider after every block. Each slider shows the next
-      // 10 Admin products; when they run out, no more sliders.
-      // Admin products 1-10 are in the top slider, so the feed
-      // sliders start from product 11.
-      final sliderStart = (blockNo + 1) * _sliderSize;
-
-      if (sliderStart < picks.length) {
-        final sliderEnd = sliderStart + _sliderSize > picks.length
-            ? picks.length
-            : sliderStart + _sliderSize;
-
-        slivers.add(
-          SliverToBoxAdapter(
-            child: _buildAdminPickSlider(
-              picks.sublist(sliderStart, sliderEnd),
-            ),
-          ),
-        );
-      }
-
-      // Native ad after every block (below the slider),
-      // never after the last block. Strip and card styles alternate.
-      if (end < docs.length) {
-        slivers.add(
-          SliverToBoxAdapter(
-            child: NativeAdCard(
-              key: ValueKey('native_ad_$adNo'),
-              productStyle: adNo.isOdd,
-            ),
-          ),
-        );
-
-        adNo++;
-      }
-
       start = end;
-      block = _nextBlockSize;
-      blockNo++;
+
+      // Insert an ad after ordinary products 6, 14, 22, 30...
+      // Do not append an ad after the final ordinary product.
+      if (start == nextAdAt) {
+        if (start < docs.length) {
+          slivers.add(
+            SliverToBoxAdapter(
+              child: NativeAdCard(
+                key: ValueKey('native_ad_$adNo'),
+                productStyle: adNo.isOdd,
+              ),
+            ),
+          );
+
+          adNo++;
+        }
+
+        nextAdAt += _adInterval;
+      }
+
+      // Insert a feed slider after ordinary products 8, 16, 24...
+      // The top slider uses picks 0-9, so feed sliders start at index 10.
+      if (start == nextSliderAt) {
+        final sliderStart = (start ~/ _feedSliderInterval) * _sliderSize;
+
+        final sliderEnd = sliderStart + _sliderSize < picks.length
+            ? sliderStart + _sliderSize
+            : picks.length;
+
+        if (sliderStart < picks.length) {
+          slivers.add(
+            SliverToBoxAdapter(
+              child: _buildAdminPickSlider(
+                picks.sublist(sliderStart, sliderEnd),
+              ),
+            ),
+          );
+        }
+
+        nextSliderAt += _feedSliderInterval;
+      }
     }
 
     return slivers;
