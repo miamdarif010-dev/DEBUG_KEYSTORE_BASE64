@@ -11,6 +11,7 @@ class AdConfig {
   // Release build করার আগে false করে দাও এবং নিচে নিজের Ad Unit ID বসাও।
   static const bool useTestAds = true;
 
+  // স্ট্রিপ এডের Native ad unit ID
   static String get nativeAdUnitId {
     if (useTestAds) {
       return Platform.isAndroid
@@ -18,16 +19,31 @@ class AdConfig {
           : 'ca-app-pub-3940256099942544/3986624511';
     }
 
-    return 'ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY';
+    return 'ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY'; // স্ট্রিপ ID
+  }
+
+  // প্রোডাক্ট-কার্ড এডের আলাদা Native ad unit ID
+  static String get nativeCardAdUnitId {
+    if (useTestAds) {
+      return Platform.isAndroid
+          ? 'ca-app-pub-3940256099942544/2247696110'
+          : 'ca-app-pub-3940256099942544/3986624511';
+    }
+
+    return 'ca-app-pub-XXXXXXXXXXXXXXXX/ZZZZZZZZZZ'; // কার্ড ID
   }
 }
 
 // =========================================================
-// NATIVE AD STRIP (full width, slim)
+// NATIVE AD (strip = slim, card = big product-like card)
 // =========================================================
 
 class NativeAdCard extends StatefulWidget {
-  const NativeAdCard({super.key});
+  /// false = slim full-width strip (আগের মতো)
+  /// true  = বড় প্রোডাক্ট-কার্ডের মতো এড (ছবি + টাইটেল + INSTALL)
+  final bool productStyle;
+
+  const NativeAdCard({super.key, this.productStyle = false});
 
   @override
   State<NativeAdCard> createState() => _NativeAdCardState();
@@ -42,7 +58,9 @@ class _NativeAdCardState extends State<NativeAdCard> {
     super.initState();
 
     _nativeAd = NativeAd(
-      adUnitId: AdConfig.nativeAdUnitId,
+      adUnitId: widget.productStyle
+          ? AdConfig.nativeCardAdUnitId
+          : AdConfig.nativeAdUnitId,
       request: const AdRequest(),
       listener: NativeAdListener(
         onAdLoaded: (ad) {
@@ -67,7 +85,8 @@ class _NativeAdCardState extends State<NativeAdCard> {
         },
       ),
       nativeTemplateStyle: NativeTemplateStyle(
-        templateType: TemplateType.small,
+        templateType:
+            widget.productStyle ? TemplateType.medium : TemplateType.small,
         mainBackgroundColor: Colors.white,
         cornerRadius: 10,
         callToActionTextStyle: NativeTemplateTextStyle(
@@ -102,15 +121,26 @@ class _NativeAdCardState extends State<NativeAdCard> {
       return const SizedBox.shrink();
     }
 
-    // Small template: উচ্চতা ~91–200dp, প্রস্থ পুরো স্ক্রিন।
     return Container(
-      margin: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-      height: 112,
+      margin: widget.productStyle
+          ? const EdgeInsets.fromLTRB(8, 4, 8, 8)
+          : const EdgeInsets.fromLTRB(8, 6, 8, 6),
+      // Small: ~112dp | Medium: কমপক্ষে ~355dp দরকার
+      height: widget.productStyle ? 360 : 112,
       width: double.infinity,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Colors.grey.shade300),
+        boxShadow: widget.productStyle
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.07),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+            : null,
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(10),
@@ -124,8 +154,8 @@ class _NativeAdCardState extends State<NativeAdCard> {
 // PRODUCT GRID + ADS
 // প্রথম [firstAdAfter] টি প্রোডাক্টের পর প্রথম বিজ্ঞাপন,
 // তারপর প্রতি [adEvery] টি প্রোডাক্টের পর একটি করে।
-// প্রোডাক্টগুলো আগের মতোই ২ কলামের গ্রিডে থাকে,
-// বিজ্ঞাপন দুই গ্রিড অংশের মাঝে পুরো প্রস্থে বসে।
+// [alternateStyles] = true হলে এড একবার স্ট্রিপ, একবার
+// প্রোডাক্ট-কার্ড স্টাইলে আসে। false হলে সব স্ট্রিপ।
 // =========================================================
 
 List<Widget> buildProductSlivers({
@@ -133,6 +163,7 @@ List<Widget> buildProductSlivers({
   required Widget Function(int index) itemBuilder,
   int firstAdAfter = 6,
   int adEvery = 8,
+  bool alternateStyles = true,
 }) {
   final slivers = <Widget>[];
 
@@ -166,7 +197,11 @@ List<Widget> buildProductSlivers({
     if (end < count) {
       slivers.add(
         SliverToBoxAdapter(
-          child: NativeAdCard(key: ValueKey('native_ad_$adNumber')),
+          child: NativeAdCard(
+            key: ValueKey('native_ad_$adNumber'),
+            // ১ম এড স্ট্রিপ, ২য় কার্ড, ৩য় স্ট্রিপ ...
+            productStyle: alternateStyles && adNumber.isOdd,
+          ),
         ),
       );
 
