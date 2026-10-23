@@ -5,7 +5,10 @@ if (!admin.apps.length) admin.initializeApp();
 
 const db = admin.firestore();
 const REGION = 'asia-northeast3';
-const LIMIT = 150;
+const LIMIT = 500;
+const CACHE_MS = 60 * 1000;
+
+let cache = { at: 0, items: null };
 
 const safeId = (v) => {
   const s = String(v || '');
@@ -16,6 +19,9 @@ const pick = (...vals) =>
   vals.find((v) => v !== undefined && v !== null && v !== '');
 
 const isOff = (d) => d.isActive === false || d.active === false;
+
+const millis = (v) =>
+  v && typeof v.toMillis === 'function' ? v.toMillis() : 0;
 
 const firstImage = (...sources) => {
   for (const v of sources) {
@@ -49,8 +55,14 @@ const resellerOriginal = (l) => {
 // getShopProducts
 // Public product list for the customer website (/shop/).
 // Returns ONLY public fields: no supplier price, no profit.
+// Newest products first. Result is cached for 60 seconds per
+// server instance, so a new product shows up within a minute.
 // ============================================================
 exports.getShopProducts = onCall({ region: REGION }, async () => {
+  if (cache.items && Date.now() - cache.at < CACHE_MS) {
+    return { items: cache.items };
+  }
+
   const items = [];
   const seen = new Set();
 
@@ -81,7 +93,8 @@ exports.getShopProducts = onCall({ region: REGION }, async () => {
         ),
         price,
         originalPrice: original > price ? original : null,
-        category: String(p.category ?? ''),
+        category: String(p.category ?? '').trim(),
+        t: millis(p.createdAt),
       });
     }
   }
@@ -120,9 +133,15 @@ exports.getShopProducts = onCall({ region: REGION }, async () => {
       imageUrl: firstImage(l.imageUrl, l.images, s.imageUrl, s.imageUrls, s.images),
       price,
       originalPrice: resellerOriginal(l),
-      category: String(pick(l.category, s.category) ?? ''),
+      category: String(pick(l.category, s.category) ?? '').trim(),
+      t: millis(l.createdAt),
     });
   });
 
-  return { items };
+  // newest first (products without createdAt go last), then hide the helper field
+  items.sort((a, b) => b.t - a.t);
+  const out = items.map(({ t, ...rest }) => rest);
+
+  cache = { at: Date.now(), items: out };
+  return { items: out };
 });
