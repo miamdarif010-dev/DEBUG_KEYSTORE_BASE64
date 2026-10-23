@@ -104,6 +104,19 @@ class ResellerLinkHandler {
     _subscription?.cancel();
   }
 
+  /// Called when the user taps a push notification that carries a link
+  /// such as "buynova://p/<productId>".
+  Future<void> openFromPush(String link) async {
+    final uri = Uri.tryParse(link);
+
+    if (uri == null) return;
+
+    // Cold start from a notification: let the home page appear first.
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    await _handle(uri);
+  }
+
   Future<void> _handle(Uri uri) async {
     final link = ResellerLink.parse(uri);
 
