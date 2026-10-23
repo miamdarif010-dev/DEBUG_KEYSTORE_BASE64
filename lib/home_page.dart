@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
@@ -35,6 +36,10 @@ class _HomePageState extends State<HomePage>
     with SingleTickerProviderStateMixin {
   int _selectedIndex = 0;
   int _selectedCategory = 0;
+
+  // Search bar + categories + slider hide when scrolling down,
+  // and come back when scrolling up.
+  bool _showHeader = true;
 
   final TextEditingController _searchController = TextEditingController();
 
@@ -1407,6 +1412,136 @@ class _HomePageState extends State<HomePage>
   }
 
   // =========================================================
+  // CATEGORIES BAR
+  // =========================================================
+
+  Widget _buildCategoriesBar() {
+    return SizedBox(
+      height: 104,
+      child: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('products').snapshots(),
+        builder: (context, categorySnapshot) {
+          final categoryProducts = (categorySnapshot.data?.docs ?? [])
+              .where(
+                (d) => !_isOwnProduct(d.data() as Map<String, dynamic>),
+              )
+              .toList();
+
+          return Container(
+            color: Colors.white,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              itemCount: categories.length,
+              itemBuilder: (context, index) {
+                return _buildCategoryItem(
+                  category: categories[index],
+                  index: index,
+                  products: categoryProducts,
+                );
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // =========================================================
+  // SLIDER SECTION (products chosen by the Admin only)
+  // =========================================================
+
+  Widget _buildSliderSection() {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance.collection('homeSlider').snapshots(),
+      builder: (context, sliderSnapshot) {
+        if (sliderSnapshot.hasError) {
+          _productSliderCount = 0;
+
+          return const SizedBox.shrink();
+        }
+
+        final List<QueryDocumentSnapshot<Map<String, dynamic>>> sliderDocs =
+            List.of(sliderSnapshot.data?.docs ?? []);
+
+        // Keep the order the Admin added them in.
+        sliderDocs.sort((a, b) {
+          final oa = a.data()['order'];
+          final ob = b.data()['order'];
+
+          final na = oa is num ? oa.toInt() : 0;
+          final nb = ob is num ? ob.toInt() : 0;
+
+          return na.compareTo(nb);
+        });
+
+        final sliderIds = sliderDocs.map((d) => d.id).toList();
+
+        if (sliderIds.isEmpty) {
+          _productSliderCount = 0;
+
+          return const SizedBox.shrink();
+        }
+
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance.collection('products').snapshots(),
+          builder: (context, productSnapshot) {
+            final Map<String, QueryDocumentSnapshot> byId = {
+              for (final d
+                  in productSnapshot.data?.docs ?? <QueryDocumentSnapshot>[])
+                d.id: d,
+            };
+
+            final sliderProducts = <QueryDocumentSnapshot>[];
+
+            for (final id in sliderIds) {
+              final doc = byId[id];
+
+              // Skip products that were deleted.
+              if (doc == null) continue;
+
+              // Nobody sees their own product.
+              if (_isOwnProduct(doc.data() as Map<String, dynamic>)) {
+                continue;
+              }
+
+              sliderProducts.add(doc);
+            }
+
+            return _buildProductAutoSlider(sliderProducts);
+          },
+        );
+      },
+    );
+  }
+
+  // =========================================================
+  // SCROLL: hide / show the header
+  // =========================================================
+
+  bool _onProductScroll(UserScrollNotification n) {
+    if (n.metrics.axis != Axis.vertical) return false;
+
+    if (n.metrics.pixels <= 0) {
+      if (!_showHeader) setState(() => _showHeader = true);
+      return false;
+    }
+
+    if (n.direction == ScrollDirection.reverse &&
+        _showHeader &&
+        n.metrics.pixels > 80) {
+      // scrolling down -> hide
+      setState(() => _showHeader = false);
+    } else if (n.direction == ScrollDirection.forward && !_showHeader) {
+      // scrolling up -> show
+      setState(() => _showHeader = true);
+    }
+
+    return false;
+  }
+
+  // =========================================================
   // BUILD
   // =========================================================
 
@@ -1450,112 +1585,26 @@ class _HomePageState extends State<HomePage>
           // BODY
           body: Column(
             children: [
-              _buildSearchBar(),
-
-              // CATEGORIES
-              SizedBox(
-                height: 104,
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('products')
-                      .snapshots(),
-                  builder: (context, categorySnapshot) {
-                    final categoryProducts =
-                        (categorySnapshot.data?.docs ?? [])
-                            .where(
-                              (d) => !_isOwnProduct(
-                                d.data() as Map<String, dynamic>,
-                              ),
-                            )
-                            .toList();
-
-                    return Container(
-                      color: Colors.white,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        physics: const BouncingScrollPhysics(),
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        itemCount: categories.length,
-                        itemBuilder: (context, index) {
-                          return _buildCategoryItem(
-                            category: categories[index],
-                            index: index,
-                            products: categoryProducts,
-                          );
-                        },
-                      ),
-                    );
-                  },
+              // HEADER: search + categories + slider.
+              // Slides up when scrolling down, back when scrolling up.
+              ClipRect(
+                child: AnimatedAlign(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeInOut,
+                  alignment: Alignment.topCenter,
+                  heightFactor: _showHeader ? 1.0 : 0.0,
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildSearchBar(),
+                        _buildCategoriesBar(),
+                        _buildSliderSection(),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-
-              // PRODUCT AUTO SLIDER (products chosen by the Admin only)
-              StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: FirebaseFirestore.instance
-                    .collection('homeSlider')
-                    .snapshots(),
-                builder: (context, sliderSnapshot) {
-                  if (sliderSnapshot.hasError) {
-                    _productSliderCount = 0;
-
-                    return const SizedBox.shrink();
-                  }
-
-                  final List<QueryDocumentSnapshot<Map<String, dynamic>>> sliderDocs =
-                      List.of(sliderSnapshot.data?.docs ?? []);
-
-                  // Keep the order the Admin added them in.
-                  sliderDocs.sort((a, b) {
-                    final oa = a.data()['order'];
-                    final ob = b.data()['order'];
-
-                    final na = oa is num ? oa.toInt() : 0;
-                    final nb = ob is num ? ob.toInt() : 0;
-
-                    return na.compareTo(nb);
-                  });
-
-                  final sliderIds = sliderDocs.map((d) => d.id).toList();
-
-                  if (sliderIds.isEmpty) {
-                    _productSliderCount = 0;
-
-                    return const SizedBox.shrink();
-                  }
-
-                  return StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('products')
-                        .snapshots(),
-                    builder: (context, productSnapshot) {
-                      final Map<String, QueryDocumentSnapshot> byId = {
-                        for (final d in productSnapshot.data?.docs ??
-                            <QueryDocumentSnapshot>[])
-                          d.id: d,
-                      };
-
-                      final sliderProducts = <QueryDocumentSnapshot>[];
-
-                      for (final id in sliderIds) {
-                        final doc = byId[id];
-
-                        // Skip products that were deleted.
-                        if (doc == null) continue;
-
-                        // Nobody sees their own product.
-                        if (_isOwnProduct(
-                          doc.data() as Map<String, dynamic>,
-                        )) {
-                          continue;
-                        }
-
-                        sliderProducts.add(doc);
-                      }
-
-                      return _buildProductAutoSlider(sliderProducts);
-                    },
-                  );
-                },
               ),
 
               // PRODUCTS
@@ -1635,26 +1684,30 @@ class _HomePageState extends State<HomePage>
                           favoriteIds.add(favoriteDoc.id);
                         }
 
-                        // PRODUCT GRID with a slim native ad strip
-                        // after every few products.
-                        return CustomScrollView(
-                          slivers: buildProductSlivers(
-                            count: filteredDocs.length,
-                            firstAdAfter: 6,
-                            adEvery: 8,
-                            itemBuilder: (index) {
-                              final productDoc = filteredDocs[index];
+                        // PRODUCT GRID with native ads
+                        // (strip + product-card style) between products.
+                        return NotificationListener<UserScrollNotification>(
+                          onNotification: _onProductScroll,
+                          child: CustomScrollView(
+                            slivers: buildProductSlivers(
+                              count: filteredDocs.length,
+                              firstAdAfter: 6,
+                              adEvery: 8,
+                              itemBuilder: (index) {
+                                final productDoc = filteredDocs[index];
 
-                              final data =
-                                  productDoc.data() as Map<String, dynamic>;
+                                final data =
+                                    productDoc.data() as Map<String, dynamic>;
 
-                              return _buildProductCard(
-                                user: user,
-                                productId: productDoc.id,
-                                data: data,
-                                isFavorite: favoriteIds.contains(productDoc.id),
-                              );
-                            },
+                                return _buildProductCard(
+                                  user: user,
+                                  productId: productDoc.id,
+                                  data: data,
+                                  isFavorite:
+                                      favoriteIds.contains(productDoc.id),
+                                );
+                              },
+                            ),
                           ),
                         );
                       },
