@@ -48,6 +48,14 @@ class _HomePageState extends State<HomePage>
   late AnimationController _couponAnimationController;
   late Animation<double> _couponOpacity;
 
+  // TOP AUTO SLIDER (Admin products 1-10)
+  Timer? _productSliderTimer;
+
+  final ScrollController _productSliderController = ScrollController();
+
+  int _productSliderIndex = 0;
+  int _productSliderCount = 0;
+
   // FEED LAYOUT
   // First block: 4 products (2x2), then the Admin slider.
   // Every later block: 8 products, then the Admin slider again.
@@ -115,11 +123,51 @@ class _HomePageState extends State<HomePage>
         curve: Curves.easeInOut,
       ),
     );
+    _startProductSliderTimer();
+  }
+
+  void _startProductSliderTimer() {
+    _productSliderTimer = Timer.periodic(
+      const Duration(milliseconds: 1500),
+      (_) {
+        if (!mounted ||
+            !_productSliderController.hasClients ||
+            _productSliderCount <= 1) {
+          return;
+        }
+
+        _productSliderIndex++;
+
+        if (_productSliderIndex >= _productSliderCount) {
+          _productSliderIndex = 0;
+
+          _productSliderController.jumpTo(0);
+          return;
+        }
+
+        final targetOffset = _productSliderIndex * 106.0;
+
+        final maxScrollExtent =
+            _productSliderController.position.maxScrollExtent;
+
+        final safeOffset =
+            targetOffset > maxScrollExtent ? maxScrollExtent : targetOffset;
+
+        _productSliderController.animateTo(
+          safeOffset,
+          duration: const Duration(milliseconds: 650),
+          curve: Curves.easeInOut,
+        );
+      },
+    );
   }
 
   @override
   void dispose() {
     _categorySubscription?.cancel();
+
+    _productSliderTimer?.cancel();
+    _productSliderController.dispose();
 
     _couponAnimationController.dispose();
     _searchController.dispose();
@@ -779,6 +827,147 @@ class _HomePageState extends State<HomePage>
     return result;
   }
 
+  /// Top slider: auto-scrolling, shows Admin products 1-10.
+  Widget _buildSliderSection() {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance.collection('homeSlider').snapshots(),
+      builder: (context, sliderSnapshot) {
+        if (sliderSnapshot.hasError ||
+            (sliderSnapshot.data?.docs ?? []).isEmpty) {
+          _productSliderCount = 0;
+          return const SizedBox.shrink();
+        }
+
+        final sliderDocs = sliderSnapshot.data!.docs;
+
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance.collection('products').snapshots(),
+          builder: (context, productSnapshot) {
+            final picks = _adminPicks(
+              sliderDocs,
+              productSnapshot.data?.docs ?? <QueryDocumentSnapshot>[],
+            ).take(_sliderSize).toList();
+
+            return _buildProductAutoSlider(picks);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildProductAutoSlider(List<QueryDocumentSnapshot> sliderProducts) {
+    _productSliderCount = sliderProducts.length;
+
+    if (_productSliderCount == 0) {
+      return const SizedBox.shrink();
+    }
+
+    if (_productSliderIndex >= _productSliderCount) {
+      _productSliderIndex = 0;
+    }
+
+    return Container(
+      height: 122,
+      color: Colors.white,
+      child: ListView.builder(
+        controller: _productSliderController,
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        itemCount: sliderProducts.length,
+        itemBuilder: (context, index) {
+          final doc = sliderProducts[index];
+
+          final data = doc.data() as Map<String, dynamic>;
+
+          final name = data['name']?.toString() ?? 'Unnamed Product';
+
+          final imageUrl = data['imageUrl']?.toString().trim() ?? '';
+
+          return SizedBox(
+            width: 98,
+            child: GestureDetector(
+              onTap: () {
+                _openProductDetails(productId: doc.id, product: data);
+              },
+              child: Container(
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.grey.shade200),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.07),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      height: 72,
+                      width: double.infinity,
+                      child: imageUrl.isNotEmpty
+                          ? Image.network(
+                              imageUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  color: Colors.grey.shade100,
+                                  child: const Icon(
+                                    Icons.image_outlined,
+                                    color: Colors.grey,
+                                  ),
+                                );
+                              },
+                            )
+                          : Container(
+                              color: Colors.grey.shade100,
+                              child: const Icon(
+                                Icons.image_outlined,
+                                color: Colors.grey,
+                              ),
+                            ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(6, 4, 6, 3),
+                      child: Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: Text(
+                        _formatBdtPrice(data),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.redAccent,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   /// Horizontal slider shown inside the product feed.
   /// It has no shared controller, so it can appear many times.
   Widget _buildAdminPickSlider(List<QueryDocumentSnapshot> picks) {
@@ -955,7 +1144,9 @@ class _HomePageState extends State<HomePage>
 
       // Admin slider after every block. Each slider shows the next
       // 10 Admin products; when they run out, no more sliders.
-      final sliderStart = blockNo * _sliderSize;
+      // Admin products 1-10 are in the top slider, so the feed
+      // sliders start from product 11.
+      final sliderStart = (blockNo + 1) * _sliderSize;
 
       if (sliderStart < picks.length) {
         final sliderEnd = sliderStart + _sliderSize > picks.length
@@ -971,9 +1162,9 @@ class _HomePageState extends State<HomePage>
         );
       }
 
-      // Native ad after every 2nd block (below the slider),
+      // Native ad after every block (below the slider),
       // never after the last block. Strip and card styles alternate.
-      if (blockNo.isOdd && end < docs.length) {
+      if (end < docs.length) {
         slivers.add(
           SliverToBoxAdapter(
             child: NativeAdCard(
@@ -1633,6 +1824,7 @@ class _HomePageState extends State<HomePage>
                       children: [
                         _buildSearchBar(),
                         _buildCategoriesBar(),
+                        _buildSliderSection(),
                       ],
                     ),
                   ),
