@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import 'home_page.dart';
 import 'app_settings.dart';
@@ -12,6 +13,11 @@ Future<void> main() async {
   await Firebase.initializeApp();
 
   await AppSettings.load();
+
+  // AdMob শুরু করা। ব্যর্থ হলেও অ্যাপ চলবে।
+  try {
+    await MobileAds.instance.initialize();
+  } catch (_) {}
 
   runApp(const MyApp());
 }
