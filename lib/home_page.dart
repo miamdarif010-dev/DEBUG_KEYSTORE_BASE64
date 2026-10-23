@@ -20,6 +20,7 @@ import 'global_notifications_page.dart';
 import 'coupon_page.dart';
 import 'price_discount.dart';
 import 'product_share.dart';
+import 'native_ad_card.dart';
 
 part 'home_page_image_search.dart';
 
@@ -1634,29 +1635,27 @@ class _HomePageState extends State<HomePage>
                           favoriteIds.add(favoriteDoc.id);
                         }
 
-                        return GridView.builder(
-                          padding: const EdgeInsets.all(8),
-                          gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            childAspectRatio: 0.75,
-                            crossAxisSpacing: 8,
-                            mainAxisSpacing: 8,
+                        // PRODUCT GRID with a slim native ad strip
+                        // after every few products.
+                        return CustomScrollView(
+                          slivers: buildProductSlivers(
+                            count: filteredDocs.length,
+                            firstAdAfter: 6,
+                            adEvery: 8,
+                            itemBuilder: (index) {
+                              final productDoc = filteredDocs[index];
+
+                              final data =
+                                  productDoc.data() as Map<String, dynamic>;
+
+                              return _buildProductCard(
+                                user: user,
+                                productId: productDoc.id,
+                                data: data,
+                                isFavorite: favoriteIds.contains(productDoc.id),
+                              );
+                            },
                           ),
-                          itemCount: filteredDocs.length,
-                          itemBuilder: (context, index) {
-                            final productDoc = filteredDocs[index];
-
-                            final data =
-                                productDoc.data() as Map<String, dynamic>;
-
-                            return _buildProductCard(
-                              user: user,
-                              productId: productDoc.id,
-                              data: data,
-                              isFavorite: favoriteIds.contains(productDoc.id),
-                            );
-                          },
                         );
                       },
                     );
