@@ -37,7 +37,7 @@ class _HomePageState extends State<HomePage>
   int _selectedIndex = 0;
   int _selectedCategory = 0;
 
-  // Search bar + categories + slider hide when scrolling down,
+  // Search bar + categories hide when scrolling down,
   // and come back when scrolling up.
   bool _showHeader = true;
 
@@ -48,13 +48,11 @@ class _HomePageState extends State<HomePage>
   late AnimationController _couponAnimationController;
   late Animation<double> _couponOpacity;
 
-  // PRODUCT AUTO SLIDER
-  Timer? _productSliderTimer;
-
-  final ScrollController _productSliderController = ScrollController();
-
-  int _productSliderIndex = 0;
-  int _productSliderCount = 0;
+  // FEED LAYOUT
+  // First block: 4 products (2x2), then the Admin slider.
+  // Every later block: 8 products, then the Admin slider again.
+  static const int _firstBlockSize = 4;
+  static const int _nextBlockSize = 8;
 
   // CATEGORIES (managed by the Admin, loaded from Firestore).
   // "All" is always first. The default list is shown until the
@@ -113,49 +111,11 @@ class _HomePageState extends State<HomePage>
         curve: Curves.easeInOut,
       ),
     );
-
-    // START PRODUCT AUTO SLIDER
-    _productSliderTimer = Timer.periodic(
-      const Duration(milliseconds: 1500),
-      (_) {
-        if (!mounted ||
-            !_productSliderController.hasClients ||
-            _productSliderCount <= 1) {
-          return;
-        }
-
-        _productSliderIndex++;
-
-        if (_productSliderIndex >= _productSliderCount) {
-          _productSliderIndex = 0;
-
-          _productSliderController.jumpTo(0);
-          return;
-        }
-
-        final targetOffset = _productSliderIndex * 106.0;
-
-        final maxScrollExtent =
-            _productSliderController.position.maxScrollExtent;
-
-        final safeOffset =
-            targetOffset > maxScrollExtent ? maxScrollExtent : targetOffset;
-
-        _productSliderController.animateTo(
-          safeOffset,
-          duration: const Duration(milliseconds: 650),
-          curve: Curves.easeInOut,
-        );
-      },
-    );
   }
 
   @override
   void dispose() {
     _categorySubscription?.cancel();
-
-    _productSliderTimer?.cancel();
-    _productSliderController.dispose();
 
     _couponAnimationController.dispose();
     _searchController.dispose();
@@ -773,124 +733,250 @@ class _HomePageState extends State<HomePage>
   }
 
   // =========================================================
-  // PRODUCT AUTO SLIDER
+  // ADMIN PICKS (products chosen by the Admin only)
   // =========================================================
 
-  Widget _buildProductAutoSlider(List<QueryDocumentSnapshot> products) {
-    final sliderProducts = products.take(10).toList();
+  /// Products the Admin added to `homeSlider`, in the order the
+  /// Admin added them. Deleted products and the user's own products
+  /// are skipped.
+  List<QueryDocumentSnapshot> _adminPicks(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> sliderDocs,
+    List<QueryDocumentSnapshot> allDocs,
+  ) {
+    final sorted = List.of(sliderDocs)
+      ..sort((a, b) {
+        final oa = a.data()['order'];
+        final ob = b.data()['order'];
 
-    _productSliderCount = sliderProducts.length;
+        final na = oa is num ? oa.toInt() : 0;
+        final nb = ob is num ? ob.toInt() : 0;
 
-    if (_productSliderCount == 0) {
-      return const SizedBox.shrink();
+        return na.compareTo(nb);
+      });
+
+    final byId = <String, QueryDocumentSnapshot>{
+      for (final d in allDocs) d.id: d,
+    };
+
+    final result = <QueryDocumentSnapshot>[];
+
+    for (final s in sorted) {
+      final doc = byId[s.id];
+
+      // Skip products that were deleted.
+      if (doc == null) continue;
+
+      // Nobody sees their own product.
+      if (_isOwnProduct(doc.data() as Map<String, dynamic>)) continue;
+
+      result.add(doc);
     }
 
-    if (_productSliderIndex >= _productSliderCount) {
-      _productSliderIndex = 0;
-    }
+    return result;
+  }
 
+  /// Horizontal slider shown inside the product feed.
+  /// It has no shared controller, so it can appear many times.
+  Widget _buildAdminPickSlider(List<QueryDocumentSnapshot> picks) {
     return Container(
-      height: 122,
       color: Colors.white,
-      child: ListView.builder(
-        controller: _productSliderController,
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        itemCount: sliderProducts.length,
-        itemBuilder: (context, index) {
-          final doc = sliderProducts[index];
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.only(top: 8, bottom: 6),
+      height: 158,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              'Admin Picks',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Expanded(
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              itemCount: picks.length,
+              itemBuilder: (context, index) {
+                final doc = picks[index];
 
-          final data = doc.data() as Map<String, dynamic>;
+                final data = doc.data() as Map<String, dynamic>;
 
-          final name = data['name']?.toString() ?? 'Unnamed Product';
+                final name = data['name']?.toString() ?? 'Unnamed Product';
 
-          final imageUrl = data['imageUrl']?.toString().trim() ?? '';
+                final imageUrl = data['imageUrl']?.toString().trim() ?? '';
 
-          final price = _formatBdtPrice(data);
-
-          return SizedBox(
-            width: 98,
-            child: GestureDetector(
-              onTap: () {
-                _openProductDetails(productId: doc.id, product: data);
-              },
-              child: Container(
-                margin: const EdgeInsets.only(right: 8),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.grey.shade200),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.07),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
+                return GestureDetector(
+                  onTap: () {
+                    _openProductDetails(productId: doc.id, product: data);
+                  },
+                  child: Container(
+                    width: 100,
+                    margin: const EdgeInsets.only(right: 8),
+                    clipBehavior: Clip.antiAlias,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.grey.shade200),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.07),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      height: 72,
-                      width: double.infinity,
-                      child: imageUrl.isNotEmpty
-                          ? Image.network(
-                              imageUrl,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Container(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          height: 80,
+                          width: double.infinity,
+                          child: imageUrl.isNotEmpty
+                              ? Image.network(
+                                  imageUrl,
+                                  fit: BoxFit.cover,
+                                  errorBuilder:
+                                      (context, error, stackTrace) {
+                                    return Container(
+                                      color: Colors.grey.shade100,
+                                      child: const Icon(
+                                        Icons.image_outlined,
+                                        color: Colors.grey,
+                                      ),
+                                    );
+                                  },
+                                )
+                              : Container(
                                   color: Colors.grey.shade100,
                                   child: const Icon(
                                     Icons.image_outlined,
                                     color: Colors.grey,
                                   ),
-                                );
-                              },
-                            )
-                          : Container(
-                              color: Colors.grey.shade100,
-                              child: const Icon(
-                                Icons.image_outlined,
-                                color: Colors.grey,
-                              ),
+                                ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(6, 4, 6, 0),
+                          child: Text(
+                            name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
                             ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(6, 4, 6, 3),
-                      child: Text(
-                        name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      child: Text(
-                        price,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.redAccent,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: Text(
+                            _formatBdtPrice(data),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.redAccent,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
+                  ),
+                );
+              },
             ),
-          );
-        },
+          ),
+        ],
       ),
     );
+  }
+
+  // =========================================================
+  // FEED: products + Admin slider + native ads
+  //
+  // 4 products (2x2) -> Admin slider -> 8 products -> Admin slider
+  // -> (ad) -> 8 products -> Admin slider -> ... and so on.
+  // =========================================================
+
+  List<Widget> _buildFeedSlivers({
+    required User? user,
+    required List<QueryDocumentSnapshot> docs,
+    required Set<String> favoriteIds,
+    required List<QueryDocumentSnapshot> picks,
+  }) {
+    final slivers = <Widget>[];
+
+    var start = 0;
+    var block = _firstBlockSize;
+    var blockNo = 0;
+    var adNo = 0;
+
+    while (start < docs.length) {
+      final end = start + block > docs.length ? docs.length : start + block;
+
+      final from = start;
+
+      slivers.add(
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 0.75,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, i) {
+                final productDoc = docs[from + i];
+
+                final data = productDoc.data() as Map<String, dynamic>;
+
+                return _buildProductCard(
+                  user: user,
+                  productId: productDoc.id,
+                  data: data,
+                  isFavorite: favoriteIds.contains(productDoc.id),
+                );
+              },
+              childCount: end - from,
+            ),
+          ),
+        ),
+      );
+
+      // Admin slider after every block.
+      if (picks.isNotEmpty) {
+        slivers.add(
+          SliverToBoxAdapter(child: _buildAdminPickSlider(picks)),
+        );
+      }
+
+      // Native ad after every 2nd block (below the slider),
+      // never after the last block. Strip and card styles alternate.
+      if (blockNo.isOdd && end < docs.length) {
+        slivers.add(
+          SliverToBoxAdapter(
+            child: NativeAdCard(
+              key: ValueKey('native_ad_$adNo'),
+              productStyle: adNo.isOdd,
+            ),
+          ),
+        );
+
+        adNo++;
+      }
+
+      start = end;
+      block = _nextBlockSize;
+      blockNo++;
+    }
+
+    return slivers;
   }
 
   // =========================================================
@@ -1449,74 +1535,6 @@ class _HomePageState extends State<HomePage>
   }
 
   // =========================================================
-  // SLIDER SECTION (products chosen by the Admin only)
-  // =========================================================
-
-  Widget _buildSliderSection() {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance.collection('homeSlider').snapshots(),
-      builder: (context, sliderSnapshot) {
-        if (sliderSnapshot.hasError) {
-          _productSliderCount = 0;
-
-          return const SizedBox.shrink();
-        }
-
-        final List<QueryDocumentSnapshot<Map<String, dynamic>>> sliderDocs =
-            List.of(sliderSnapshot.data?.docs ?? []);
-
-        // Keep the order the Admin added them in.
-        sliderDocs.sort((a, b) {
-          final oa = a.data()['order'];
-          final ob = b.data()['order'];
-
-          final na = oa is num ? oa.toInt() : 0;
-          final nb = ob is num ? ob.toInt() : 0;
-
-          return na.compareTo(nb);
-        });
-
-        final sliderIds = sliderDocs.map((d) => d.id).toList();
-
-        if (sliderIds.isEmpty) {
-          _productSliderCount = 0;
-
-          return const SizedBox.shrink();
-        }
-
-        return StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('products').snapshots(),
-          builder: (context, productSnapshot) {
-            final Map<String, QueryDocumentSnapshot> byId = {
-              for (final d
-                  in productSnapshot.data?.docs ?? <QueryDocumentSnapshot>[])
-                d.id: d,
-            };
-
-            final sliderProducts = <QueryDocumentSnapshot>[];
-
-            for (final id in sliderIds) {
-              final doc = byId[id];
-
-              // Skip products that were deleted.
-              if (doc == null) continue;
-
-              // Nobody sees their own product.
-              if (_isOwnProduct(doc.data() as Map<String, dynamic>)) {
-                continue;
-              }
-
-              sliderProducts.add(doc);
-            }
-
-            return _buildProductAutoSlider(sliderProducts);
-          },
-        );
-      },
-    );
-  }
-
-  // =========================================================
   // SCROLL: hide / show the header
   // =========================================================
 
@@ -1585,7 +1603,7 @@ class _HomePageState extends State<HomePage>
           // BODY
           body: Column(
             children: [
-              // HEADER: search + categories + slider.
+              // HEADER: search + categories.
               // Slides up when scrolling down, back when scrolling up.
               ClipRect(
                 child: AnimatedAlign(
@@ -1600,7 +1618,6 @@ class _HomePageState extends State<HomePage>
                       children: [
                         _buildSearchBar(),
                         _buildCategoriesBar(),
-                        _buildSliderSection(),
                       ],
                     ),
                   ),
@@ -1684,31 +1701,31 @@ class _HomePageState extends State<HomePage>
                           favoriteIds.add(favoriteDoc.id);
                         }
 
-                        // PRODUCT GRID with native ads
-                        // (strip + product-card style) between products.
-                        return NotificationListener<UserScrollNotification>(
-                          onNotification: _onProductScroll,
-                          child: CustomScrollView(
-                            slivers: buildProductSlivers(
-                              count: filteredDocs.length,
-                              firstAdAfter: 6,
-                              adEvery: 8,
-                              itemBuilder: (index) {
-                                final productDoc = filteredDocs[index];
+                        // Admin-chosen products (homeSlider collection).
+                        return StreamBuilder<
+                            QuerySnapshot<Map<String, dynamic>>>(
+                          stream: FirebaseFirestore.instance
+                              .collection('homeSlider')
+                              .snapshots(),
+                          builder: (context, sliderSnapshot) {
+                            final picks = _adminPicks(
+                              sliderSnapshot.data?.docs ?? [],
+                              allDocs,
+                            );
 
-                                final data =
-                                    productDoc.data() as Map<String, dynamic>;
-
-                                return _buildProductCard(
+                            return NotificationListener<
+                                UserScrollNotification>(
+                              onNotification: _onProductScroll,
+                              child: CustomScrollView(
+                                slivers: _buildFeedSlivers(
                                   user: user,
-                                  productId: productDoc.id,
-                                  data: data,
-                                  isFavorite:
-                                      favoriteIds.contains(productDoc.id),
-                                );
-                              },
-                            ),
-                          ),
+                                  docs: filteredDocs,
+                                  favoriteIds: favoriteIds,
+                                  picks: picks,
+                                ),
+                              ),
+                            );
+                          },
                         );
                       },
                     );
