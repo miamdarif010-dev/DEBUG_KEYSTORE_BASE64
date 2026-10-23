@@ -54,6 +54,10 @@ class _HomePageState extends State<HomePage>
   static const int _firstBlockSize = 4;
   static const int _nextBlockSize = 8;
 
+  // Products per Admin slider (1st slider = Admin products 1-10,
+  // 2nd slider = 11-20, and so on).
+  static const int _sliderSize = 10;
+
   // CATEGORIES (managed by the Admin, loaded from Firestore).
   // "All" is always first. The default list is shown until the
   // Firestore list arrives, so the bar is never empty.
@@ -949,10 +953,21 @@ class _HomePageState extends State<HomePage>
         ),
       );
 
-      // Admin slider after every block.
-      if (picks.isNotEmpty) {
+      // Admin slider after every block. Each slider shows the next
+      // 10 Admin products; when they run out, no more sliders.
+      final sliderStart = blockNo * _sliderSize;
+
+      if (sliderStart < picks.length) {
+        final sliderEnd = sliderStart + _sliderSize > picks.length
+            ? picks.length
+            : sliderStart + _sliderSize;
+
         slivers.add(
-          SliverToBoxAdapter(child: _buildAdminPickSlider(picks)),
+          SliverToBoxAdapter(
+            child: _buildAdminPickSlider(
+              picks.sublist(sliderStart, sliderEnd),
+            ),
+          ),
         );
       }
 
