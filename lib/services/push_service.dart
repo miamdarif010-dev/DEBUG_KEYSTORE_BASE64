@@ -85,9 +85,16 @@ class PushService {
     } catch (_) {}
   }
 
+  /// Retries a few times: for a brand new account the users/{uid}
+  /// document is created a moment after sign-in.
   Future<void> _save(String token) async {
-    try {
-      await _fn.httpsCallable('savePushToken').call({'token': token});
-    } catch (_) {}
+    for (var i = 0; i < 4; i++) {
+      try {
+        await _fn.httpsCallable('savePushToken').call({'token': token});
+        return;
+      } catch (_) {
+        await Future.delayed(const Duration(seconds: 4));
+      }
+    }
   }
 }
