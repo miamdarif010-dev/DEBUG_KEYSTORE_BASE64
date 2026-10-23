@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'home_page.dart';
 import 'app_settings.dart';
 import 'reseller_link.dart';
+import 'services/push_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,6 +37,26 @@ class _MyAppState extends State<MyApp> {
     // Start after the first frame so the Navigator exists.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _linkHandler.start();
+
+      // Push notifications: token saving + what happens on tap.
+      PushService.instance.init(
+        onOpen: (data) {
+          final link = (data['link'] ?? '').toString();
+          if (link.isNotEmpty) {
+            _linkHandler.openFromPush(link);
+          }
+        },
+        onForeground: (title, body) {
+          final ctx = _navigatorKey.currentContext;
+          if (ctx == null) return;
+          ScaffoldMessenger.maybeOf(ctx)?.showSnackBar(
+            SnackBar(
+              content: Text(body.isEmpty ? title : '$title\n$body'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        },
+      );
     });
   }
 
