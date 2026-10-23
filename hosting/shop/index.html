@@ -82,7 +82,7 @@ footer h4{color:#fff;margin:0 0 10px;font-size:14px}footer p{margin:6px 0}
 </style>
 </head>
 <body>
-<div class="strip"><div class="w"><div>🚚 সারা দেশে ডেলিভারি | ঢাকায় ৳60 | ঢাকার বাইরে ৳120</div><div><a href="buynova://r">📱 অ্যাপে খুলুন</a></div></div></div>
+<div class="strip"><div class="w"><div>🚚 সারা বাংলাদেশে ডেলিভারি</div><div><a href="buynova://r">📱 অ্যাপে খুলুন</a></div></div></div>
 <header>
  <div class="w hb"><a href="#/" class="logo"><div class="lg">🛍️</div>Buy<b>Nova</b></a>
   <div class="sr"><input id="hq" placeholder="পণ্য খুঁজুন... (যেমন: ফোন, ঘড়ি)"><button id="hs">🔍</button></div>
@@ -133,6 +133,13 @@ const pc = (i) => (i.originalPrice && i.originalPrice > i.price) ? Math.round((1
 const page = (h) => { $app.innerHTML = `<div class="w">${h}</div>`; };
 const toast = (t) => { const d = document.createElement("div"); d.className = "toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 1500); };
 $("dl").href = DOWNLOAD_URL;
+const IN_APP = /FBAN|FBAV|FB_IAB|Messenger|Instagram|Line\/|TikTok|Snapchat|; wv\)/i.test(navigator.userAgent);
+$("dl").addEventListener("click", (e) => {
+  e.preventDefault();
+  if (IN_APP) { alert("এই ব্রাউজারে ডাউনলোড হয় না। ⋮ মেনু থেকে Chrome-এ খুলুন চাপুন, তারপর আবার চেষ্টা করুন।"); return; }
+  toast("ডাউনলোড শুরু হচ্ছে...");
+  window.location.href = DOWNLOAD_URL;
+});
 
 // ---------- cart ----------
 function getCart() { try { return JSON.parse(localStorage.getItem("bn_cart") || "[]"); } catch (e) { return []; } }
@@ -256,6 +263,7 @@ async function viewProduct(kind, id) {
       <div class="pprice">${off ? `<s>${money(l.originalPrice)}</s>` : ""}${money(l.price)}${off ? ` <span class="off" style="position:static;display:inline-block;vertical-align:middle">-${off}%</span>` : ""}</div>
       <div class="chips"><span class="chip">✔ মানসম্মত পণ্য</span><span class="chip">♡ পছন্দের কালেকশন</span><span class="chip">★ BuyNova</span>${l.category ? `<span class="chip">${esc(l.category)}</span>` : ""}</div>
       <div class="qty"><button id="mi">−</button><span id="qv">1</span><button id="pl">+</button></div>
+      <div class="sum t" style="margin-top:0"><span>মোট (<i id="qn" style="font-style:normal">1</i>টি)</span><span id="tot">${money(l.price)}</span></div>
       <div class="row"><button class="btn out" id="addC">🛒 কার্টে রাখুন</button><button class="btn" id="buyN">এখনই কিনুন</button></div>
       <div class="row"><a class="btn out" href="buynova://${kind}/${encodeURIComponent(id)}">📱 অ্যাপে খুলুন</a><button class="btn out" id="cpy">🔗 লিংক কপি</button></div>
       <div id="pmsg"></div></div></div>
@@ -265,8 +273,9 @@ async function viewProduct(kind, id) {
     $("mainImg").src = images[+t.dataset.n];
     document.querySelectorAll(".thumbs img").forEach(x => x.classList.remove("on")); t.classList.add("on");
   });
-  $("mi").onclick = () => { qty = Math.max(1, qty - 1); $("qv").textContent = qty; };
-  $("pl").onclick = () => { qty = Math.min(100, qty + 1); $("qv").textContent = qty; };
+  const upd = () => { $("qv").textContent = qty; $("qn").textContent = qty; $("tot").textContent = money(l.price * qty); };
+  $("mi").onclick = () => { qty = Math.max(1, qty - 1); upd(); };
+  $("pl").onclick = () => { qty = Math.min(100, qty + 1); upd(); };
   $("addC").onclick = () => { addToCart(item, qty); $("pmsg").innerHTML = `<div class="ok">কার্টে যোগ হয়েছে। <a href="#/cart" style="text-decoration:underline">কার্ট দেখুন</a></div>`; };
   $("buyN").onclick = () => { addToCart(item, qty); location.hash = "#/checkout"; };
   $("cpy").onclick = () => {
