@@ -3,13 +3,10 @@ import 'package:flutter/material.dart';
 
 import 'video_player_page.dart';
 
-/// Shows the published videos of ONE user (from the `sellerVideos`
-/// collection, the same one the Videos/Reels feed uses) as a grid.
-///
-/// Used on the profile page:
-///  - own profile  -> isOwner: true  (shows [headerAction], e.g. "Manage")
-///  - other's page -> isOwner: false
-class UserVideosGrid extends StatelessWidget {
+/// Published videos of ONE user as a 3-column grid (TikTok profile style).
+/// Tapping a video opens the full-screen reels pager at that video, and you
+/// can swipe through the rest of the user's videos.
+class UserVideosGrid extends StatefulWidget {
   final String userId;
   final bool isOwner;
   final VoidCallback? onUpload;
@@ -23,56 +20,62 @@ class UserVideosGrid extends StatelessWidget {
     this.onManage,
   });
 
-  int _toInt(dynamic value) {
-    if (value is num) {
-      return value.toInt();
-    }
+  @override
+  State<UserVideosGrid> createState() => _UserVideosGridState();
+}
 
+class _UserVideosGridState extends State<UserVideosGrid> {
+  static const int _limit = 60;
+
+  late Stream<QuerySnapshot<Map<String, dynamic>>> _stream;
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> _buildStream() {
+    // Two equality filters only, so no composite index is needed.
+    return FirebaseFirestore.instance
+        .collection('sellerVideos')
+        .where('userId', isEqualTo: widget.userId)
+        .where('status', isEqualTo: 'published')
+        .limit(_limit)
+        .snapshots();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _stream = _buildStream();
+  }
+
+  @override
+  void didUpdateWidget(covariant UserVideosGrid oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.userId != widget.userId) {
+      _stream = _buildStream();
+    }
+  }
+
+  int _toInt(dynamic value) {
+    if (value is num) return value.toInt();
     return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
   String _formatCount(int value) {
-    if (value >= 1000000) {
-      return '${(value / 1000000).toStringAsFixed(1)}M';
-    }
-
-    if (value >= 1000) {
-      return '${(value / 1000).toStringAsFixed(1)}K';
-    }
-
+    if (value >= 1000000) return '${(value / 1000000).toStringAsFixed(1)}M';
+    if (value >= 1000) return '${(value / 1000).toStringAsFixed(1)}K';
     return value.toString();
   }
 
-  void _openVideo(
-    BuildContext context,
-    Map<String, dynamic> data,
-  ) {
-    final videoUrl = (data['videoUrl'] ?? '').toString();
-
-    if (videoUrl.isEmpty) {
+  void _openVideo(List<Map<String, dynamic>> videos, int index) {
+    if ((videos[index]['videoUrl'] ?? '').toString().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Video URL is not available.'),
-        ),
+        const SnackBar(content: Text('Video URL is not available.')),
       );
       return;
     }
 
-    final name = (data['userName'] ??
-            data['sellerName'] ??
-            'BuyNova User')
-        .toString();
-
-    final caption = (data['caption'] ?? '').toString();
-
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => VideoPlayerPage(
-          videoUrl: videoUrl,
-          sellerName: name,
-          caption: caption,
-        ),
+        builder: (_) => VideoPlayerPage(videos: videos, initialIndex: index),
       ),
     );
   }
@@ -81,11 +84,7 @@ class UserVideosGrid extends StatelessWidget {
     return Container(
       color: Colors.black12,
       child: const Center(
-        child: Icon(
-          Icons.video_library_outlined,
-          color: Colors.grey,
-          size: 30,
-        ),
+        child: Icon(Icons.video_library_outlined, color: Colors.grey, size: 30),
       ),
     );
   }
@@ -93,35 +92,23 @@ class UserVideosGrid extends StatelessWidget {
   Widget _header(int count) {
     return Row(
       children: [
-        const Icon(
-          Icons.play_circle_fill,
-          color: Colors.redAccent,
-        ),
+        const Icon(Icons.play_circle_fill, color: Colors.redAccent),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             count == 0 ? 'Videos' : 'Videos ($count)',
-            style: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
           ),
         ),
-        if (isOwner && onUpload != null)
+        if (widget.isOwner && widget.onUpload != null)
           IconButton(
             tooltip: 'Upload video',
             visualDensity: VisualDensity.compact,
-            onPressed: onUpload,
-            icon: const Icon(
-              Icons.add_circle_outline,
-              color: Colors.redAccent,
-            ),
+            onPressed: widget.onUpload,
+            icon: const Icon(Icons.add_circle_outline, color: Colors.redAccent),
           ),
-        if (isOwner && onManage != null)
-          TextButton(
-            onPressed: onManage,
-            child: const Text('Manage'),
-          ),
+        if (widget.isOwner && widget.onManage != null)
+          TextButton(onPressed: widget.onManage, child: const Text('Manage')),
       ],
     );
   }
@@ -143,13 +130,8 @@ class UserVideosGrid extends StatelessWidget {
           ),
         ],
       ),
-      // Two equality filters only, so no composite index is needed.
       child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('sellerVideos')
-            .where('userId', isEqualTo: userId)
-            .where('status', isEqualTo: 'published')
-            .snapshots(),
+        stream: _stream,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Column(
@@ -165,16 +147,15 @@ class UserVideosGrid extends StatelessWidget {
             );
           }
 
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _header(0),
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 22),
-                  child: Center(
-                    child: CircularProgressIndicator(),
-                  ),
+                  child: Center(child: CircularProgressIndicator()),
                 ),
               ],
             );
@@ -186,10 +167,8 @@ class UserVideosGrid extends StatelessWidget {
           docs.sort((a, b) {
             final ta = a.data()['createdAt'];
             final tb = b.data()['createdAt'];
-
             final da = ta is Timestamp ? ta.millisecondsSinceEpoch : 0;
             final db = tb is Timestamp ? tb.millisecondsSinceEpoch : 0;
-
             return db.compareTo(da);
           });
 
@@ -202,17 +181,17 @@ class UserVideosGrid extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 22),
                   child: Center(
                     child: Text(
-                      isOwner
+                      widget.isOwner
                           ? 'You have not posted any video yet.'
                           : 'No videos yet.',
                       style: const TextStyle(color: Colors.grey),
                     ),
                   ),
                 ),
-                if (isOwner && onUpload != null)
+                if (widget.isOwner && widget.onUpload != null)
                   Center(
                     child: ElevatedButton.icon(
-                      onPressed: onUpload,
+                      onPressed: widget.onUpload,
                       icon: const Icon(Icons.upload),
                       label: const Text('Post a video'),
                     ),
@@ -220,6 +199,10 @@ class UserVideosGrid extends StatelessWidget {
               ],
             );
           }
+
+          final videos = docs
+              .map((d) => <String, dynamic>{'id': d.id, ...d.data()})
+              .toList();
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -229,47 +212,33 @@ class UserVideosGrid extends StatelessWidget {
               GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: docs.length,
-                gridDelegate:
-                    const SliverGridDelegateWithFixedCrossAxisCount(
+                itemCount: videos.length,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 3,
                   crossAxisSpacing: 6,
                   mainAxisSpacing: 6,
                   childAspectRatio: 0.62,
                 ),
                 itemBuilder: (context, index) {
-                  final data = docs[index].data();
-
-                  final thumbnailUrl =
-                      (data['thumbnailUrl'] ?? '').toString();
-
-                  final views = _toInt(
-                    data['viewCount'] ?? data['views'],
-                  );
+                  final data = videos[index];
+                  final thumb = (data['thumbnailUrl'] ?? '').toString();
+                  final views = _toInt(data['viewCount'] ?? data['views']);
 
                   return GestureDetector(
-                    onTap: () => _openVideo(context, data),
+                    onTap: () => _openVideo(videos, index),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(10),
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          if (thumbnailUrl.isNotEmpty)
+                          if (thumb.isNotEmpty)
                             Image.network(
-                              thumbnailUrl,
+                              thumb,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  _placeholder(),
+                              errorBuilder: (_, __, ___) => _placeholder(),
                             )
                           else
                             _placeholder(),
-                          const Center(
-                            child: Icon(
-                              Icons.play_circle_outline,
-                              color: Colors.white,
-                              size: 34,
-                            ),
-                          ),
                           Positioned(
                             left: 0,
                             right: 0,
@@ -283,20 +252,16 @@ class UserVideosGrid extends StatelessWidget {
                                 gradient: LinearGradient(
                                   begin: Alignment.bottomCenter,
                                   end: Alignment.topCenter,
-                                  colors: [
-                                    Colors.black87,
-                                    Colors.transparent,
-                                  ],
+                                  colors: [Colors.black87, Colors.transparent],
                                 ),
                               ),
                               child: Row(
                                 children: [
                                   const Icon(
-                                    Icons.visibility_outlined,
+                                    Icons.play_arrow,
                                     color: Colors.white,
-                                    size: 13,
+                                    size: 15,
                                   ),
-                                  const SizedBox(width: 3),
                                   Text(
                                     _formatCount(views),
                                     style: const TextStyle(
