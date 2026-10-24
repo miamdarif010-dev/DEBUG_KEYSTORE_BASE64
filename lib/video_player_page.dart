@@ -34,6 +34,9 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
   int _current = 0;
   bool _paused = false;
 
+  // Video ids whose view was already recorded in this session.
+  final Set<String> _viewed = {};
+
   @override
   void initState() {
     super.initState();
@@ -42,6 +45,37 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _prepare(_current);
     _prepare(_current + 1);
+    _recordView(_current);
+  }
+
+  /// One doc per user: sellerVideos/{id}/views/{uid}.
+  /// The Cloud Function `onViewCreated` bumps viewCount from it.
+  /// The owner's own views are not counted.
+  Future<void> _recordView(int index) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || index < 0 || index >= widget.videos.length) return;
+
+    final data = widget.videos[index];
+    final id = (data['id'] ?? '').toString();
+    if (id.isEmpty || _viewed.contains(id)) return;
+
+    _viewed.add(id);
+
+    final ownerId = (data['userId'] ?? data['sellerId'] ?? '').toString();
+    if (ownerId == user.uid) return;
+
+    try {
+      final ref = FirebaseFirestore.instance
+          .collection('sellerVideos')
+          .doc(id)
+          .collection('views')
+          .doc(user.uid);
+
+      final snap = await ref.get();
+      if (!snap.exists) {
+        await ref.set({'createdAt': FieldValue.serverTimestamp()});
+      }
+    } catch (_) {}
   }
 
   Future<void> _prepare(int i) async {
@@ -98,6 +132,7 @@ class _VideoPlayerPageState extends State<VideoPlayerPage> {
     _prepare(index);
     _prepare(index + 1);
     _prepare(index - 1);
+    _recordView(index);
 
     // Keep only previous, current and next in memory.
     final far = _controllers.keys.where((k) => (k - index).abs() > 1).toList();
@@ -505,6 +540,22 @@ class _ReelActionsState extends State<_ReelActions> {
     if (url.isEmpty) return;
 
     await Clipboard.setData(ClipboardData(text: url));
+
+    // One doc per user: sellerVideos/{id}/shares/{uid} -> shareCount.
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null && _videoId.isNotEmpty) {
+        final ref = FirebaseFirestore.instance
+            .collection('sellerVideos')
+            .doc(_videoId)
+            .collection('shares')
+            .doc(user.uid);
+        final snap = await ref.get();
+        if (!snap.exists) {
+          await ref.set({'createdAt': FieldValue.serverTimestamp()});
+        }
+      }
+    } catch (_) {}
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
