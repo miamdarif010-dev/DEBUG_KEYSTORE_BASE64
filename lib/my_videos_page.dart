@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 
 import 'add_seller_video_page.dart';
 import 'video_player_page.dart';
@@ -18,81 +18,66 @@ class _MyVideosPageState extends State<MyVideosPage> {
 
   static const int _videoLimit = 100;
 
-  // Video IDs currently being deleted (blocks double taps).
   final Set<String> _deletingIds = {};
 
-  // =========================================================
-  // OPEN ADD VIDEO
-  // =========================================================
+  // Created once, so setState() doesn't re-subscribe and flash a spinner.
+  late Stream<QuerySnapshot<Map<String, dynamic>>> _stream;
+
+  @override
+  void initState() {
+    super.initState();
+    _stream = _buildStream();
+  }
+
+  // where() + orderBy() needs a composite index (userId ASC, createdAt DESC).
+  Stream<QuerySnapshot<Map<String, dynamic>>> _buildStream() {
+    final user = currentUser;
+
+    if (user == null) return const Stream.empty();
+
+    return FirebaseFirestore.instance
+        .collection('sellerVideos')
+        .where('userId', isEqualTo: user.uid)
+        .orderBy('createdAt', descending: true)
+        .limit(_videoLimit)
+        .snapshots();
+  }
+
+  // ============================================================
+  // ACTIONS
+  // ============================================================
 
   Future<void> _openAddVideo() async {
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const AddSellerVideoPage()),
     );
-
-    if (mounted) {
-      setState(() {});
-    }
   }
 
-  // =========================================================
-  // DELETE CLOUDINARY MEDIA (server-side, best effort)
-  // =========================================================
-  //
-  // The Cloud Function checks that the caller owns the video, so
-  // the videoId is sent together with the URLs.
+  void _openVideo(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+      int index) {
+    final videos = docs
+        .map((d) => <String, dynamic>{'id': d.id, ...d.data()})
+        .toList();
 
-  Future<void> _deleteCloudinaryMedia({
-    required String videoId,
-    required String videoUrl,
-    required String thumbnailUrl,
-  }) async {
-    try {
-      await FirebaseFunctions.instanceFor(region: 'asia-northeast3')
-          .httpsCallable('deleteCloudinaryVideo')
-          .call(<String, dynamic>{
-        'videoId': videoId,
-        'videoUrl': videoUrl,
-        'thumbnailUrl': thumbnailUrl,
-      });
-    } catch (e) {
-      debugPrint('Cloudinary cleanup failed: $e');
+    if ((videos[index]['videoUrl'] ?? '').toString().isEmpty) {
+      _snack('Video URL is not available.');
+      return;
     }
-  }
 
-  // =========================================================
-  // EDIT CAPTION
-  // =========================================================
-
-  Future<void> _editCaption(String videoId, String current) async {
-    final controller = TextEditingController(text: current);
-
-    final newText = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Edit Caption'),
-        content: TextField(
-          controller: controller,
-          maxLines: 4,
-          maxLength: 500,
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () =>
-                Navigator.pop(dialogContext, controller.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => VideoPlayerPage(videos: videos, initialIndex: index),
       ),
     );
+  }
 
-    controller.dispose();
+  Future<void> _editCaption(String videoId, String current) async {
+    final newText = await showDialog<String>(
+      context: context,
+      builder: (_) => _CaptionDialog(initial: current),
+    );
 
     if (newText == null || newText == current) return;
 
@@ -105,58 +90,37 @@ class _MyVideosPageState extends State<MyVideosPage> {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Caption updated.')),
-      );
+      _snack('Caption updated.');
     } catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not update caption: $e')),
-      );
+      _snack('Could not update caption: $e');
     }
   }
 
-  // =========================================================
-  // DELETE VIDEO
-  // =========================================================
-
   Future<void> _deleteVideo(String videoId) async {
     final user = currentUser;
-
-    if (user == null) return;
-
-    if (_deletingIds.contains(videoId)) return;
+    if (user == null || _deletingIds.contains(videoId)) return;
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Delete Video'),
-          content: const Text('Are you sure you want to delete this video?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Delete'),
-            ),
-          ],
-        );
-      },
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Video'),
+        content: const Text('Are you sure you want to delete this video?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
     );
 
-    if (confirmed != true) return;
+    if (confirmed != true || !mounted) return;
 
-    if (_deletingIds.contains(videoId)) return;
-
-    setState(() {
-      _deletingIds.add(videoId);
-    });
+    setState(() => _deletingIds.add(videoId));
 
     try {
       final videoRef =
@@ -165,313 +129,204 @@ class _MyVideosPageState extends State<MyVideosPage> {
       final videoDoc = await videoRef.get();
 
       if (!videoDoc.exists) {
-        if (!mounted) return;
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Video no longer exists.')),
-        );
-
-        setState(() {
-          _deletingIds.remove(videoId);
-        });
-
+        _snack('Video no longer exists.');
         return;
       }
 
       final data = videoDoc.data();
-
       final ownerId = (data?['userId'] ?? '').toString();
       final sellerId = (data?['sellerId'] ?? '').toString();
 
       if (ownerId != user.uid && sellerId != user.uid) {
-        if (!mounted) return;
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('You can only delete your own videos.')),
-        );
-
-        setState(() {
-          _deletingIds.remove(videoId);
-        });
-
+        _snack('You can only delete your own videos.');
         return;
       }
 
       final videoUrl = (data?['videoUrl'] ?? '').toString();
       final thumbnailUrl = (data?['thumbnailUrl'] ?? '').toString();
 
-      // Cloudinary first (the function reads this document to check the
-      // owner), then the Firestore record.
+      // Cloudinary first (the function reads this doc to check the owner),
+      // then the Firestore record.
       if (videoUrl.isNotEmpty) {
-        await _deleteCloudinaryMedia(
-          videoId: videoId,
-          videoUrl: videoUrl,
-          thumbnailUrl: thumbnailUrl,
-        );
+        try {
+          await FirebaseFunctions.instanceFor(region: 'asia-northeast3')
+              .httpsCallable('deleteCloudinaryVideo')
+              .call(<String, dynamic>{
+            'videoId': videoId,
+            'videoUrl': videoUrl,
+            'thumbnailUrl': thumbnailUrl,
+          });
+        } catch (e) {
+          debugPrint('Cloudinary cleanup failed: $e');
+        }
       }
 
       await videoRef.delete();
 
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Video deleted successfully.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-
-      setState(() {
-        _deletingIds.remove(videoId);
-      });
+      _snack('Video deleted successfully.');
     } catch (e) {
-      if (!mounted) return;
-
-      setState(() {
-        _deletingIds.remove(videoId);
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not delete video: $e'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      _snack('Could not delete video: $e');
+    } finally {
+      if (mounted) setState(() => _deletingIds.remove(videoId));
     }
   }
 
-  // =========================================================
-  // OPEN VIDEO
-  // =========================================================
+  void _snack(String message) {
+    if (!mounted) return;
 
-  void _openVideo(Map<String, dynamic> data) {
-    final videoUrl = (data['videoUrl'] ?? '').toString();
-
-    if (videoUrl.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Video URL is not available.')),
-      );
-
-      return;
-    }
-
-    final sellerName =
-        (data['userName'] ?? data['sellerName'] ?? 'BuyNova User').toString();
-
-    final caption = (data['caption'] ?? '').toString();
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => VideoPlayerPage(
-          videoUrl: videoUrl,
-          sellerName: sellerName,
-          caption: caption,
-        ),
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
 
-  // =========================================================
-  // VIDEO QUERY
-  // =========================================================
-  //
-  // where() + orderBy() needs a composite index (userId ASC,
-  // createdAt DESC). If missing, the error contains a link that
-  // creates it in the Firebase Console.
-
-  Stream<QuerySnapshot<Map<String, dynamic>>> _myVideosStream() {
-    final user = currentUser;
-
-    if (user == null) {
-      return const Stream.empty();
-    }
-
-    return FirebaseFirestore.instance
-        .collection('sellerVideos')
-        .where('userId', isEqualTo: user.uid)
-        .orderBy('createdAt', descending: true)
-        .limit(_videoLimit)
-        .snapshots();
+  int _toInt(dynamic value) {
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
-  // =========================================================
-  // VIDEO CARD
-  // =========================================================
+  String _formatCount(int v) {
+    if (v >= 1000000) return '${(v / 1000000).toStringAsFixed(1)}M';
+    if (v >= 1000) return '${(v / 1000).toStringAsFixed(1)}K';
+    return v.toString();
+  }
 
-  Widget _videoCard(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+  // ============================================================
+  // GRID TILE
+  // ============================================================
+
+  Widget _tile(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    int index,
+  ) {
+    final doc = docs[index];
     final data = doc.data();
 
-    final videoUrl = (data['videoUrl'] ?? '').toString();
-    final thumbnailUrl = (data['thumbnailUrl'] ?? '').toString();
+    final thumb = (data['thumbnailUrl'] ?? '').toString();
     final caption = (data['caption'] ?? '').toString();
     final status = (data['status'] ?? 'published').toString();
-
-    // New videos use viewCount / likeCount, old ones views / likes.
     final views = _toInt(data['viewCount'] ?? data['views']);
     final likes = _toInt(data['likeCount'] ?? data['likes']);
+    final deleting = _deletingIds.contains(doc.id);
 
-    final isDeleting = _deletingIds.contains(doc.id);
-
-    return Card(
-      elevation: 0,
-      margin: const EdgeInsets.only(bottom: 12),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: (videoUrl.isEmpty || isDeleting)
-            ? null
-            : () {
-                _openVideo(data);
-              },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return GestureDetector(
+      onTap: deleting ? null : () => _openVideo(docs, index),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            AspectRatio(
-              aspectRatio: 9 / 16,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (thumbnailUrl.isNotEmpty)
-                    Image.network(
-                      thumbnailUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return _videoPlaceholder();
-                      },
-                    )
-                  else
-                    _videoPlaceholder(),
+            if (thumb.isNotEmpty)
+              Image.network(
+                thumb,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => _placeholder(),
+              )
+            else
+              _placeholder(),
 
-                  // PLAY BUTTON
-                  Center(
-                    child: Container(
-                      width: 58,
-                      height: 58,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.black54,
-                      ),
-                      child: const Icon(
-                        Icons.play_arrow,
-                        color: Colors.white,
-                        size: 34,
-                      ),
-                    ),
+            // bottom stats
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [Colors.black87, Colors.transparent],
                   ),
-
-                  // STATUS
-                  Positioned(
-                    top: 10,
-                    left: 10,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        status,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // EDIT BUTTON
-                  Positioned(
-                    top: 8,
-                    right: 60,
-                    child: Material(
-                      color: Colors.black54,
-                      shape: const CircleBorder(),
-                      child: IconButton(
-                        onPressed: isDeleting
-                            ? null
-                            : () => _editCaption(doc.id, caption),
-                        icon: const Icon(
-                          Icons.edit_outlined,
-                          color: Colors.white,
-                        ),
-                        tooltip: 'Edit caption',
-                      ),
-                    ),
-                  ),
-
-                  // DELETE BUTTON
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Material(
-                      color: Colors.black54,
-                      shape: const CircleBorder(),
-                      child: isDeleting
-                          ? const Padding(
-                              padding: EdgeInsets.all(10),
-                              child: SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            )
-                          : IconButton(
-                              onPressed: () {
-                                _deleteVideo(doc.id);
-                              },
-                              icon: const Icon(
-                                Icons.delete_outline,
-                                color: Colors.white,
-                              ),
-                              tooltip: 'Delete video',
-                            ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // VIDEO INFORMATION
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (caption.isNotEmpty)
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.play_arrow,
+                        color: Colors.white, size: 15),
                     Text(
-                      caption,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                      _formatCount(views),
                       style: const TextStyle(
-                        fontSize: 16,
+                        color: Colors.white,
+                        fontSize: 11,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      const Icon(Icons.visibility_outlined, size: 18),
-                      const SizedBox(width: 5),
-                      Text('$views views'),
-                      const SizedBox(width: 18),
-                      const Icon(Icons.favorite_border, size: 18),
-                      const SizedBox(width: 5),
-                      Text('$likes likes'),
-                      const Spacer(),
-                      const Icon(Icons.play_circle_outline, size: 18),
-                      const SizedBox(width: 5),
-                      const Text('Watch'),
-                    ],
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    const Icon(Icons.favorite,
+                        color: Colors.white, size: 12),
+                    const SizedBox(width: 2),
+                    Text(
+                      _formatCount(likes),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
               ),
+            ),
+
+            // status badge (only when not published)
+            if (status != 'published')
+              Positioned(
+                top: 6,
+                left: 6,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.orange,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    status,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+
+            // menu
+            Positioned(
+              top: 2,
+              right: 2,
+              child: deleting
+                  ? const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      ),
+                    )
+                  : PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert,
+                          color: Colors.white, size: 20),
+                      onSelected: (v) {
+                        if (v == 'edit') _editCaption(doc.id, caption);
+                        if (v == 'delete') _deleteVideo(doc.id);
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(
+                          value: 'edit',
+                          child: Text('Edit caption'),
+                        ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Text('Delete'),
+                        ),
+                      ],
+                    ),
             ),
           ],
         ),
@@ -479,29 +334,13 @@ class _MyVideosPageState extends State<MyVideosPage> {
     );
   }
 
-  Widget _videoPlaceholder() {
+  Widget _placeholder() {
     return Container(
       color: Colors.black12,
       child: const Center(
-        child: Icon(
-          Icons.video_library_outlined,
-          size: 60,
-          color: Colors.grey,
-        ),
+        child: Icon(Icons.video_library_outlined, size: 32, color: Colors.grey),
       ),
     );
-  }
-
-  int _toInt(dynamic value) {
-    if (value is int) {
-      return value;
-    }
-
-    if (value is num) {
-      return value.toInt();
-    }
-
-    return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
   Widget _emptyState() {
@@ -511,11 +350,8 @@ class _MyVideosPageState extends State<MyVideosPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.video_library_outlined,
-              size: 72,
-              color: Colors.grey,
-            ),
+            const Icon(Icons.video_library_outlined,
+                size: 72, color: Colors.grey),
             const SizedBox(height: 18),
             const Text(
               'No Videos Yet',
@@ -523,9 +359,8 @@ class _MyVideosPageState extends State<MyVideosPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Upload your first BuyNova video '
-              'and it will appear here and in the '
-              'main Videos feed.',
+              'Upload your first BuyNova video and it will appear here '
+              'and in the main Videos feed.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey.shade600, height: 1.4),
             ),
@@ -541,20 +376,16 @@ class _MyVideosPageState extends State<MyVideosPage> {
     );
   }
 
-  // =========================================================
+  // ============================================================
   // BUILD
-  // =========================================================
+  // ============================================================
 
   @override
   Widget build(BuildContext context) {
-    final user = currentUser;
-
-    if (user == null) {
+    if (currentUser == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('My Videos'), centerTitle: true),
-        body: const Center(
-          child: Text('Please log in to view your videos.'),
-        ),
+        body: const Center(child: Text('Please log in to view your videos.')),
       );
     }
 
@@ -573,17 +404,9 @@ class _MyVideosPageState extends State<MyVideosPage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _openAddVideo,
-        child: const Icon(Icons.add),
-      ),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: _myVideosStream(),
+        stream: _stream,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
           if (snapshot.hasError) {
             return Center(
               child: Padding(
@@ -591,15 +414,11 @@ class _MyVideosPageState extends State<MyVideosPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
-                      Icons.error_outline,
-                      size: 55,
-                      color: Colors.redAccent,
-                    ),
+                    const Icon(Icons.error_outline,
+                        size: 55, color: Colors.redAccent),
                     const SizedBox(height: 12),
                     const Text(
                       'Could not load your videos.',
-                      textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.bold,
@@ -613,9 +432,7 @@ class _MyVideosPageState extends State<MyVideosPage> {
                     ),
                     const SizedBox(height: 16),
                     ElevatedButton.icon(
-                      onPressed: () {
-                        setState(() {});
-                      },
+                      onPressed: () => setState(() => _stream = _buildStream()),
                       icon: const Icon(Icons.refresh),
                       label: const Text('Retry'),
                     ),
@@ -625,27 +442,74 @@ class _MyVideosPageState extends State<MyVideosPage> {
             );
           }
 
-          final docs = snapshot.data?.docs ?? [];
-
-          if (docs.isEmpty) {
-            return _emptyState();
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
           }
 
-          return RefreshIndicator(
-            onRefresh: () async {
-              setState(() {});
-            },
-            child: ListView.builder(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
-              itemCount: docs.length,
-              itemBuilder: (context, index) {
-                return _videoCard(docs[index]);
-              },
+          final docs = snapshot.data?.docs ?? [];
+
+          if (docs.isEmpty) return _emptyState();
+
+          return GridView.builder(
+            padding: const EdgeInsets.all(8),
+            itemCount: docs.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 6,
+              mainAxisSpacing: 6,
+              childAspectRatio: 0.62,
             ),
+            itemBuilder: (context, index) => _tile(docs, index),
           );
         },
       ),
+    );
+  }
+}
+
+/// Own StatefulWidget so the controller is disposed together with the
+/// dialog (disposing it right after showDialog() can crash during the
+/// close animation).
+class _CaptionDialog extends StatefulWidget {
+  final String initial;
+
+  const _CaptionDialog({required this.initial});
+
+  @override
+  State<_CaptionDialog> createState() => _CaptionDialogState();
+}
+
+class _CaptionDialogState extends State<_CaptionDialog> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Edit Caption'),
+      content: TextField(
+        controller: _controller,
+        maxLines: 4,
+        maxLength: 500,
+        autofocus: true,
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, _controller.text.trim()),
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }
