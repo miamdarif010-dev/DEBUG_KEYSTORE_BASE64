@@ -80,11 +80,86 @@ const productImage = (d) =>
   null;
 const productSeller = (d) => String(d.sellerId ?? d.ownerId ?? 'unknown_seller');
 
+// ---------- size / color options ----------
+const listOf = (raw) => {
+  if (Array.isArray(raw)) {
+    return raw.map((x) => String(x ?? '').trim()).filter(Boolean);
+  }
+  if (typeof raw === 'string') {
+    return raw.split(',').map((x) => x.trim()).filter(Boolean);
+  }
+  return [];
+};
+
+const colorNames = (raw) =>
+  Array.isArray(raw)
+    ? raw
+        .filter((c) => c && typeof c === 'object')
+        .map((c) => String(c.name ?? c.hex ?? '').trim())
+        .filter(Boolean)
+    : [];
+
+// Checks the size / color the buyer chose against what the product really
+// offers. A wrong value is always rejected. A missing value is rejected only
+// when `required` is true (the website sends requireOptions: true).
+const resolveOptions = (source, raw, required, name) => {
+  const sizes = listOf(source.sizes ?? source.availableSizes).map((s) =>
+    s.toUpperCase()
+  );
+  const colors = colorNames(source.colors);
+
+  const wantSize = String(raw?.size ?? '').trim().toUpperCase();
+  const wantColor = String(raw?.color ?? '').trim();
+
+  let size = null;
+  let color = null;
+
+  if (sizes.length) {
+    if (wantSize) {
+      if (!sizes.includes(wantSize)) {
+        throw new HttpsError(
+          'invalid-argument',
+          `The selected size is not available for "${name}".`
+        );
+      }
+      size = wantSize;
+    } else if (required) {
+      throw new HttpsError(
+        'failed-precondition',
+        `Please select a size for "${name}".`
+      );
+    }
+  }
+
+  if (colors.length) {
+    if (wantColor) {
+      const found = colors.find(
+        (c) => c.toLowerCase() === wantColor.toLowerCase()
+      );
+      if (!found) {
+        throw new HttpsError(
+          'invalid-argument',
+          `The selected color is not available for "${name}".`
+        );
+      }
+      color = found;
+    } else if (required) {
+      throw new HttpsError(
+        'failed-precondition',
+        `Please select a color for "${name}".`
+      );
+    }
+  }
+
+  return { size, color };
+};
+
 // ============================================================
 // createOrder
 // Everyone (Buyer, Seller, Reseller) uses the same checkout.
 // The only restriction: nobody can buy their own product/listing.
-// The client only sends WHAT it wants (product ids + quantities).
+// The client only sends WHAT it wants (product ids + quantities,
+// plus the chosen size / color).
 // Prices, discount, delivery fee and totals are all computed here.
 //
 // Product discounts: `price` (seller) and `sellingPrice` (reseller)
@@ -95,7 +170,10 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Please login again.');
 
-  const { items, couponCode, paymentMethod, addressId } = request.data || {};
+  const { items, couponCode, paymentMethod, addressId, requireOptions } =
+    request.data || {};
+
+  const mustChooseOptions = requireOptions === true;
 
   if (!Array.isArray(items) || items.length === 0 || items.length > 50) {
     throw new HttpsError('invalid-argument', 'Your cart is empty.');
@@ -171,13 +249,25 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
           throw new HttpsError('failed-precondition', 'A product in your cart has an invalid price.');
         }
 
+        const lineName = productName(listing) || productName(supplier);
+
+        // Sizes and colors come from the supplier's product.
+        const { size, color } = resolveOptions(
+          supplier,
+          raw,
+          mustChooseOptions,
+          lineName
+        );
+
         return {
           id,
-          name: productName(listing) || productName(supplier),
+          name: lineName,
           imageUrl: productImage(listing) ?? productImage(supplier),
           price,
           quantity,
           total: round2(price * quantity),
+          size,
+          color,
           isResellerProduct: true,
           entrepreneurUid: String(listing.entrepreneurUid ?? ''),
           sellerId: productSeller(supplier),
@@ -204,13 +294,24 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
         throw new HttpsError('failed-precondition', 'A product in your cart has an invalid price.');
       }
 
+      const lineName = productName(product);
+
+      const { size, color } = resolveOptions(
+        product,
+        raw,
+        mustChooseOptions,
+        lineName
+      );
+
       return {
         id,
-        name: productName(product),
+        name: lineName,
         imageUrl: productImage(product),
         price,
         quantity,
         total: round2(price * quantity),
+        size,
+        color,
         isResellerProduct: false,
         entrepreneurUid: null,
         sellerId: productSeller(product),
@@ -313,6 +414,8 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
       price: l.price,
       quantity: l.quantity,
       total: l.total,
+      size: l.size,
+      color: l.color,
       imageUrl: l.imageUrl,
       isResellerProduct: l.isResellerProduct,
       entrepreneurUid: l.entrepreneurUid,
@@ -398,6 +501,8 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
           price: l.price,
           quantity: l.quantity,
           total: l.total,
+          size: l.size,
+          color: l.color,
           imageUrl: l.imageUrl,
         })),
         subtotal: p.base,
@@ -450,6 +555,8 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
           price: l.price,
           quantity: l.quantity,
           total: l.total,
+          size: l.size,
+          color: l.color,
           imageUrl: l.imageUrl,
           supplierProductId: l.supplierProductId,
           supplierPrice: l.supplierPrice,
