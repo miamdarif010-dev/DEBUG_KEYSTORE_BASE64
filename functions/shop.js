@@ -51,12 +51,33 @@ const resellerOriginal = (l) => {
   return null;
 };
 
+// ---------- size / color options ----------
+const listOf = (raw) => {
+  if (Array.isArray(raw)) {
+    return raw.map((x) => String(x ?? '').trim()).filter(Boolean);
+  }
+  if (typeof raw === 'string') {
+    return raw.split(',').map((x) => x.trim()).filter(Boolean);
+  }
+  return [];
+};
+
+// True when the product has sizes or colors the buyer must choose.
+const hasOptions = (p) =>
+  listOf(p.sizes ?? p.availableSizes).length > 0 ||
+  (Array.isArray(p.colors) &&
+    p.colors.some(
+      (c) => c && typeof c === 'object' && String(c.name ?? c.hex ?? '').trim()
+    ));
+
 // ============================================================
 // getShopProducts
 // Public product list for the customer website (/shop/).
 // Returns ONLY public fields: no supplier price, no profit.
 // Newest products first. Result is cached for 60 seconds per
 // server instance, so a new product shows up within a minute.
+// hasOptions = true means the buyer must pick a size / color,
+// so the website sends them to the product page first.
 // ============================================================
 exports.getShopProducts = onCall({ region: REGION }, async () => {
   if (cache.items && Date.now() - cache.at < CACHE_MS) {
@@ -94,6 +115,7 @@ exports.getShopProducts = onCall({ region: REGION }, async () => {
         price,
         originalPrice: original > price ? original : null,
         category: String(p.category ?? '').trim(),
+        hasOptions: hasOptions(p),
         t: millis(p.createdAt),
       });
     }
@@ -134,6 +156,7 @@ exports.getShopProducts = onCall({ region: REGION }, async () => {
       price,
       originalPrice: resellerOriginal(l),
       category: String(pick(l.category, s.category) ?? '').trim(),
+      hasOptions: hasOptions(s),
       t: millis(l.createdAt),
     });
   });
