@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'order_tracking_page.dart';
 import 'order_details_page.dart';
+import 'order_variant.dart';
 
 class MyOrdersPage extends StatelessWidget {
   const MyOrdersPage({super.key});
@@ -345,6 +346,7 @@ class MyOrdersPage extends StatelessWidget {
                     fontSize: 13,
                   ),
                 ),
+                VariantLine(item),
                 const SizedBox(height: 4),
                 Text(
                   '৳${(price * quantity).toStringAsFixed(0)}',
