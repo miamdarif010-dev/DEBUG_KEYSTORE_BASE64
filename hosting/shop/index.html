@@ -108,8 +108,8 @@ footer h4{color:#fff;margin:0 0 10px;font-size:14px}footer p{margin:6px 0}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-import { getFirestore, collection, query, where, getDocs, addDoc, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { getFirestore, collection, query, where, getDocs, addDoc, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-functions.js";
 
 const firebaseConfig = {
@@ -138,7 +138,27 @@ const icon = (c) => IC[c] || IC[String(c).trim().toLowerCase()] || "▦";
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 const money = (n) => CUR + " " + Number(n || 0).toLocaleString("en-US");
 const safeImg = (u) => (typeof u === "string" && u.indexOf("https://") === 0) ? u : "";
-const errText = (e) => (e && e.message ? String(e.message).replace(/^.*?:\s*/, "") : "কিছু একটা সমস্যা হয়েছে।");
+const AUTH_ERR = {
+  "auth/unauthorized-domain": "এই ওয়েবসাইটের ডোমেইন Firebase-এ অনুমোদিত নয়। (Firebase Console → Authentication → Settings → Authorized domains-এ ডোমেইন যোগ করুন)",
+  "auth/operation-not-allowed": "Google লগইন চালু করা নেই। (Firebase Console → Authentication → Sign-in method → Google চালু করুন)",
+  "auth/popup-blocked": "ব্রাউজার পপআপ আটকে দিয়েছে। পপআপ অনুমতি দিয়ে আবার চেষ্টা করুন।",
+  "auth/popup-closed-by-user": "লগইন বাতিল হয়েছে।",
+  "auth/cancelled-popup-request": "লগইন বাতিল হয়েছে।",
+  "auth/network-request-failed": "ইন্টারনেট সংযোগে সমস্যা। আবার চেষ্টা করুন।",
+  "auth/invalid-credential": "ইমেইল বা পাসওয়ার্ড ভুল।",
+  "auth/wrong-password": "ইমেইল বা পাসওয়ার্ড ভুল।",
+  "auth/user-not-found": "এই ইমেইলে কোনো অ্যাকাউন্ট নেই।",
+  "auth/email-already-in-use": "এই ইমেইল আগেই ব্যবহার হয়েছে, লগইন করুন।",
+  "auth/weak-password": "পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের দিন।",
+  "auth/invalid-email": "ইমেইল সঠিক নয়।",
+  "auth/account-exists-with-different-credential": "এই ইমেইলে আগে অন্য পদ্ধতিতে অ্যাকাউন্ট খোলা হয়েছে। আগের পদ্ধতিতে (Google বা ইমেইল-পাসওয়ার্ড) লগইন করুন।",
+  "auth/too-many-requests": "অনেকবার চেষ্টা হয়েছে। কিছুক্ষণ পর আবার চেষ্টা করুন।"
+};
+const errText = (e) => {
+  if (e && e.code && AUTH_ERR[e.code]) return AUTH_ERR[e.code];
+  if (e && e.code && String(e.code).indexOf("auth/") === 0) return e.code;
+  return e && e.message ? String(e.message).replace(/^.*?:\s*/, "") : "কিছু একটা সমস্যা হয়েছে।";
+};
 const pc = (i) => (i.originalPrice && i.originalPrice > i.price) ? Math.round((1 - i.price / i.originalPrice) * 100) : 0;
 const page = (h) => { $app.innerHTML = `<div class="w">${h}</div>`; };
 const toast = (t) => { const d = document.createElement("div"); d.className = "toast"; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 1500); };
@@ -155,17 +175,78 @@ $("dl").addEventListener("click", (e) => {
 });
 
 // ---------- cart ----------
-function getCart() { try { return JSON.parse(localStorage.getItem("bn_cart") || "[]"); } catch (e) { return []; } }
-function setCart(c) { try { localStorage.setItem("bn_cart", JSON.stringify(c)); } catch (e) {} updateCartCount(); }
-function updateCartCount() { const n = getCart().reduce((s, i) => s + i.qty, 0); const el = $("cartCnt"); el.textContent = n; el.hidden = n === 0; }
-// Same product with a different size or color is a separate cart line.
-function addToCart(item, qty) {
-  const cart = getCart();
+// Logged out: the cart stays in this browser.
+// Logged in: the cart is saved in users/{uid}/cart, the same place the app uses,
+// so the app and the website always show the same cart for the same account.
+function localCart() { try { return JSON.parse(localStorage.getItem("bn_cart") || "[]"); } catch (e) { return []; } }
+function saveLocal(c) { try { localStorage.setItem("bn_cart", JSON.stringify(c)); } catch (e) {} }
+let cartMem = localCart(), cartUnsub = null;
+function getCart() { return cartMem; }
+function updateCartCount() { const n = cartMem.reduce((s, i) => s + i.qty, 0); const el = $("cartCnt"); el.textContent = n; el.hidden = n === 0; }
+// Same document id the app uses: a different size or color is a separate line.
+function cartDocId(i) {
+  const c = (i.color || "").trim(), z = (i.size || "").trim();
+  return (!c && !z) ? i.id : (i.id + "__" + c + "__" + z).replace(/\//g, "-");
+}
+const cartCol = () => collection(db, "users", user.uid, "cart");
+function fromCartDoc(d) {
+  const x = d.data() || {};
+  return {
+    _d: d.id, id: String(x.productId || d.id), kind: x.isResellerProduct === true ? "r" : "p",
+    name: String(x.name ?? x.productName ?? ""), imageUrl: String(x.imageUrl || ""),
+    price: Number(x.price ?? x.sellingPrice) || 0, qty: Math.max(1, Number(x.quantity) || 1),
+    size: String(x.size ?? x.selectedSize ?? "").trim(), color: String(x.color ?? x.selectedColor ?? "").trim()
+  };
+}
+function subscribeCart() {
+  if (cartUnsub) cartUnsub();
+  return new Promise((resolve) => {
+    let first = true;
+    const t = setTimeout(resolve, 4000);
+    cartUnsub = onSnapshot(cartCol(), (snap) => {
+      cartMem = snap.docs.map(fromCartDoc); updateCartCount();
+      if (first) { first = false; clearTimeout(t); resolve(); }
+      else if (location.hash === "#/cart") viewCart();
+    }, (e) => { console.warn("cart", e); clearTimeout(t); resolve(); });
+  });
+}
+async function addToCart(item, qty) {
   const size = item.size || "", color = item.color || "";
-  const f = cart.find(i => i.id === item.id && i.kind === item.kind && (i.size || "") === size && (i.color || "") === color);
-  if (f) f.qty = Math.min(100, f.qty + qty);
-  else cart.push({ id: item.id, kind: item.kind, name: item.name, imageUrl: item.imageUrl, price: item.price, qty, size, color });
-  setCart(cart);
+  if (!user) {
+    const cart = localCart();
+    const f = cart.find(i => i.id === item.id && i.kind === item.kind && (i.size || "") === size && (i.color || "") === color);
+    if (f) f.qty = Math.min(100, f.qty + qty);
+    else cart.push({ id: item.id, kind: item.kind, name: item.name, imageUrl: item.imageUrl, price: item.price, qty, size, color });
+    saveLocal(cart); cartMem = cart; updateCartCount(); return;
+  }
+  const ref = doc(db, "users", user.uid, "cart", cartDocId(item));
+  const snap = await getDoc(ref);
+  if (snap.exists()) {
+    await updateDoc(ref, { quantity: Math.min(100, (Number(snap.data().quantity) || 1) + qty), name: item.name, price: item.price, imageUrl: item.imageUrl || "" });
+  } else {
+    await setDoc(ref, {
+      productId: item.id, name: item.name, price: item.price, imageUrl: item.imageUrl || "", quantity: qty,
+      addedAt: serverTimestamp(), color, size, variant: "",
+      isResellerProduct: item.kind === "r", entrepreneurUid: "", sellerId: "",
+      supplierProductId: item.kind === "r" ? "" : item.id, supplierPrice: null, resellerProfit: null
+    });
+  }
+}
+async function cartSetQty(it, q) {
+  it.qty = q;
+  if (!user) { saveLocal(cartMem); updateCartCount(); return; }
+  await updateDoc(doc(db, "users", user.uid, "cart", it._d || cartDocId(it)), { quantity: q });
+}
+async function cartRemove(it) {
+  cartMem = cartMem.filter(x => x !== it);
+  if (!user) { saveLocal(cartMem); updateCartCount(); return; }
+  await deleteDoc(doc(db, "users", user.uid, "cart", it._d || cartDocId(it)));
+}
+async function clearCart() {
+  if (!user) { cartMem = []; saveLocal([]); updateCartCount(); return; }
+  const snap = await getDocs(cartCol());
+  await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+  cartMem = []; updateCartCount();
 }
 
 // ---------- header ----------
@@ -190,10 +271,11 @@ document.addEventListener("click", (e) => {
     if (!it) return;
     // Products with size / color must be chosen on the product page.
     if (it.hasOptions) { location.hash = "#/" + it.kind + "/" + encodeURIComponent(it.id); return; }
-    addToCart(it, 1); toast("কার্টে যোগ হয়েছে ✅");
+    addToCart(it, 1).then(() => toast("কার্টে যোগ হয়েছে ✅")).catch((err) => toast("কার্টে যোগ করা যায়নি"));
   }
 });
 
+getRedirectResult(auth).catch((e) => { try { sessionStorage.setItem("bn_autherr", errText(e)); } catch (x) {} });
 onAuthStateChanged(auth, async (u) => {
   user = u; authReady = true;
   $("uTxt").textContent = u ? "অ্যাকাউন্ট" : "লগইন";
@@ -203,6 +285,16 @@ onAuthStateChanged(auth, async (u) => {
       const snap = await getDoc(ref);
       if (!snap.exists()) await setDoc(ref, { name: u.displayName || "", email: u.email || "", createdAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true });
     } catch (e) { console.warn("user doc", e); }
+    // Items added before login move into the account cart (same cart as the app).
+    const pending = localCart();
+    if (pending.length) {
+      for (const it of pending) { try { await addToCart(it, it.qty); } catch (e) { console.warn("merge cart", e); } }
+      saveLocal([]);
+    }
+    await subscribeCart();
+  } else {
+    if (cartUnsub) { cartUnsub(); cartUnsub = null; }
+    cartMem = localCart(); updateCartCount();
   }
   route();
 });
@@ -352,12 +444,18 @@ async function viewProduct(kind, id) {
   };
   $("mi").onclick = () => { qty = Math.max(1, qty - 1); upd(); };
   $("pl").onclick = () => { qty = Math.min(100, qty + 1); upd(); };
-  $("addC").onclick = () => {
+  $("addC").onclick = async () => {
     if (blocked()) return;
-    addToCart(makeItem(), qty);
-    $("pmsg").innerHTML = `<div class="ok">কার্টে যোগ হয়েছে। <a href="#/cart" style="text-decoration:underline">কার্ট দেখুন</a></div>`;
+    try {
+      await addToCart(makeItem(), qty);
+      $("pmsg").innerHTML = `<div class="ok">কার্টে যোগ হয়েছে। <a href="#/cart" style="text-decoration:underline">কার্ট দেখুন</a></div>`;
+    } catch (e) { $("pmsg").innerHTML = `<div class="err">কার্টে যোগ করা যায়নি: ${esc(errText(e))}</div>`; }
   };
-  $("buyN").onclick = () => { if (blocked()) return; addToCart(makeItem(), qty); location.hash = "#/checkout"; };
+  $("buyN").onclick = async () => {
+    if (blocked()) return;
+    try { await addToCart(makeItem(), qty); location.hash = "#/checkout"; }
+    catch (e) { $("pmsg").innerHTML = `<div class="err">কার্টে যোগ করা যায়নি: ${esc(errText(e))}</div>`; }
+  };
   $("cpy").onclick = () => {
     const link = location.origin + "/" + kind + "/" + encodeURIComponent(id);
     (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject()).then(() => toast("লিংক কপি হয়েছে ✅")).catch(() => prompt("লিংক কপি করুন:", link));
@@ -376,21 +474,37 @@ function viewCart() {
       <button class="rm" data-r="${n}">✕</button></div>`).join("")}
     <div class="sum t"><span>সাবটোটাল</span><span>${money(sub)}</span></div>
     <div class="muted">ডেলিভারি চার্জ ও কুপন চেকআউটে হিসাব হবে।</div><a class="btn" href="#/checkout">চেকআউট করুন</a></div>`);
-  $app.querySelectorAll("[data-d]").forEach(b => b.onclick = () => { const c = getCart(); const it = c[+b.dataset.n]; it.qty = Math.min(100, Math.max(1, it.qty + (+b.dataset.d))); setCart(c); viewCart(); });
-  $app.querySelectorAll("[data-r]").forEach(b => b.onclick = () => { const c = getCart(); c.splice(+b.dataset.r, 1); setCart(c); viewCart(); });
+  $app.querySelectorAll("[data-d]").forEach(b => b.onclick = async () => { const it = getCart()[+b.dataset.n]; if (!it) return; try { await cartSetQty(it, Math.min(100, Math.max(1, it.qty + (+b.dataset.d)))); } catch (e) { toast("আপডেট করা যায়নি"); } viewCart(); });
+  $app.querySelectorAll("[data-r]").forEach(b => b.onclick = async () => { const it = getCart()[+b.dataset.r]; if (!it) return; try { await cartRemove(it); } catch (e) { toast("মোছা যায়নি"); } viewCart(); });
 }
 
 // ---------- login ----------
 function viewLogin() {
-  if (user) { location.hash = "#/orders"; return; }
+  if (user) { const back = sessionStorage.getItem("bn_back") || "#/orders"; sessionStorage.removeItem("bn_back"); location.hash = back; return; }
   page(`<div class="box" style="margin:14px auto;max-width:420px"><h2>লগইন / সাইনআপ</h2>
     <button class="btn out" id="gBtn" style="margin-top:0">Google দিয়ে চালিয়ে যান</button><div class="or">অথবা ইমেইল দিয়ে</div>
     <label class="f">ইমেইল</label><input class="t" id="em" type="email" autocomplete="email">
     <label class="f">পাসওয়ার্ড</label><input class="t" id="pw" type="password" autocomplete="current-password">
     <div id="lerr"></div><div class="row"><button class="btn" id="liBtn">লগইন</button><button class="btn out" id="suBtn">সাইনআপ</button></div></div>`);
   const show = (e) => { $("lerr").innerHTML = `<div class="err">${esc(errText(e))}</div>`; };
+  try { const pe = sessionStorage.getItem("bn_autherr"); if (pe) { sessionStorage.removeItem("bn_autherr"); $("lerr").innerHTML = `<div class="err">${esc(pe)}</div>`; } } catch (x) {}
   const done = () => { const back = sessionStorage.getItem("bn_back") || "#/orders"; sessionStorage.removeItem("bn_back"); location.hash = back; };
-  $("gBtn").onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).then(done).catch(show);
+  $("gBtn").onclick = async () => {
+    $("lerr").innerHTML = "";
+    if (IN_APP) { $("lerr").innerHTML = `<div class="err">Google এই ব্রাউজারে লগইন করতে দেয় না। ⋮ মেনু থেকে Chrome-এ খুলুন, অথবা নিচে ইমেইল দিয়ে লগইন করুন।</div>`; return; }
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    try {
+      await signInWithPopup(auth, provider); done();
+    } catch (e) {
+      const fallback = ["auth/popup-blocked", "auth/operation-not-supported-in-this-environment", "auth/web-storage-unsupported"];
+      if (fallback.indexOf(e.code) !== -1) {
+        try { await signInWithRedirect(auth, provider); return; } catch (e2) { show(e2); return; }
+      }
+      if (e.code === "auth/popup-closed-by-user" || e.code === "auth/cancelled-popup-request") return;
+      show(e);
+    }
+  };
   $("liBtn").onclick = () => signInWithEmailAndPassword(auth, $("em").value.trim(), $("pw").value).then(done).catch(show);
   $("suBtn").onclick = () => createUserWithEmailAndPassword(auth, $("em").value.trim(), $("pw").value).then(done).catch(show);
 }
@@ -455,7 +569,7 @@ async function viewCheckout() {
           try { await call("placeWalletOrder", { orderId }); }
           catch (e) { try { await call("cancelUnpaidOrder", { orderId }); } catch (x) {} throw e; }
         }
-        setCart([]);
+        try { await clearCart(); } catch (e) { console.warn('clear cart', e); }
         page(`<div class="box msg" style="margin-top:14px"><h2>✅ অর্ডার সফল হয়েছে</h2>
           <p>মোট: <b>${money(res.total)}</b> (ডেলিভারি ${money(res.deliveryFee)}${res.discount ? `, ডিসকাউন্ট ${money(res.discount)}` : ""})</p>
           <p class="muted">অর্ডার আইডি: ${esc(orderId)}</p><a class="btn" href="#/orders">আমার অর্ডার দেখুন</a><a class="btn out" href="#/">আরও কেনাকাটা</a></div>`);
