@@ -128,9 +128,11 @@ const fns = getFunctions(app, "asia-northeast3");
 const call = (name, data) => httpsCallable(fns, name)(data || {}).then(r => r.data);
 
 const CUR = "৳";
+// New email+password accounts made after this day must enter the email code.
+const CODE_AFTER = Date.UTC(2026, 9, 27);
 const $app = document.getElementById("app");
 const $ = (id) => document.getElementById(id);
-let user = null, authReady = false, allItems = null, search = "", activeCat = "", shown = 12, homeDraw = null;
+let user = null, needCode = false, authReady = false, allItems = null, search = "", activeCat = "", shown = 12, homeDraw = null;
 const IC = { "ফোন":"📱","ল্যাপটপ":"💻","ঘড়ি":"⌚","ইয়ারবাড":"🎧","ক্যামেরা":"📷","ফ্যাশন":"👕","জুতা":"👟","ব্যাগ":"👜","বিউটি":"🧴","স্পোর্টস":"⚽","টয়স":"🧸","গ্রোসারি":"🛒",
   phone:"📱",phones:"📱",mobile:"📱",laptop:"💻",laptops:"💻",watch:"⌚",watches:"⌚",earbud:"🎧",earbuds:"🎧",headphone:"🎧",headphones:"🎧",camera:"📷",cameras:"📷",fashion:"👕",men:"👔",man:"👔",women:"👗",woman:"👗",shoes:"👟",shoe:"👟",bag:"👜",bags:"👜",beauty:"🧴",sports:"⚽",sport:"⚽",toys:"🧸",toy:"🧸",grocery:"🛒" };
 const icon = (c) => IC[c] || IC[String(c).trim().toLowerCase()] || "▦";
@@ -280,10 +282,29 @@ onAuthStateChanged(auth, async (u) => {
   user = u; authReady = true;
   $("uTxt").textContent = u ? "অ্যাকাউন্ট" : "লগইন";
   if (u) {
+    needCode = false;
     try {
       const ref = doc(db, "users", u.uid);
       const snap = await getDoc(ref);
-      if (!snap.exists()) await setDoc(ref, { name: u.displayName || "", email: u.email || "", createdAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true });
+      let nm = u.displayName || "";
+      try { nm = nm || sessionStorage.getItem("bn_signup_name") || ""; sessionStorage.removeItem("bn_signup_name"); } catch (x) {}
+      const photo = u.photoURL || "";
+      let ud = {};
+      if (!snap.exists()) {
+        // New account (Google details are taken from the Google account)
+        await setDoc(ref, { uid: u.uid, name: nm, email: u.email || "", phone: "", profileImageUrl: photo, sellerStatus: "none", entrepreneurStatus: "none", createdAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true });
+      } else {
+        ud = snap.data() || {};
+        const patch = { updatedAt: serverTimestamp() };
+        if (u.email && ud.email !== u.email) patch.email = u.email;
+        if (!ud.name && nm) patch.name = nm;
+        if (!ud.profileImageUrl && photo) patch.profileImageUrl = photo;
+        await updateDoc(ref, patch);
+      }
+      // Email code is only for brand-new email + password accounts
+      const usesPassword = u.providerData.some(p => p.providerId === "password");
+      const created = u.metadata && u.metadata.creationTime ? Date.parse(u.metadata.creationTime) : 0;
+      needCode = usesPassword && created >= CODE_AFTER && ud.emailCodeVerified !== true;
     } catch (e) { console.warn("user doc", e); }
     // Items added before login move into the account cart (same cart as the app).
     const pending = localCart();
@@ -293,6 +314,7 @@ onAuthStateChanged(auth, async (u) => {
     }
     await subscribeCart();
   } else {
+    needCode = false;
     if (cartUnsub) { cartUnsub(); cartUnsub = null; }
     cartMem = localCart(); updateCartCount();
   }
@@ -479,13 +501,20 @@ function viewCart() {
 }
 
 // ---------- login ----------
-function viewLogin() {
+function viewLogin(mode) {
   if (user) { const back = sessionStorage.getItem("bn_back") || "#/orders"; sessionStorage.removeItem("bn_back"); location.hash = back; return; }
-  page(`<div class="box" style="margin:14px auto;max-width:420px"><h2>লগইন / সাইনআপ</h2>
-    <button class="btn out" id="gBtn" style="margin-top:0">Google দিয়ে চালিয়ে যান</button><div class="or">অথবা ইমেইল দিয়ে</div>
+  const su = mode === "signup";
+  page(`<div class="box" style="margin:14px auto;max-width:420px"><h2>${su ? "নতুন অ্যাকাউন্ট খুলুন" : "লগইন"}</h2>
+    <button class="btn out" id="gBtn" style="margin-top:0">Google দিয়ে সরাসরি চালিয়ে যান</button>
+    <div class="muted" style="text-align:center;margin-top:6px">Google দিয়ে ঢুকলে আলাদা অ্যাকাউন্ট খোলা লাগে না। আপনার নাম, ইমেইল ও ছবি Google থেকে নিজেই সেভ হবে।</div>
+    <div class="or">অথবা ইমেইল দিয়ে</div>
+    ${su ? `<label class="f">আপনার নাম</label><input class="t" id="nm" autocomplete="name">` : ""}
     <label class="f">ইমেইল</label><input class="t" id="em" type="email" autocomplete="email">
-    <label class="f">পাসওয়ার্ড</label><input class="t" id="pw" type="password" autocomplete="current-password">
-    <div id="lerr"></div><div class="row"><button class="btn" id="liBtn">লগইন</button><button class="btn out" id="suBtn">সাইনআপ</button></div></div>`);
+    <label class="f">পাসওয়ার্ড${su ? " (কমপক্ষে ৬ অক্ষর)" : ""}</label><input class="t" id="pw" type="password" autocomplete="${su ? "new-password" : "current-password"}">
+    <div id="lerr"></div>
+    <button class="btn" id="mainBtn">${su ? "অ্যাকাউন্ট খুলুন" : "লগইন"}</button>
+    ${su ? `<div class="muted" style="margin-top:8px">অ্যাকাউন্ট খুললে আপনার ইমেইলে একটি ৬ সংখ্যার কোড যাবে। কোড দিলে অ্যাকাউন্ট চালু হবে।</div>` : ""}
+    <div class="or">${su ? "আগে থেকেই অ্যাকাউন্ট আছে?" : "নতুন ইউজার?"} <a href="#/login${su ? "" : "/signup"}" style="color:var(--brand);font-weight:700">${su ? "লগইন করুন" : "অ্যাকাউন্ট খুলুন"}</a></div></div>`);
   const show = (e) => { $("lerr").innerHTML = `<div class="err">${esc(errText(e))}</div>`; };
   try { const pe = sessionStorage.getItem("bn_autherr"); if (pe) { sessionStorage.removeItem("bn_autherr"); $("lerr").innerHTML = `<div class="err">${esc(pe)}</div>`; } } catch (x) {}
   const done = () => { const back = sessionStorage.getItem("bn_back") || "#/orders"; sessionStorage.removeItem("bn_back"); location.hash = back; };
@@ -505,8 +534,58 @@ function viewLogin() {
       show(e);
     }
   };
-  $("liBtn").onclick = () => signInWithEmailAndPassword(auth, $("em").value.trim(), $("pw").value).then(done).catch(show);
-  $("suBtn").onclick = () => createUserWithEmailAndPassword(auth, $("em").value.trim(), $("pw").value).then(done).catch(show);
+  $("mainBtn").onclick = () => {
+    $("lerr").innerHTML = "";
+    const email = $("em").value.trim(), pass = $("pw").value;
+    if (!su) { signInWithEmailAndPassword(auth, email, pass).then(done).catch(show); return; }
+    const name = $("nm").value.trim();
+    if (name.length < 2) { $("lerr").innerHTML = `<div class="err">আপনার নাম দিন।</div>`; return; }
+    if (pass.length < 6) { $("lerr").innerHTML = `<div class="err">পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের দিন।</div>`; return; }
+    try { sessionStorage.setItem("bn_signup_name", name); } catch (x) {}
+    createUserWithEmailAndPassword(auth, email, pass).then(done).catch(show);
+  };
+}
+
+// ---------- email code (new email + password accounts) ----------
+async function viewVerify() {
+  page(`<div class="box" style="margin:14px auto;max-width:420px"><h2>ইমেইল যাচাই করুন</h2>
+    <p class="muted" id="vinfo">কোড পাঠানো হচ্ছে...</p>
+    <input class="t" id="vc" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="৬ সংখ্যার কোড" style="text-align:center;font-size:24px;letter-spacing:8px">
+    <div id="verr"></div>
+    <button class="btn" id="vBtn">যাচাই করুন</button>
+    <button class="btn out" id="rBtn" disabled>আবার কোড পাঠান</button>
+    <button class="btn out" id="oBtn">অন্য অ্যাকাউন্টে লগইন করুন</button></div>`);
+  let timer = null;
+  const countdown = (sec) => {
+    clearInterval(timer);
+    const btn = $("rBtn"); if (!btn) return;
+    const tick = () => { const b = $("rBtn"); if (!b) { clearInterval(timer); return; } if (sec <= 0) { clearInterval(timer); b.disabled = false; b.textContent = "আবার কোড পাঠান"; return; } b.disabled = true; b.textContent = "নতুন কোড " + sec + " সেকেন্ড পর"; sec--; };
+    tick(); timer = setInterval(tick, 1000);
+  };
+  const send = async () => {
+    $("verr").innerHTML = "";
+    try {
+      const r = await call("sendLoginCode");
+      if (r.alreadyVerified) { needCode = false; route(); return; }
+      $("vinfo").textContent = (r.email || user.email) + " ঠিকানায় ৬ সংখ্যার একটি কোড পাঠানো হয়েছে। কোডটি ১০ মিনিট চলবে।";
+      countdown(r.resendAfterSeconds || 60);
+    } catch (e) { $("vinfo").textContent = (user.email || "") + " ঠিকানায় কোড পাঠানো যায়নি।"; $("verr").innerHTML = `<div class="err">${esc(errText(e))}</div>`; countdown(30); }
+  };
+  $("rBtn").onclick = send;
+  $("vBtn").onclick = async () => {
+    const code = $("vc").value.trim();
+    if (!/^\d{6}$/.test(code)) { $("verr").innerHTML = `<div class="err">৬ সংখ্যার কোড দিন।</div>`; return; }
+    const btn = $("vBtn"); btn.disabled = true; $("verr").innerHTML = "";
+    try {
+      await call("verifyLoginCode", { code });
+      needCode = false; clearInterval(timer);
+      const back = sessionStorage.getItem("bn_back") || "#/"; sessionStorage.removeItem("bn_back");
+      toast("ইমেইল যাচাই হয়েছে ✅");
+      if (location.hash === back) route(); else location.hash = back;
+    } catch (e) { $("verr").innerHTML = `<div class="err">${esc(errText(e))}</div>`; btn.disabled = false; }
+  };
+  $("oBtn").onclick = async () => { clearInterval(timer); await signOut(auth); location.hash = "#/login"; };
+  send();
 }
 
 // ---------- checkout ----------
@@ -600,12 +679,13 @@ function route() {
   const parts = (location.hash.replace(/^#\/?/, "") || "").split("/").filter(Boolean);
   window.scrollTo(0, 0);
   const [a, b] = parts;
+  if (user && needCode) return viewVerify();
   if (!a) { loadItems().catch(() => {}); return viewHome(); }
   if ((a === "p" || a === "r") && b) return viewProduct(a, decodeURIComponent(b));
   if (a === "cart") return viewCart();
   if (a === "checkout") return viewCheckout();
   if (a === "orders") return viewOrders();
-  if (a === "login") return viewLogin();
+  if (a === "login") return viewLogin(b);
   viewHome();
 }
 window.addEventListener("hashchange", route);
