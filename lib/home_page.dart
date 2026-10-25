@@ -20,6 +20,7 @@ import 'product_details_page.dart';
 import 'global_notifications_page.dart';
 import 'coupon_page.dart';
 import 'price_discount.dart';
+import 'verify_code_page.dart';
 import 'product_share.dart';
 import 'native_ad_card.dart';
 
@@ -130,6 +131,30 @@ class _HomePageState extends State<HomePage>
       ),
     );
     _startProductSliderTimer();
+
+    // New email + password accounts must enter the email code first.
+    _checkEmailCode();
+  }
+
+  Future<void> _checkEmailCode() async {
+    final current = FirebaseAuth.instance.currentUser;
+
+    if (current == null || emailCodeOkUid == current.uid) {
+      return;
+    }
+
+    final needs = await needsEmailCode(current);
+
+    if (!mounted) return;
+
+    if (needs) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const VerifyCodePage()),
+      );
+    } else {
+      emailCodeOkUid = current.uid;
+    }
   }
 
   void _startProductSliderTimer() {
