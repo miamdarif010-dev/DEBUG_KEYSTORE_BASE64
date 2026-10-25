@@ -2,13 +2,14 @@
 //
 // Cloudinary video functions:
 //   getVideoUploadSignature : unique signed upload (never overwrites)
-//   deleteCloudinaryVideo   : owner-only delete, uses the URL stored in
-//                             Firestore (never a URL sent by the client)
+//   deleteCloudinaryVideo   : owner-only delete.
+//     - If the Firestore video doc exists: deletes the URL stored there.
+//     - If it does NOT exist (upload worked but saving failed): deletes the
+//       client-sent videoUrl, but ONLY if its public_id starts with
+//       buynova_videos/<caller uid>_ (set by getVideoUploadSignature).
 //
-// In functions/index.js:
-//   1. DELETE the old `exports.deleteCloudinaryVideo = onCall(...)` block
-//   2. ADD this line (for example below the counters/rewards requires):
-//        Object.assign(exports, require("./cloudinary_functions"));
+// In functions/index.js this is loaded with:
+//   Object.assign(exports, require("./cloudinary_functions"));
 
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
@@ -111,7 +112,7 @@ exports.deleteCloudinaryVideo = onCall(
   async (request) => {
     const uid = requireAuth(request);
 
-    const { videoId } = request.data || {};
+    const { videoId, videoUrl } = request.data || {};
 
     if (!videoId || typeof videoId !== "string" || videoId.includes("/")) {
       throw new HttpsError("invalid-argument", "videoId is required.");
@@ -119,18 +120,26 @@ exports.deleteCloudinaryVideo = onCall(
 
     const snap = await db.collection("sellerVideos").doc(videoId).get();
 
-    if (!snap.exists) {
-      throw new HttpsError("not-found", "Video not found.");
+    let publicId = null;
+
+    if (snap.exists) {
+      // Normal delete: only the URL stored in Firestore is used.
+      const v = snap.data() || {};
+
+      if (v.userId !== uid && v.sellerId !== uid) {
+        throw new HttpsError("permission-denied", "Not your video.");
+      }
+
+      publicId = extractCloudinaryPublicId(String(v.videoUrl || ""));
+    } else {
+      // Orphan upload: the Firestore doc was never saved.
+      // Allowed only for the caller's own signed upload.
+      publicId = extractCloudinaryPublicId(String(videoUrl || ""));
+
+      if (!publicId || !publicId.startsWith(`buynova_videos/${uid}_`)) {
+        throw new HttpsError("permission-denied", "Not your upload.");
+      }
     }
-
-    const v = snap.data() || {};
-
-    if (v.userId !== uid && v.sellerId !== uid) {
-      throw new HttpsError("permission-denied", "Not your video.");
-    }
-
-    // Only the URL stored in Firestore is deleted, never a client URL.
-    const publicId = extractCloudinaryPublicId(String(v.videoUrl || ""));
 
     if (!publicId) {
       return { video: null };
