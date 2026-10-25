@@ -593,6 +593,16 @@ class _ReelsVideoItem extends StatefulWidget {
 }
 
 class _ReelsVideoItemState extends State<_ReelsVideoItem> {
+  // Points per video are set by the Admin (platformSettings/monetization ->
+  // pointsPerVideo). Read once and kept for 5 minutes for ALL videos, so
+  // scrolling does not cost a Firestore read per video.
+  static int? _cachedRewardPoints;
+  static DateTime? _cachedRewardAt;
+
+  // The claim document must keep saying 5: firestore.rules requires it.
+  // The Cloud Function ignores this number and pays the Admin's value.
+  static const int _claimRewardPoints = 5;
+
   VideoPlayerController? _controller;
   Timer? _watchTimer;
 
@@ -611,7 +621,9 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
 
   int _watchSeconds = 0;
   final int _requiredWatchSeconds = 10;
-  final int _rewardPoints = 5;
+
+  // Shown on the button. 0 = the Admin paused video rewards.
+  int _rewardPoints = 5;
 
   int _likeCount = 0;
   int _commentCount = 0;
@@ -708,6 +720,46 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
     _loadVideo();
     _checkLike();
     _checkReward();
+    _loadRewardPoints();
+  }
+
+  // ============================================================
+  // REWARD POINTS SET BY THE ADMIN
+  // ============================================================
+
+  Future<void> _loadRewardPoints() async {
+    final cached = _cachedRewardPoints;
+    final cachedAt = _cachedRewardAt;
+
+    if (cached != null &&
+        cachedAt != null &&
+        DateTime.now().difference(cachedAt) < const Duration(minutes: 5)) {
+      // Runs synchronously inside initState, so no setState is needed.
+      _rewardPoints = cached;
+      return;
+    }
+
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('platformSettings')
+          .doc('monetization')
+          .get();
+
+      var points = (doc.data()?['pointsPerVideo'] as num?)?.toInt() ?? 5;
+
+      if (points < 0) points = 0;
+
+      _cachedRewardPoints = points;
+      _cachedRewardAt = DateTime.now();
+
+      if (mounted) {
+        setState(() {
+          _rewardPoints = points;
+        });
+      }
+    } catch (_) {
+      // Keep the default label if the setting cannot be read.
+    }
   }
 
   @override
@@ -947,15 +999,15 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
         return;
       }
 
+      // No email here: the server does not need it.
       await claimRef.set({
         'userId': user.uid,
-        'userEmail': user.email ?? '',
         'videoId': widget.videoId,
         'status': 'pending',
         'source': 'watch_video',
         'watchSeconds': _watchSeconds,
         'requiredSeconds': _requiredWatchSeconds,
-        'rewardPoints': _rewardPoints,
+        'rewardPoints': _claimRewardPoints,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
@@ -1541,7 +1593,8 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
   }
 
   Widget _buildRewardButton() {
-    if (!_rewardEligible) {
+    // Not eligible, or the Admin paused video rewards (0 points).
+    if (!_rewardEligible || _rewardPoints <= 0) {
       return const SizedBox.shrink();
     }
 
@@ -1622,7 +1675,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
           const Icon(Icons.card_giftcard, color: Colors.white, size: 17),
           const SizedBox(width: 6),
           Text(
-            '$_watchSeconds/$_requiredWatchSeconds sec',
+            '$_watchSeconds/$_requiredWatchSeconds sec  •  +$_rewardPoints',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 11,
@@ -1735,11 +1788,11 @@ class _CommentsSheetState extends State<_CommentsSheet> {
 
       // Only the comment is written here. commentCount /
       // totalComments are updated by Cloud Functions.
+      // No email: comments are public.
       await commentRef.set({
         'commentId': commentRef.id,
         'userId': user.uid,
         'userName': name,
-        'userEmail': user.email ?? '',
         'profileImageUrl': profileImageUrl,
         'text': text,
         'createdAt': FieldValue.serverTimestamp(),
