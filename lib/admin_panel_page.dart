@@ -7,6 +7,8 @@ import 'admin_coupon_page.dart';
 import 'admin_wallet_page.dart';
 import 'admin_slider_products_page.dart';
 import 'admin_categories_page.dart';
+import 'admin_points_page.dart';
+import 'admin_reward_settings_page.dart';
 
 // The big admin panel is split into part files.
 // They share this file's private members (_db, _toDouble, ...).
@@ -457,6 +459,42 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                           _openSection(
                             title: 'BuyNova Monetization',
                             page: _monetizationTab(),
+                          );
+                        },
+                      ),
+
+                      // ==================================================
+                      // NEW: WATCH & EARN / INVITE REWARD SETTINGS
+                      // ==================================================
+
+                      _adminMenuBox(
+                        icon: Icons.card_giftcard_outlined,
+                        title: 'Reward Settings',
+                        subtitle:
+                            'Video points, invite bonus, streak & conversion',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  const AdminRewardSettingsPage(),
+                            ),
+                          );
+                        },
+                      ),
+
+                      // ==================================================
+                      // NEW: ADD / DEDUCT A USER'S POINTS
+                      // ==================================================
+
+                      _adminMenuBox(
+                        icon: Icons.stars_outlined,
+                        title: 'Manage Points',
+                        subtitle: 'Add or deduct a user\'s reward points',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const AdminPointsPage(),
+                            ),
                           );
                         },
                       ),
