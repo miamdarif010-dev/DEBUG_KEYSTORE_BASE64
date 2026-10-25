@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'seller_return_refund_page.dart';
+import 'order_variant.dart';
 
 // =============================================================
 // ORDER ENTRY
@@ -428,6 +429,7 @@ class SellerOrdersPage extends StatelessWidget {
                     fontSize: 13,
                   ),
                 ),
+                VariantLine(item),
                 const SizedBox(height: 4),
                 Text(
                   'Total: ${_money(total)}',
