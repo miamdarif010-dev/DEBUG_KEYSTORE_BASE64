@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'order_variant.dart';
 
 class ResellerOrdersPage extends StatefulWidget {
   const ResellerOrdersPage({super.key});
@@ -385,6 +386,7 @@ class _ResellerOrdersPageState
                               .shade600,
                         ),
                       ),
+                      VariantLine(itemData),
                     ],
                   ),
                 ),
