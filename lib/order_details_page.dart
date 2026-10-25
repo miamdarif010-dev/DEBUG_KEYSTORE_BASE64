@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'order_tracking_page.dart';
 import 'return_refund_request_page.dart';
+import 'order_variant.dart';
 
 class OrderDetailsPage extends StatefulWidget {
   final String orderId;
@@ -323,6 +324,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                       fontSize: 13,
                     ),
                   ),
+                  VariantLine(item),
                   const SizedBox(height: 5),
                   Text(
                     '৳${total.toStringAsFixed(0)}',
@@ -426,6 +428,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                           fontSize: 13,
                         ),
                       ),
+                      VariantLine(item),
                       const SizedBox(height: 5),
                       Text(
                         '৳${total.toStringAsFixed(0)}',
