@@ -2,7 +2,6 @@ const admin = require("firebase-admin");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
-const { defineSecret } = require("firebase-functions/params");
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -12,12 +11,41 @@ const FieldValue = admin.firestore.FieldValue;
 
 const REGION = "asia-northeast3";
 
-// The Gmail address that sends the code, and its App Password.
-// Set them once with:
-//   firebase functions:secrets:set GMAIL_USER
-//   firebase functions:secrets:set GMAIL_APP_PASSWORD
-const GMAIL_USER = defineSecret("GMAIL_USER");
-const GMAIL_APP_PASSWORD = defineSecret("GMAIL_APP_PASSWORD");
+// ------------------------------------------------------------
+// MAIL SETTINGS
+// The Gmail address that sends the code and its App Password are
+// read from ONE Firestore document:
+//
+//   server_config / email
+//       gmailUser        : "yourname@gmail.com"
+//       gmailAppPassword : "abcdefghijklmnop"   (16 letters, no spaces)
+//
+// The collection server_config is not in the security rules, so the
+// app and website can never read it. Only these server functions can.
+// ------------------------------------------------------------
+let mailConfigCache = { at: 0, value: null };
+
+async function getMailConfig() {
+  if (mailConfigCache.value && Date.now() - mailConfigCache.at < 5 * 60 * 1000) {
+    return mailConfigCache.value;
+  }
+
+  const snap = await db.doc("server_config/email").get();
+  const d = snap.exists ? snap.data() : {};
+
+  const user = String(d.gmailUser || "").trim();
+  const pass = String(d.gmailAppPassword || "").replace(/\s+/g, "");
+
+  if (!user || !pass) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Email sending is not set up yet. Please contact support."
+    );
+  }
+
+  mailConfigCache = { at: Date.now(), value: { user, pass } };
+  return mailConfigCache.value;
+}
 
 const CODE_TTL_MS = 10 * 60 * 1000; // a code works for 10 minutes
 const RESEND_MS = 60 * 1000; // wait 1 minute before asking for a new code
@@ -32,13 +60,15 @@ const hashCode = (uid, salt, code) =>
 // only this function has to change.
 // ------------------------------------------------------------
 async function sendMail(to, code) {
+  const cfg = await getMailConfig();
+
   const transporter = nodemailer.createTransport({
     service: "gmail",
-    auth: { user: GMAIL_USER.value(), pass: GMAIL_APP_PASSWORD.value() },
+    auth: { user: cfg.user, pass: cfg.pass },
   });
 
   await transporter.sendMail({
-    from: `"BuyNova" <${GMAIL_USER.value()}>`,
+    from: `"BuyNova" <${cfg.user}>`,
     to,
     subject: `${code} is your BuyNova verification code`,
     text:
@@ -66,7 +96,7 @@ async function sendMail(to, code) {
 // which the app and website can never read).
 // ============================================================
 exports.sendLoginCode = onCall(
-  { region: REGION, secrets: [GMAIL_USER, GMAIL_APP_PASSWORD] },
+  { region: REGION },
   async (request) => {
     const uid = request.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "Please login again.");
@@ -129,6 +159,7 @@ exports.sendLoginCode = onCall(
     } catch (e) {
       console.error("sendLoginCode mail error", e);
       await ref.delete().catch(() => {});
+      if (e instanceof HttpsError) throw e;
       throw new HttpsError("internal", "Could not send the email. Please try again.");
     }
 
