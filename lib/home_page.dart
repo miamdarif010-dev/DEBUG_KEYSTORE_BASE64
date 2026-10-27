@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
@@ -40,9 +39,17 @@ class _HomePageState extends State<HomePage>
   int _selectedIndex = 0;
   int _selectedCategory = 0;
 
-  // Search bar + categories hide when scrolling down,
+  // Search bar + categories + slider hide when scrolling down,
   // and come back when scrolling up.
   bool _showHeader = true;
+
+  // While the header animates, the list size changes and fires fake scroll
+  // events. We ignore scroll events until this time, so the header does not
+  // jump back (feedback loop).
+  DateTime _headerLockUntil = DateTime.fromMillisecondsSinceEpoch(0);
+
+  // Distance scrolled in the same direction (to avoid tiny-move flicker).
+  double _scrollAcc = 0;
 
   final TextEditingController _searchController = TextEditingController();
 
@@ -1719,23 +1726,51 @@ class _HomePageState extends State<HomePage>
   // =========================================================
   // SCROLL: hide / show the header
   // =========================================================
+  //
+  // Why the old version jumped back: hiding the header changes the list
+  // height, which fires extra scroll notifications, which toggled the header
+  // again (a loop). Fixes:
+  //   1. react only to real finger drags (dragDetails != null)
+  //   2. lock for 400 ms after each toggle (animation time)
+  //   3. need 40 px of movement in one direction before toggling
 
-  bool _onProductScroll(UserScrollNotification n) {
+  bool _onProductScroll(ScrollNotification n) {
     if (n.metrics.axis != Axis.vertical) return false;
 
-    if (n.metrics.pixels <= 0) {
-      if (!_showHeader) setState(() => _showHeader = true);
+    if (n is! ScrollUpdateNotification || n.dragDetails == null) {
       return false;
     }
 
-    if (n.direction == ScrollDirection.reverse &&
-        _showHeader &&
-        n.metrics.pixels > 80) {
-      // scrolling down -> hide
-      setState(() => _showHeader = false);
-    } else if (n.direction == ScrollDirection.forward && !_showHeader) {
+    // Ignore the layout-change shake while the header is animating.
+    if (DateTime.now().isBefore(_headerLockUntil)) return false;
+
+    final delta = n.scrollDelta ?? 0;
+    final pixels = n.metrics.pixels;
+
+    // Distance in the same direction; reset when direction changes.
+    if (delta != 0 && (_scrollAcc > 0) != (delta > 0)) {
+      _scrollAcc = 0;
+    }
+
+    _scrollAcc += delta;
+
+    void setHeader(bool show) {
+      if (_showHeader == show) return;
+
+      _headerLockUntil = DateTime.now().add(const Duration(milliseconds: 400));
+      _scrollAcc = 0;
+
+      setState(() => _showHeader = show);
+    }
+
+    if (pixels <= 0) {
+      setHeader(true);
+    } else if (_scrollAcc > 40 && pixels > 120) {
+      // scrolling down -> hide, more room for products
+      setHeader(false);
+    } else if (_scrollAcc < -40) {
       // scrolling up -> show
-      setState(() => _showHeader = true);
+      setHeader(true);
     }
 
     return false;
@@ -1801,7 +1836,7 @@ class _HomePageState extends State<HomePage>
           // BODY
           body: Column(
             children: [
-              // HEADER: search + categories.
+              // HEADER: search + categories + slider.
               // Slides up when scrolling down, back when scrolling up.
               ClipRect(
                 child: AnimatedAlign(
@@ -1912,8 +1947,7 @@ class _HomePageState extends State<HomePage>
                               allDocs,
                             );
 
-                            return NotificationListener<
-                                UserScrollNotification>(
+                            return NotificationListener<ScrollNotification>(
                               onNotification: _onProductScroll,
                               child: CustomScrollView(
                                 slivers: _buildFeedSlivers(
