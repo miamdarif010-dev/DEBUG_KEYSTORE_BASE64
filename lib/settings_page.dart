@@ -1,97 +1,548 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'login_page.dart';
 import 'app_settings.dart';
 
-class SettingsPage extends StatelessWidget {
+/// TODO: put your real support email here.
+const String kSupportEmail = 'support@buynova.com';
+const String kAppVersion = '1.0.0';
+
+class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
-  void _showMessage(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  User? get _user => FirebaseAuth.instance.currentUser;
+
+  // ---------------------------------------------------------------
+  // HELPERS
+  // ---------------------------------------------------------------
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Future<void> _logout(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Logout'),
-          content: const Text(
-            'Are you sure you want to logout?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext, false);
-              },
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.pop(dialogContext, true);
-              },
-              child: const Text('Logout'),
-            ),
-          ],
-        );
-      },
-    );
+  String _authError(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'wrong-password':
+      case 'invalid-credential':
+        return 'Wrong password. Please try again.';
+      case 'weak-password':
+        return 'Password is too weak (minimum 6 characters).';
+      case 'requires-recent-login':
+        return 'Please login again and retry.';
+      case 'email-already-in-use':
+        return 'This email is already used by another account.';
+      case 'invalid-email':
+        return 'Invalid email address.';
+      case 'too-many-requests':
+        return 'Too many attempts. Try again later.';
+      case 'network-request-failed':
+        return 'No internet connection.';
+      case 'invalid-phone-number':
+        return 'Invalid phone number. Use format +8210XXXXXXXX';
+      case 'invalid-verification-code':
+        return 'Wrong verification code.';
+      case 'credential-already-in-use':
+      case 'provider-already-linked':
+        return 'This phone number is already used.';
+      default:
+        return e.message ?? 'Something went wrong.';
+    }
+  }
 
-    if (confirmed != true) return;
+  bool get _hasPasswordProvider =>
+      _user?.providerData.any((p) => p.providerId == 'password') ?? false;
+
+  bool get _hasGoogleProvider =>
+      _user?.providerData.any((p) => p.providerId == 'google.com') ?? false;
+
+  Future<bool> _confirm({
+    required String title,
+    required String message,
+    required String confirmText,
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(confirmText),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
+
+  Future<String?> _askText({
+    required String title,
+    required String label,
+    bool obscure = false,
+    TextInputType keyboardType = TextInputType.text,
+    String? hint,
+    String confirmText = 'OK',
+  }) async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          obscureText: obscure,
+          keyboardType: keyboardType,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: label,
+            hintText: hint,
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
+            child: Text(confirmText),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
+  }
+
+  /// Firebase needs a recent login for sensitive actions.
+  Future<bool> _reauthenticate() async {
+    final user = _user;
+    if (user == null) return false;
+
+    try {
+      if (_hasPasswordProvider && user.email != null) {
+        final password = await _askText(
+          title: 'Confirm your identity',
+          label: 'Current password',
+          obscure: true,
+          confirmText: 'Continue',
+        );
+        if (password == null || password.isEmpty) return false;
+
+        await user.reauthenticateWithCredential(
+          EmailAuthProvider.credential(
+            email: user.email!,
+            password: password,
+          ),
+        );
+        return true;
+      }
+
+      if (_hasGoogleProvider) {
+        await user.reauthenticateWithProvider(GoogleAuthProvider());
+        return true;
+      }
+
+      _showMessage('Please logout and login again, then retry.');
+      return false;
+    } on FirebaseAuthException catch (e) {
+      _showMessage(_authError(e));
+      return false;
+    }
+  }
+
+  Future<void> _refreshUser() async {
+    try {
+      await _user?.reload();
+    } catch (_) {}
+    if (mounted) setState(() {});
+  }
+
+  // ---------------------------------------------------------------
+  // LOGOUT / DELETE
+  // ---------------------------------------------------------------
+
+  Future<void> _logout() async {
+    final ok = await _confirm(
+      title: 'Logout',
+      message: 'Are you sure you want to logout?',
+      confirmText: 'Logout',
+    );
+    if (!ok) return;
 
     await FirebaseAuth.instance.signOut();
-
-    if (!context.mounted) return;
+    if (!mounted) return;
 
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(
-        builder: (_) => const LoginPage(),
-      ),
+      MaterialPageRoute(builder: (_) => const LoginPage()),
       (route) => false,
     );
   }
 
-  Future<void> _deleteAccount(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
+  Future<void> _deleteAccount() async {
+    final ok = await _confirm(
+      title: 'Delete Account',
+      message: 'Are you sure you want to delete your account?\n\n'
+          'This action cannot be undone.',
+      confirmText: 'Delete',
+    );
+    if (!ok) return;
+
+    final reauthed = await _reauthenticate();
+    if (!reauthed) return;
+
+    try {
+      await FirebaseAuth.instance.currentUser?.delete();
+    } on FirebaseAuthException catch (e) {
+      _showMessage(_authError(e));
+      return;
+    }
+
+    if (!mounted) return;
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+      (route) => false,
+    );
+  }
+
+  // ---------------------------------------------------------------
+  // ACCOUNT & SECURITY
+  // ---------------------------------------------------------------
+
+  Future<void> _changePassword() async {
+    final user = _user;
+    if (user == null) return;
+
+    if (!_hasPasswordProvider) {
+      _showMessage(
+        'You signed in with Google, so there is no app password to change.',
+      );
+      return;
+    }
+
+    final current = TextEditingController();
+    final newPass = TextEditingController();
+    final confirm = TextEditingController();
+    String? error;
+
+    final result = await showDialog<String>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Delete Account'),
-          content: const Text(
-            'Are you sure you want to delete your account?\n\n'
-            'This action cannot be undone.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext, false);
-              },
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.pop(dialogContext, true);
-              },
-              child: const Text('Delete'),
-            ),
-          ],
+        return StatefulBuilder(
+          builder: (context, setLocal) {
+            return AlertDialog(
+              title: const Text('Change Password'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: current,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Current password',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: newPass,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'New password',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: confirm,
+                      obscureText: true,
+                      decoration: InputDecoration(
+                        labelText: 'Confirm new password',
+                        border: const OutlineInputBorder(),
+                        errorText: error,
+                      ),
+                    ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(dialogContext, 'reset'),
+                        child: const Text('Forgot? Send reset email'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    if (current.text.isEmpty) {
+                      setLocal(() => error = 'Enter your current password');
+                    } else if (newPass.text.length < 6) {
+                      setLocal(() => error = 'Minimum 6 characters');
+                    } else if (newPass.text != confirm.text) {
+                      setLocal(() => error = 'Passwords do not match');
+                    } else {
+                      Navigator.pop(dialogContext, 'save');
+                    }
+                  },
+                  child: const Text('Update'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
 
-    if (confirmed != true) return;
+    final currentText = current.text;
+    final newText = newPass.text;
+    current.dispose();
+    newPass.dispose();
+    confirm.dispose();
 
-    _showMessage(
-      context,
-      'Account deletion will be connected later.',
+    if (result == 'reset') {
+      try {
+        await FirebaseAuth.instance.sendPasswordResetEmail(
+          email: user.email!,
+        );
+        _showMessage('Password reset email sent to ${user.email}');
+      } on FirebaseAuthException catch (e) {
+        _showMessage(_authError(e));
+      }
+      return;
+    }
+
+    if (result != 'save') return;
+
+    try {
+      await user.reauthenticateWithCredential(
+        EmailAuthProvider.credential(
+          email: user.email!,
+          password: currentText,
+        ),
+      );
+      await user.updatePassword(newText);
+      _showMessage('Password updated successfully.');
+    } on FirebaseAuthException catch (e) {
+      _showMessage(_authError(e));
+    }
+  }
+
+  Future<void> _changeEmail() async {
+    final user = _user;
+    if (user == null) return;
+
+    final newEmail = await _askText(
+      title: 'Change Email',
+      label: 'New email address',
+      keyboardType: TextInputType.emailAddress,
+      confirmText: 'Continue',
+    );
+    if (newEmail == null || newEmail.isEmpty) return;
+
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(newEmail)) {
+      _showMessage('Invalid email address.');
+      return;
+    }
+
+    final reauthed = await _reauthenticate();
+    if (!reauthed) return;
+
+    try {
+      await user.verifyBeforeUpdateEmail(newEmail);
+      _showMessage(
+        'Verification link sent to $newEmail. '
+        'Your email changes after you open the link.',
+      );
+    } on FirebaseAuthException catch (e) {
+      _showMessage(_authError(e));
+    }
+  }
+
+  Future<void> _attachPhone(User user, PhoneAuthCredential credential) async {
+    final hasPhone = user.providerData.any((p) => p.providerId == 'phone');
+    if (hasPhone) {
+      await user.updatePhoneNumber(credential);
+    } else {
+      await user.linkWithCredential(credential);
+    }
+  }
+
+  Future<void> _changePhone() async {
+    final user = _user;
+    if (user == null) return;
+
+    final phone = await _askText(
+      title: 'Phone Number',
+      label: 'Phone with country code',
+      hint: '+8210XXXXXXXX',
+      keyboardType: TextInputType.phone,
+      confirmText: 'Send code',
+    );
+    if (phone == null || phone.isEmpty) return;
+
+    if (!RegExp(r'^\+[1-9]\d{7,14}$').hasMatch(phone)) {
+      _showMessage('Use international format, e.g. +8210XXXXXXXX');
+      return;
+    }
+
+    await FirebaseAuth.instance.verifyPhoneNumber(
+      phoneNumber: phone,
+      verificationCompleted: (credential) async {
+        try {
+          await _attachPhone(user, credential);
+          await _refreshUser();
+          _showMessage('Phone number saved.');
+        } on FirebaseAuthException catch (e) {
+          _showMessage(_authError(e));
+        }
+      },
+      verificationFailed: (e) => _showMessage(_authError(e)),
+      codeSent: (verificationId, resendToken) async {
+        if (!mounted) return;
+        final code = await _askText(
+          title: 'Enter verification code',
+          label: '6-digit code',
+          keyboardType: TextInputType.number,
+          confirmText: 'Verify',
+        );
+        if (code == null || code.length < 6) return;
+
+        try {
+          final credential = PhoneAuthProvider.credential(
+            verificationId: verificationId,
+            smsCode: code,
+          );
+          await _attachPhone(user, credential);
+          await _refreshUser();
+          _showMessage('Phone number saved.');
+        } on FirebaseAuthException catch (e) {
+          _showMessage(_authError(e));
+        }
+      },
+      codeAutoRetrievalTimeout: (_) {},
     );
   }
 
-  void _showLanguageDialog(BuildContext context) {
+  String _formatDate(DateTime? d) {
+    if (d == null) return 'Unknown';
+    final l = d.toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${l.year}-${two(l.month)}-${two(l.day)} ${two(l.hour)}:${two(l.minute)}';
+  }
+
+  void _showLoginSecurity() {
+    final user = _user;
+    if (user == null) return;
+
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        final providers = user.providerData
+            .map((p) {
+              switch (p.providerId) {
+                case 'password':
+                  return 'Email & Password';
+                case 'google.com':
+                  return 'Google';
+                case 'phone':
+                  return 'Phone';
+                default:
+                  return p.providerId;
+              }
+            })
+            .join(', ');
+
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Login & Security',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 16),
+                _InfoRow('Sign-in method', providers.isEmpty ? '-' : providers),
+                _InfoRow('Email', user.email ?? 'Not available'),
+                _InfoRow(
+                  'Email verified',
+                  user.emailVerified ? 'Yes' : 'No',
+                ),
+                _InfoRow('Account created',
+                    _formatDate(user.metadata.creationTime)),
+                _InfoRow('Last sign in',
+                    _formatDate(user.metadata.lastSignInTime)),
+                const SizedBox(height: 12),
+                if (!user.emailVerified && user.email != null)
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.mark_email_read_outlined),
+                      label: const Text('Send verification email'),
+                      onPressed: () async {
+                        try {
+                          await user.sendEmailVerification();
+                          _showMessage('Verification email sent.');
+                        } on FirebaseAuthException catch (e) {
+                          _showMessage(_authError(e));
+                        }
+                      },
+                    ),
+                  ),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Refresh status'),
+                    onPressed: () async {
+                      Navigator.pop(sheetContext);
+                      await _refreshUser();
+                      _showMessage('Status refreshed.');
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------
+  // DIALOGS: language, currency, video quality
+  // ---------------------------------------------------------------
+
+  void _showLanguageDialog() {
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -104,7 +555,6 @@ class SettingsPage extends StatelessWidget {
                 groupValue: language,
                 onChanged: (value) {
                   if (value == null) return;
-
                   AppSettings.setLanguage(value);
                   Navigator.pop(dialogContext);
                 },
@@ -133,7 +583,7 @@ class SettingsPage extends StatelessWidget {
     );
   }
 
-  void _showCurrencyDialog(BuildContext context) {
+  void _showCurrencyDialog() {
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -146,7 +596,6 @@ class SettingsPage extends StatelessWidget {
                 groupValue: currency,
                 onChanged: (value) {
                   if (value == null) return;
-
                   AppSettings.setCurrency(value);
                   Navigator.pop(dialogContext);
                 },
@@ -183,7 +632,7 @@ class SettingsPage extends StatelessWidget {
     );
   }
 
-  void _showVideoQualityDialog(BuildContext context) {
+  void _showVideoQualityDialog() {
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -196,29 +645,17 @@ class SettingsPage extends StatelessWidget {
                 groupValue: quality,
                 onChanged: (value) {
                   if (value == null) return;
-
                   AppSettings.setVideoQuality(value);
                   Navigator.pop(dialogContext);
                 },
                 child: const Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    RadioListTile<String>(value: 'Auto', title: Text('Auto')),
+                    RadioListTile<String>(value: 'Low', title: Text('Low')),
                     RadioListTile<String>(
-                      value: 'Auto',
-                      title: Text('Auto'),
-                    ),
-                    RadioListTile<String>(
-                      value: 'Low',
-                      title: Text('Low'),
-                    ),
-                    RadioListTile<String>(
-                      value: 'Medium',
-                      title: Text('Medium'),
-                    ),
-                    RadioListTile<String>(
-                      value: 'High',
-                      title: Text('High'),
-                    ),
+                        value: 'Medium', title: Text('Medium')),
+                    RadioListTile<String>(value: 'High', title: Text('High')),
                   ],
                 ),
               ),
@@ -229,9 +666,199 @@ class SettingsPage extends StatelessWidget {
     );
   }
 
+  String _currencyName(String currency) {
+    switch (currency) {
+      case 'BDT':
+        return '৳ Bangladeshi Taka';
+      case 'USD':
+        return '\$ US Dollar';
+      case 'INR':
+        return '₹ Indian Rupee';
+      case 'EUR':
+        return '€ Euro';
+      case 'KRW':
+      default:
+        return '₩ Korean Won';
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // PRIVACY / HELP
+  // ---------------------------------------------------------------
+
+  void _showMediaPermissionsInfo() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Media Permissions'),
+        content: const Text(
+          'Photo, video and camera access is controlled by your phone.\n\n'
+          'Android: Settings → Apps → BuyNova → Permissions\n'
+          'iPhone: Settings → BuyNova → Photos / Camera',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showContactSupport() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Contact Support'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Email us at:'),
+            SizedBox(height: 8),
+            SelectableText(
+              kSupportEmail,
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              await Clipboard.setData(
+                const ClipboardData(text: kSupportEmail),
+              );
+              if (dialogContext.mounted) Navigator.pop(dialogContext);
+              _showMessage('Email address copied.');
+            },
+            child: const Text('Copy email'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _reportProblem() async {
+    final controller = TextEditingController();
+
+    final send = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Report a Problem'),
+        content: TextField(
+          controller: controller,
+          maxLines: 5,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'Describe the problem...',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Copy report'),
+          ),
+        ],
+      ),
+    );
+
+    final text = controller.text.trim();
+    controller.dispose();
+
+    if (send != true) return;
+    if (text.isEmpty) {
+      _showMessage('Please describe the problem first.');
+      return;
+    }
+
+    final report = 'BuyNova problem report\n'
+        'App version: $kAppVersion\n'
+        'User: ${_user?.uid ?? 'guest'}\n\n'
+        '$text';
+
+    await Clipboard.setData(ClipboardData(text: report));
+    _showMessage('Report copied. Send it to $kSupportEmail');
+  }
+
+  void _openPage(Widget page) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+  }
+
+  Future<void> _resetAllSettings() async {
+    final ok = await _confirm(
+      title: 'Reset all settings',
+      message: 'All settings will go back to default values.',
+      confirmText: 'Reset',
+    );
+    if (!ok) return;
+
+    await AppSettings.resetAll();
+    _showMessage('All settings reset.');
+  }
+
+  // ---------------------------------------------------------------
+  // REUSABLE TILES
+  // ---------------------------------------------------------------
+
+  Widget _switchTile({
+    required ValueNotifier<bool> notifier,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Future<void> Function(bool) onChanged,
+  }) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: notifier,
+      builder: (context, value, child) {
+        return SwitchListTile(
+          secondary: Icon(icon),
+          title: Text(title),
+          subtitle: Text(subtitle),
+          value: value,
+          onChanged: (newValue) {
+            AppSettings.haptic();
+            onChanged(newValue);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _navTile({
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      subtitle: subtitle == null ? null : Text(subtitle),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () {
+        AppSettings.haptic();
+        onTap();
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------
+  // BUILD
+  // ---------------------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = _user;
 
     return Scaffold(
       appBar: AppBar(
@@ -241,33 +868,45 @@ class SettingsPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.only(bottom: 30),
         children: [
+          // ================= GENERAL =================
+          const _SectionTitle(icon: Icons.tune, title: 'General'),
 
-          // =====================================================
-          // GENERAL
-          // =====================================================
-
-          const _SectionTitle(
-            icon: Icons.tune,
-            title: 'General',
+          _switchTile(
+            notifier: AppSettings.notifications,
+            icon: Icons.notifications_outlined,
+            title: 'Notifications',
+            subtitle: 'Receive BuyNova notifications',
+            onChanged: AppSettings.setNotifications,
           ),
 
-          ValueListenableBuilder<bool>(
-            valueListenable: AppSettings.notifications,
-            builder: (context, value, child) {
-              return SwitchListTile(
-                secondary: const Icon(
-                  Icons.notifications_outlined,
-                ),
-                title: const Text('Notifications'),
-                subtitle: const Text(
-                  'Receive BuyNova notifications',
-                ),
-                value: value,
-                onChanged: (newValue) {
-                  AppSettings.setNotifications(newValue);
-                },
+          ValueListenableBuilder<String>(
+            valueListenable: AppSettings.language,
+            builder: (context, language, child) {
+              return _navTile(
+                icon: Icons.language_outlined,
+                title: 'Language',
+                subtitle: language,
+                onTap: _showLanguageDialog,
               );
             },
+          ),
+
+          ValueListenableBuilder<String>(
+            valueListenable: AppSettings.currency,
+            builder: (context, currency, child) {
+              return _navTile(
+                icon: Icons.currency_exchange,
+                title: 'Currency',
+                subtitle: _currencyName(currency),
+                onTap: _showCurrencyDialog,
+              );
+            },
+          ),
+
+          // ================= APPEARANCE =================
+          const _SectionTitle(
+            icon: Icons.palette_outlined,
+            title: 'Appearance',
           ),
 
           ValueListenableBuilder<ThemeMode>(
@@ -277,557 +916,269 @@ class SettingsPage extends StatelessWidget {
 
               return SwitchListTile(
                 secondary: Icon(
-                  isDark
-                      ? Icons.dark_mode
-                      : Icons.light_mode_outlined,
+                  isDark ? Icons.dark_mode : Icons.light_mode_outlined,
                 ),
                 title: const Text('Dark Mode'),
                 subtitle: Text(
-                  isDark
-                      ? 'Dark theme is enabled'
-                      : 'Use light theme',
+                  isDark ? 'Dark theme is enabled' : 'Use light theme',
                 ),
                 value: isDark,
                 onChanged: (value) {
+                  AppSettings.haptic();
                   AppSettings.setDarkMode(value);
                 },
               );
             },
           ),
 
-          ValueListenableBuilder<String>(
-            valueListenable: AppSettings.language,
-            builder: (context, language, child) {
+          ValueListenableBuilder<double>(
+            valueListenable: AppSettings.textScale,
+            builder: (context, scale, child) {
               return ListTile(
-                leading: const Icon(
-                  Icons.language_outlined,
+                leading: const Icon(Icons.text_fields),
+                title: const Text('Text Size'),
+                subtitle: Slider(
+                  value: scale,
+                  min: 0.8,
+                  max: 1.4,
+                  divisions: 6,
+                  label: '${(scale * 100).round()}%',
+                  onChanged: (v) => AppSettings.textScale.value = v,
+                  onChangeEnd: (v) => AppSettings.setTextScale(v),
                 ),
-                title: const Text('Language'),
-                subtitle: Text(language),
-                trailing: const Icon(
-                  Icons.chevron_right,
-                ),
-                onTap: () {
-                  _showLanguageDialog(context);
-                },
+                trailing: Text('${(scale * 100).round()}%'),
               );
             },
           ),
 
-          ValueListenableBuilder<String>(
-            valueListenable: AppSettings.currency,
-            builder: (context, currency, child) {
-              String currencyName;
-
-              switch (currency) {
-                case 'BDT':
-                  currencyName = '৳ Bangladeshi Taka';
-                  break;
-                case 'USD':
-                  currencyName = '\$ US Dollar';
-                  break;
-                case 'INR':
-                  currencyName = '₹ Indian Rupee';
-                  break;
-                case 'EUR':
-                  currencyName = '€ Euro';
-                  break;
-                case 'KRW':
-                default:
-                  currencyName = '₩ Korean Won';
-              }
-
-              return ListTile(
-                leading: const Icon(
-                  Icons.currency_exchange,
-                ),
-                title: const Text('Currency'),
-                subtitle: Text(currencyName),
-                trailing: const Icon(
-                  Icons.chevron_right,
-                ),
-                onTap: () {
-                  _showCurrencyDialog(context);
-                },
-              );
-            },
+          _switchTile(
+            notifier: AppSettings.reduceMotion,
+            icon: Icons.animation_outlined,
+            title: 'Reduce Motion',
+            subtitle: 'Reduce animations in the app',
+            onChanged: AppSettings.setReduceMotion,
           ),
 
-          // =====================================================
-          // VIDEOS
-          // =====================================================
+          _switchTile(
+            notifier: AppSettings.vibration,
+            icon: Icons.vibration_outlined,
+            title: 'Vibration',
+            subtitle: 'Use vibration for interactions',
+            onChanged: AppSettings.setVibration,
+          ),
 
+          // ================= VIDEOS =================
           const _SectionTitle(
             icon: Icons.video_library_outlined,
             title: 'Videos',
           ),
 
-          ValueListenableBuilder<bool>(
-            valueListenable: AppSettings.autoPlayVideos,
-            builder: (context, value, child) {
-              return SwitchListTile(
-                secondary: const Icon(
-                  Icons.play_circle_outline,
-                ),
-                title: const Text('Auto Play Videos'),
-                subtitle: const Text(
-                  'Automatically play videos',
-                ),
-                value: value,
-                onChanged: (newValue) {
-                  AppSettings.setAutoPlayVideos(newValue);
-                },
-              );
-            },
+          _switchTile(
+            notifier: AppSettings.autoPlayVideos,
+            icon: Icons.play_circle_outline,
+            title: 'Auto Play Videos',
+            subtitle: 'Automatically play videos',
+            onChanged: AppSettings.setAutoPlayVideos,
           ),
 
-          ValueListenableBuilder<bool>(
-            valueListenable: AppSettings.videoSound,
-            builder: (context, value, child) {
-              return SwitchListTile(
-                secondary: const Icon(
-                  Icons.volume_up_outlined,
-                ),
-                title: const Text('Video Sound'),
-                subtitle: const Text(
-                  'Play sound automatically',
-                ),
-                value: value,
-                onChanged: (newValue) {
-                  AppSettings.setVideoSound(newValue);
-                },
-              );
-            },
+          _switchTile(
+            notifier: AppSettings.videoSound,
+            icon: Icons.volume_up_outlined,
+            title: 'Video Sound',
+            subtitle: 'Play sound automatically',
+            onChanged: AppSettings.setVideoSound,
           ),
 
           ValueListenableBuilder<String>(
             valueListenable: AppSettings.videoQuality,
             builder: (context, quality, child) {
-              return ListTile(
-                leading: const Icon(
-                  Icons.high_quality_outlined,
-                ),
-                title: const Text('Video Quality'),
-                subtitle: Text(quality),
-                trailing: const Icon(
-                  Icons.chevron_right,
-                ),
-                onTap: () {
-                  _showVideoQualityDialog(context);
-                },
+              return _navTile(
+                icon: Icons.high_quality_outlined,
+                title: 'Video Quality',
+                subtitle: quality,
+                onTap: _showVideoQualityDialog,
               );
             },
           ),
 
-          ValueListenableBuilder<bool>(
-            valueListenable: AppSettings.dataSaver,
-            builder: (context, value, child) {
-              return SwitchListTile(
-                secondary: const Icon(
-                  Icons.data_saver_on_outlined,
-                ),
-                title: const Text('Data Saver'),
-                subtitle: const Text(
-                  'Reduce mobile data usage',
-                ),
-                value: value,
-                onChanged: (newValue) {
-                  AppSettings.setDataSaver(newValue);
-                },
-              );
-            },
+          _switchTile(
+            notifier: AppSettings.dataSaver,
+            icon: Icons.data_saver_on_outlined,
+            title: 'Data Saver',
+            subtitle: 'Reduce mobile data usage',
+            onChanged: AppSettings.setDataSaver,
           ),
 
-          ValueListenableBuilder<bool>(
-            valueListenable: AppSettings.reduceMotion,
-            builder: (context, value, child) {
-              return SwitchListTile(
-                secondary: const Icon(
-                  Icons.animation_outlined,
-                ),
-                title: const Text('Reduce Motion'),
-                subtitle: const Text(
-                  'Reduce animations in the app',
-                ),
-                value: value,
-                onChanged: (newValue) {
-                  AppSettings.setReduceMotion(newValue);
-                },
-              );
-            },
-          ),
-
-          ValueListenableBuilder<bool>(
-            valueListenable: AppSettings.vibration,
-            builder: (context, value, child) {
-              return SwitchListTile(
-                secondary: const Icon(
-                  Icons.vibration_outlined,
-                ),
-                title: const Text('Vibration'),
-                subtitle: const Text(
-                  'Use vibration for interactions',
-                ),
-                value: value,
-                onChanged: (newValue) {
-                  AppSettings.setVibration(newValue);
-                },
-              );
-            },
-          ),
-
-          // =====================================================
-          // ACCOUNT & SECURITY
-          // =====================================================
-
+          // ================= ACCOUNT & SECURITY =================
           const _SectionTitle(
             icon: Icons.security_outlined,
             title: 'Account & Security',
           ),
 
-          if (user != null)
-            ListTile(
-              leading: const Icon(
-                Icons.lock_outline,
-              ),
-              title: const Text('Change Password'),
-              trailing: const Icon(
-                Icons.chevron_right,
-              ),
-              onTap: () {
-                _showMessage(
-                  context,
-                  'Change Password will be connected later.',
-                );
-              },
+          if (user != null) ...[
+            _navTile(
+              icon: Icons.lock_outline,
+              title: 'Change Password',
+              subtitle: _hasPasswordProvider
+                  ? 'Update your password'
+                  : 'Not available for Google sign-in',
+              onTap: _changePassword,
+            ),
+            _navTile(
+              icon: Icons.email_outlined,
+              title: 'Email Address',
+              subtitle: user.email ?? 'Not available',
+              onTap: _changeEmail,
+            ),
+            _navTile(
+              icon: Icons.phone_outlined,
+              title: 'Phone Number',
+              subtitle: (user.phoneNumber != null &&
+                      user.phoneNumber!.isNotEmpty)
+                  ? user.phoneNumber!
+                  : 'Add phone number',
+              onTap: _changePhone,
+            ),
+            _navTile(
+              icon: Icons.login_outlined,
+              title: 'Login & Security',
+              subtitle: user.emailVerified
+                  ? 'Email verified'
+                  : 'Email not verified',
+              onTap: _showLoginSecurity,
+            ),
+            _navTile(
+              icon: Icons.delete_outline,
+              title: 'Delete Account',
+              subtitle: 'Permanently delete your account',
+              onTap: _deleteAccount,
+            ),
+          ] else
+            const ListTile(
+              leading: Icon(Icons.info_outline),
+              title: Text('You are not logged in'),
+              subtitle: Text('Login to manage your account'),
             ),
 
-          if (user != null)
-            ListTile(
-              leading: const Icon(
-                Icons.email_outlined,
-              ),
-              title: const Text('Email Address'),
-              subtitle: Text(
-                user.email ?? 'Not available',
-              ),
-              trailing: const Icon(
-                Icons.chevron_right,
-              ),
-              onTap: () {
-                _showMessage(
-                  context,
-                  'Email settings will be connected later.',
-                );
-              },
-            ),
-
-          if (user != null)
-            ListTile(
-              leading: const Icon(
-                Icons.phone_outlined,
-              ),
-              title: const Text('Phone Number'),
-              subtitle: const Text(
-                'Manage phone number',
-              ),
-              trailing: const Icon(
-                Icons.chevron_right,
-              ),
-              onTap: () {
-                _showMessage(
-                  context,
-                  'Phone settings will be connected later.',
-                );
-              },
-            ),
-
-          if (user != null)
-            ListTile(
-              leading: const Icon(
-                Icons.login_outlined,
-              ),
-              title: const Text('Login & Security'),
-              subtitle: const Text(
-                'Manage login and security',
-              ),
-              trailing: const Icon(
-                Icons.chevron_right,
-              ),
-              onTap: () {
-                _showMessage(
-                  context,
-                  'Login & Security will be connected later.',
-                );
-              },
-            ),
-
-          if (user != null)
-            ListTile(
-              leading: const Icon(
-                Icons.delete_outline,
-              ),
-              title: const Text('Delete Account'),
-              subtitle: const Text(
-                'Permanently delete your account',
-              ),
-              trailing: const Icon(
-                Icons.chevron_right,
-              ),
-              onTap: () {
-                _deleteAccount(context);
-              },
-            ),
-
-          // =====================================================
-          // PRIVACY
-          // =====================================================
-
+          // ================= PRIVACY =================
           const _SectionTitle(
             icon: Icons.privacy_tip_outlined,
             title: 'Privacy',
           ),
 
-          ListTile(
-            leading: const Icon(
-              Icons.visibility_outlined,
-            ),
-            title: const Text('Privacy Settings'),
-            subtitle: const Text(
-              'Control your privacy',
-            ),
-            trailing: const Icon(
-              Icons.chevron_right,
-            ),
-            onTap: () {
-              _showMessage(
-                context,
-                'Privacy Settings will be connected later.',
+          ValueListenableBuilder<List<String>>(
+            valueListenable: AppSettings.blockedUsers,
+            builder: (context, blocked, child) {
+              return _navTile(
+                icon: Icons.block_outlined,
+                title: 'Blocked Users',
+                subtitle: blocked.isEmpty
+                    ? 'No blocked users'
+                    : '${blocked.length} blocked',
+                onTap: () => _openPage(const _BlockedUsersPage()),
               );
             },
           ),
 
-          ListTile(
-            leading: const Icon(
-              Icons.block_outlined,
-            ),
-            title: const Text('Blocked Users'),
-            subtitle: const Text(
-              'Manage blocked users',
-            ),
-            trailing: const Icon(
-              Icons.chevron_right,
-            ),
-            onTap: () {
-              _showMessage(
-                context,
-                'Blocked Users will be connected later.',
-              );
-            },
+          _navTile(
+            icon: Icons.perm_media_outlined,
+            title: 'Media Permissions',
+            subtitle: 'Manage photo and video permissions',
+            onTap: _showMediaPermissionsInfo,
           ),
 
-          ListTile(
-            leading: const Icon(
-              Icons.perm_media_outlined,
-            ),
-            title: const Text('Media Permissions'),
-            subtitle: const Text(
-              'Manage photo and video permissions',
-            ),
-            trailing: const Icon(
-              Icons.chevron_right,
-            ),
-            onTap: () {
-              _showMessage(
-                context,
-                'Media Permissions will be connected later.',
-              );
-            },
-          ),
-
-          // =====================================================
-          // HELP & SUPPORT
-          // =====================================================
-
+          // ================= HELP & SUPPORT =================
           const _SectionTitle(
             icon: Icons.help_outline,
             title: 'Help & Support',
           ),
 
-          ListTile(
-            leading: const Icon(
-              Icons.help_center_outlined,
-            ),
-            title: const Text('Help Center'),
-            trailing: const Icon(
-              Icons.chevron_right,
-            ),
-            onTap: () {
-              _showMessage(
-                context,
-                'Help Center will be connected later.',
-              );
-            },
+          _navTile(
+            icon: Icons.help_center_outlined,
+            title: 'Help Center',
+            onTap: () => _openPage(const _TextPage(
+              title: 'Help Center',
+              sections: _helpSections,
+            )),
+          ),
+          _navTile(
+            icon: Icons.support_agent_outlined,
+            title: 'Contact Support',
+            onTap: _showContactSupport,
+          ),
+          _navTile(
+            icon: Icons.report_problem_outlined,
+            title: 'Report a Problem',
+            onTap: _reportProblem,
+          ),
+          _navTile(
+            icon: Icons.question_answer_outlined,
+            title: 'FAQ',
+            onTap: () => _openPage(const _FaqPage()),
           ),
 
-          ListTile(
-            leading: const Icon(
-              Icons.support_agent_outlined,
-            ),
-            title: const Text('Contact Support'),
-            trailing: const Icon(
-              Icons.chevron_right,
-            ),
-            onTap: () {
-              _showMessage(
-                context,
-                'Contact Support will be connected later.',
-              );
-            },
-          ),
-
-          ListTile(
-            leading: const Icon(
-              Icons.report_problem_outlined,
-            ),
-            title: const Text('Report a Problem'),
-            trailing: const Icon(
-              Icons.chevron_right,
-            ),
-            onTap: () {
-              _showMessage(
-                context,
-                'Report a Problem will be connected later.',
-              );
-            },
-          ),
-
-          ListTile(
-            leading: const Icon(
-              Icons.question_answer_outlined,
-            ),
-            title: const Text('FAQ'),
-            trailing: const Icon(
-              Icons.chevron_right,
-            ),
-            onTap: () {
-              _showMessage(
-                context,
-                'FAQ will be connected later.',
-              );
-            },
-          ),
-
-          // =====================================================
-          // STORAGE
-          // =====================================================
-
+          // ================= STORAGE =================
           const _SectionTitle(
             icon: Icons.cleaning_services_outlined,
             title: 'Storage',
           ),
 
-          ListTile(
-            leading: const Icon(
-              Icons.cleaning_services_outlined,
-            ),
-            title: const Text('Clear Temporary Settings'),
-            subtitle: const Text(
-              'Reset temporary video settings',
-            ),
-            trailing: const Icon(
-              Icons.chevron_right,
-            ),
+          _navTile(
+            icon: Icons.cleaning_services_outlined,
+            title: 'Clear Temporary Settings',
+            subtitle: 'Reset temporary video settings',
             onTap: () async {
               await AppSettings.clearCache();
-
-              if (!context.mounted) return;
-
-              _showMessage(
-                context,
-                'Temporary settings cleared.',
-              );
+              _showMessage('Temporary settings cleared.');
             },
           ),
-
-          // =====================================================
-          // ABOUT
-          // =====================================================
-
-          const _SectionTitle(
-            icon: Icons.info_outline,
-            title: 'About',
+          _navTile(
+            icon: Icons.restart_alt,
+            title: 'Reset All Settings',
+            subtitle: 'Restore default settings',
+            onTap: _resetAllSettings,
           ),
 
-          ListTile(
-            leading: const Icon(
-              Icons.info_outline,
-            ),
-            title: const Text('About BuyNova'),
-            subtitle: const Text(
-              'BuyNova shopping platform',
-            ),
-            trailing: const Icon(
-              Icons.chevron_right,
-            ),
+          // ================= ABOUT =================
+          const _SectionTitle(icon: Icons.info_outline, title: 'About'),
+
+          _navTile(
+            icon: Icons.info_outline,
+            title: 'About BuyNova',
+            subtitle: 'BuyNova shopping platform',
             onTap: () {
               showAboutDialog(
                 context: context,
                 applicationName: 'BuyNova',
-                applicationVersion: '1.0.0',
+                applicationVersion: kAppVersion,
                 applicationLegalese: '© BuyNova',
               );
             },
           ),
-
-          ListTile(
-            leading: const Icon(
-              Icons.description_outlined,
-            ),
-            title: const Text('Terms & Conditions'),
-            trailing: const Icon(
-              Icons.chevron_right,
-            ),
-            onTap: () {
-              _showMessage(
-                context,
-                'Terms & Conditions will be connected later.',
-              );
-            },
+          _navTile(
+            icon: Icons.description_outlined,
+            title: 'Terms & Conditions',
+            onTap: () => _openPage(const _TextPage(
+              title: 'Terms & Conditions',
+              sections: _termsSections,
+            )),
+          ),
+          _navTile(
+            icon: Icons.policy_outlined,
+            title: 'Privacy Policy',
+            onTap: () => _openPage(const _TextPage(
+              title: 'Privacy Policy',
+              sections: _privacySections,
+            )),
           ),
 
-          ListTile(
-            leading: const Icon(
-              Icons.policy_outlined,
-            ),
-            title: const Text('Privacy Policy'),
-            trailing: const Icon(
-              Icons.chevron_right,
-            ),
-            onTap: () {
-              _showMessage(
-                context,
-                'Privacy Policy will be connected later.',
-              );
-            },
-          ),
-
-          // =====================================================
-          // LOGOUT
-          // =====================================================
-
+          // ================= LOGOUT =================
           if (user != null) ...[
-            const Divider(
-              height: 30,
-            ),
+            const Divider(height: 30),
             ListTile(
-              leading: const Icon(
-                Icons.logout,
-              ),
+              leading: const Icon(Icons.logout),
               title: const Text('Logout'),
-              onTap: () {
-                _logout(context);
-              },
+              onTap: _logout,
             ),
           ],
         ],
@@ -837,45 +1188,252 @@ class SettingsPage extends StatelessWidget {
 }
 
 // =============================================================
-// SECTION TITLE
+// SMALL WIDGETS
 // =============================================================
 
 class _SectionTitle extends StatelessWidget {
   final IconData icon;
   final String title;
 
-  const _SectionTitle({
-    required this.icon,
-    required this.title,
-  });
+  const _SectionTitle({required this.icon, required this.title});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        20,
-        24,
-        20,
-        8,
-      ),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
       child: Row(
         children: [
-          Icon(
-            icon,
-            size: 21,
-          ),
+          Icon(icon, size: 21),
           const SizedBox(width: 10),
           Text(
             title,
             style: Theme.of(context)
                 .textTheme
                 .titleMedium
-                ?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                ?.copyWith(fontWeight: FontWeight.bold),
           ),
         ],
       ),
     );
   }
 }
+
+class _InfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _InfoRow(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 130,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          Expanded(child: Text(value)),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================
+// BLOCKED USERS PAGE (stored locally)
+// =============================================================
+
+class _BlockedUsersPage extends StatelessWidget {
+  const _BlockedUsersPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Blocked Users')),
+      body: ValueListenableBuilder<List<String>>(
+        valueListenable: AppSettings.blockedUsers,
+        builder: (context, blocked, child) {
+          if (blocked.isEmpty) {
+            return const Center(child: Text('You have not blocked anyone.'));
+          }
+          return ListView.separated(
+            itemCount: blocked.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              final id = blocked[index];
+              return ListTile(
+                leading: const CircleAvatar(child: Icon(Icons.person_off)),
+                title: Text(id),
+                trailing: TextButton(
+                  onPressed: () => AppSettings.unblockUser(id),
+                  child: const Text('Unblock'),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+// =============================================================
+// FAQ PAGE
+// =============================================================
+
+class _FaqPage extends StatelessWidget {
+  const _FaqPage();
+
+  static const _items = <(String, String)>[
+    (
+      'How do I place an order?',
+      'Open a product, choose your options and tap Buy / Add to cart, '
+          'then follow the checkout steps.'
+    ),
+    (
+      'How can I change my password?',
+      'Settings → Account & Security → Change Password.'
+    ),
+    (
+      'How do I change the app currency?',
+      'Settings → General → Currency and pick your currency.'
+    ),
+    (
+      'Videos use too much data. What can I do?',
+      'Turn on Data Saver and set Video Quality to Low in Settings → Videos.'
+    ),
+    (
+      'How do I delete my account?',
+      'Settings → Account & Security → Delete Account. '
+          'This cannot be undone.'
+    ),
+    (
+      'How do I contact support?',
+      'Settings → Help & Support → Contact Support.'
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('FAQ')),
+      body: ListView(
+        children: [
+          for (final item in _items)
+            ExpansionTile(
+              title: Text(item.$1),
+              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              expandedCrossAxisAlignment: CrossAxisAlignment.start,
+              children: [Text(item.$2)],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================
+// TEXT PAGES (Help, Terms, Privacy)
+// =============================================================
+
+class _TextPage extends StatelessWidget {
+  final String title;
+  final List<(String, String)> sections;
+
+  const _TextPage({required this.title, required this.sections});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          for (final s in sections) ...[
+            Text(
+              s.$1,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            Text(s.$2),
+            const SizedBox(height: 20),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+const List<(String, String)> _helpSections = [
+  (
+    'Getting started',
+    'Create an account or login, browse products and videos, and place '
+        'orders from the product page.'
+  ),
+  (
+    'Account',
+    'You can change your password, email and phone number from '
+        'Settings → Account & Security.'
+  ),
+  (
+    'Still need help?',
+    'Use Settings → Help & Support → Contact Support or Report a Problem.'
+  ),
+];
+
+// NOTE: replace these with your real legal text before publishing.
+const List<(String, String)> _termsSections = [
+  (
+    '1. Using BuyNova',
+    'By using BuyNova you agree to use the app lawfully and not to misuse '
+        'the platform, other users or sellers.'
+  ),
+  (
+    '2. Accounts',
+    'You are responsible for keeping your login details safe and for all '
+        'activity under your account.'
+  ),
+  (
+    '3. Orders & payments',
+    'Prices, availability and delivery times are shown at checkout and may '
+        'change before an order is confirmed.'
+  ),
+  (
+    '4. Changes',
+    'We may update these terms. Continued use of the app means you accept '
+        'the updated terms.'
+  ),
+];
+
+const List<(String, String)> _privacySections = [
+  (
+    'Information we collect',
+    'Account details such as email or phone number, and the activity needed '
+        'to run the app (orders, preferences).'
+  ),
+  (
+    'How we use it',
+    'To provide and improve BuyNova, process orders, and keep your account '
+        'secure.'
+  ),
+  (
+    'Your control',
+    'You can change your account details or delete your account at any time '
+        'from Settings.'
+  ),
+  (
+    'Contact',
+    'Questions about privacy? Contact $kSupportEmail.'
+  ),
+];
