@@ -23,8 +23,10 @@ import 'price_discount.dart';
 import 'verify_code_page.dart';
 import 'product_share.dart';
 import 'native_ad_card.dart';
+import 'invite_page.dart';
 
 part 'home_page_image_search.dart';
+part 'home_page_drawer.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -1574,144 +1576,6 @@ class _HomePageState extends State<HomePage>
   }
 
   // =========================================================
-  // DRAWER
-  // =========================================================
-
-  Widget _buildDrawer(bool isLoggedIn) {
-    return Drawer(
-      child: SafeArea(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            const DrawerHeader(
-              decoration: BoxDecoration(gradient: _headerGradient),
-              child: Row(
-                children: [
-                  Icon(Icons.shopping_bag, color: Colors.white, size: 32),
-                  SizedBox(width: 12),
-                  Text(
-                    'BuyNova',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.person_outline),
-              title: const Text('Account'),
-              onTap: () {
-                Navigator.pop(context);
-
-                _openAccount(isLoggedIn);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.home_outlined),
-              title: const Text('Home'),
-              onTap: () {
-                Navigator.pop(context);
-
-                setState(() {
-                  _selectedIndex = 0;
-                });
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.category_outlined),
-              title: const Text('Categories'),
-              onTap: () async {
-                Navigator.pop(context);
-
-                final result = await Navigator.push<String>(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const CategoriesPage(),
-                  ),
-                );
-
-                if (result != null && mounted) {
-                  final matchIndex = categories.indexOf(result);
-
-                  if (matchIndex != -1) {
-                    setState(() {
-                      _selectedCategory = matchIndex;
-                    });
-                  }
-                }
-              },
-            ),
-            if (isLoggedIn)
-              ListTile(
-                leading: const Icon(Icons.add_circle_outline),
-                title: const Text('Add Product'),
-                onTap: () {
-                  Navigator.pop(context);
-
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const AddProductPage(),
-                    ),
-                  );
-                },
-              ),
-            ListTile(
-              leading: const Icon(Icons.video_library_outlined),
-              title: const Text('Videos'),
-              subtitle: const Text('Watch Reels & Videos'),
-              onTap: () {
-                Navigator.pop(context);
-
-                _openVideos();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.shopping_cart_outlined),
-              title: const Text('Cart'),
-              onTap: () {
-                Navigator.pop(context);
-
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const CartPage()),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.settings_outlined),
-              title: const Text('Settings'),
-              onTap: () {
-                Navigator.pop(context);
-
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const SettingsPage(),
-                  ),
-                );
-              },
-            ),
-            if (isLoggedIn)
-              ListTile(
-                leading: const Icon(Icons.logout),
-                title: const Text('Logout'),
-                onTap: () async {
-                  Navigator.pop(context);
-
-                  await FirebaseAuth.instance.signOut();
-                },
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // =========================================================
   // SEARCH BAR
   // =========================================================
 
@@ -1892,7 +1756,19 @@ class _HomePageState extends State<HomePage>
 
         return Scaffold(
           backgroundColor: _pageBackground,
-          drawer: _buildDrawer(isLoggedIn),
+
+          // SIDE MENU (see home_page_drawer.dart)
+          drawer: _HomeDrawer(
+            isLoggedIn: isLoggedIn,
+            onAccount: () => _openAccount(isLoggedIn),
+            onHome: () => setState(() => _selectedIndex = 0),
+            onVideos: _openVideos,
+            onCategorySelected: (result) {
+              final i = categories.indexOf(result);
+
+              if (i != -1) setState(() => _selectedCategory = i);
+            },
+          ),
 
           // APP BAR
           appBar: AppBar(
