@@ -30,7 +30,8 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  final GlobalKey<NavigatorState> _navigatorKey =
+      GlobalKey<NavigatorState>();
 
   late final ResellerLinkHandler _linkHandler;
 
@@ -55,9 +56,12 @@ class _MyAppState extends State<MyApp> {
         onForeground: (title, body) {
           final ctx = _navigatorKey.currentContext;
           if (ctx == null) return;
+
           ScaffoldMessenger.maybeOf(ctx)?.showSnackBar(
             SnackBar(
-              content: Text(body.isEmpty ? title : '$title\n$body'),
+              content: Text(
+                body.isEmpty ? title : '$title\n$body',
+              ),
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -77,30 +81,43 @@ class _MyAppState extends State<MyApp> {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: AppSettings.themeMode,
       builder: (context, themeMode, child) {
-        return MaterialApp(
-          title: 'BuyNova',
-          debugShowCheckedModeBanner: false,
-          navigatorKey: _navigatorKey,
+        return ValueListenableBuilder<double>(
+          valueListenable: AppSettings.textScale,
+          builder: (context, scale, child) {
+            return MaterialApp(
+              title: 'BuyNova',
+              debugShowCheckedModeBanner: false,
+              navigatorKey: _navigatorKey,
 
-          themeMode: themeMode,
+              themeMode: themeMode,
 
-          theme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: Colors.redAccent,
-              brightness: Brightness.light,
-            ),
-            useMaterial3: true,
-          ),
+              theme: ThemeData(
+                colorScheme: ColorScheme.fromSeed(
+                  seedColor: Colors.redAccent,
+                  brightness: Brightness.light,
+                ),
+                useMaterial3: true,
+              ),
 
-          darkTheme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: Colors.redAccent,
-              brightness: Brightness.dark,
-            ),
-            useMaterial3: true,
-          ),
+              darkTheme: ThemeData(
+                colorScheme: ColorScheme.fromSeed(
+                  seedColor: Colors.redAccent,
+                  brightness: Brightness.dark,
+                ),
+                useMaterial3: true,
+              ),
 
-          home: const HomePage(),
+              builder: (context, child) =>
+                  MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(scale),
+                ),
+                child: child!,
+              ),
+
+              home: const HomePage(),
+            );
+          },
         );
       },
     );
