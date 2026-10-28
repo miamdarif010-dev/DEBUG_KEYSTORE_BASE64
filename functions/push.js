@@ -59,6 +59,128 @@ exports.removePushToken = onCall({ region: REGION }, async (request) => {
 });
 
 // ============================================================
+// setPushEnabled  (Settings -> Notifications switch)
+// pushEnabled === false  => no phone pushes for this user at all.
+// ============================================================
+exports.setPushEnabled = onCall({ region: REGION }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+  const enabled = !!(request.data && request.data.enabled === true);
+  const token = text(request.data && request.data.token, 4096).trim();
+
+  const ref = db.collection('users').doc(request.auth.uid);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw new HttpsError('not-found', 'User account not found.');
+  }
+
+  const update = {
+    pushEnabled: enabled,
+    fcmUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  if (!enabled && token) {
+    update.fcmTokens = admin.firestore.FieldValue.arrayRemove(token);
+  }
+  await ref.update(update);
+  return { success: true };
+});
+
+// ============================================================
+// deleteMyAccount  (Settings -> Delete Account)
+// Runs with admin rights, so it can remove what the Firestore rules
+// do not let the app delete. The app re-checks the password first.
+//
+// KEPT on purpose (money / legal records): orders, seller_orders,
+// reseller_orders, return_refund_requests, conversations.
+// NOT touched: the user's products (see note below).
+// ============================================================
+exports.deleteMyAccount = onCall(
+  { region: REGION, timeoutSeconds: 300, memory: '512MiB' },
+  async (request) => {
+    if (!request.auth || !request.auth.uid) {
+      throw new HttpsError('unauthenticated', 'You must be logged in.');
+    }
+    const uid = request.auth.uid;
+    const userRef = db.collection('users').doc(uid);
+    const userSnap = await userRef.get();
+    const u = userSnap.exists ? userSnap.data() || {} : {};
+
+    // ---- Safety checks: never delete someone who still has money / open orders
+    const money = Math.max(Number(u.walletBalance || 0), Number(u.balance || 0));
+    if (money > 0) {
+      throw new HttpsError(
+        'failed-precondition',
+        'Please withdraw your wallet balance before deleting your account.'
+      );
+    }
+
+    const pendingWallet = await userRef
+      .collection('walletTransactions')
+      .where('status', '==', 'pending')
+      .limit(1)
+      .get();
+    if (!pendingWallet.empty) {
+      throw new HttpsError(
+        'failed-precondition',
+        'You have a pending wallet request. Please wait until it is finished.'
+      );
+    }
+
+    const OPEN = ['placed', 'confirmed', 'processing', 'shipped'];
+    const hasOpen = async (field) => {
+      const snap = await db
+        .collection('seller_orders')
+        .where(field, '==', uid)
+        .limit(100)
+        .get();
+      return snap.docs.some((d) => OPEN.includes((d.data() || {}).orderStatus));
+    };
+    if ((await hasOpen('customerId')) || (await hasOpen('sellerId'))) {
+      throw new HttpsError(
+        'failed-precondition',
+        'You still have open orders. Please finish or cancel them first.'
+      );
+    }
+
+    // ---- Delete user-owned documents (with all their sub-collections)
+    const removeWhere = async (collection, field) => {
+      const snap = await db.collection(collection).where(field, '==', uid).get();
+      for (const d of snap.docs) {
+        await db.recursiveDelete(d.ref);
+      }
+    };
+
+    // Edit this list to match your data.
+    await removeWhere('sellerVideos', 'userId');
+    await removeWhere('product_reviews', 'userId');
+    await removeWhere('reseller_products', 'entrepreneurUid');
+    await removeWhere('watchRewardClaims', 'userId');
+
+    // NOTE: products where sellerId == uid are left as they are. Add
+    //   await removeWhere('products', 'sellerId');
+    // above if sellers' products should disappear with the account.
+
+    await db.collection('publicProfiles').doc(uid).delete().catch(() => {});
+
+    // users/{uid} + cart, addresses, favorites, notifications,
+    // walletTransactions, paymentMethods, ... (all sub-collections)
+    await db.recursiveDelete(userRef);
+
+    // Finally the login account itself
+    try {
+      await admin.auth().deleteUser(uid);
+    } catch (e) {
+      if (!e || e.code !== 'auth/user-not-found') {
+        console.error('deleteUser failed', uid, e);
+        throw new HttpsError('internal', 'Could not delete the login account.');
+      }
+    }
+    return { success: true };
+  }
+);
+
+// ============================================================
 // Every in-app notification also becomes a phone push.
 // Trigger: a new document in users/{uid}/notifications
 // (wallet, order refund, earning, membership ... all already
@@ -80,6 +202,9 @@ exports.onNotificationCreatedPush = onDocumentCreated(
     const userRef = db.collection('users').doc(userId);
     const userSnap = await userRef.get();
     if (!userSnap.exists) return null;
+
+    // User turned notifications off in Settings.
+    if ((userSnap.data() || {}).pushEnabled === false) return null;
 
     const tokens = (Array.isArray((userSnap.data() || {}).fcmTokens)
       ? userSnap.data().fcmTokens
