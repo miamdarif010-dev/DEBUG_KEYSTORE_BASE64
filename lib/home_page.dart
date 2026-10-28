@@ -72,8 +72,15 @@ class _HomePageState extends State<HomePage>
   // Ads appear after 6 ordinary products, then every 8 more.
   static const int _sliderSize = 10;
   static const int _feedSliderInterval = 8;
-  static const int _firstAdPosition = 6;
-  static const int _adInterval = 8;
+
+  // AD SETTINGS (controlled by the Admin from Firestore: settings/ads).
+  // These are the defaults used until the Admin's values arrive.
+  bool _adsEnabled = true;
+  int _firstAdPosition = 6;
+  int _adInterval = 8;
+
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
+      _adSettingsSubscription;
 
   // LOOK
   static const LinearGradient _headerGradient = LinearGradient(
@@ -125,6 +132,37 @@ class _HomePageState extends State<HomePage>
       },
       onError: (_) {
         // Keep the current list if categories cannot load.
+      },
+    );
+
+    // LOAD AD SETTINGS FROM ADMIN
+    _adSettingsSubscription = FirebaseFirestore.instance
+        .collection('settings')
+        .doc('ads')
+        .snapshots()
+        .listen(
+      (doc) {
+        if (!mounted) return;
+
+        final d = doc.data();
+
+        // No settings document yet -> keep the defaults.
+        if (d == null) return;
+
+        int readInt(String key, int fallback) {
+          final v = d[key];
+          final n = v is num ? v.toInt() : fallback;
+          return n < 1 ? 1 : (n > 100 ? 100 : n);
+        }
+
+        setState(() {
+          _adsEnabled = d['enabled'] != false;
+          _firstAdPosition = readInt('firstAdPosition', 6);
+          _adInterval = readInt('interval', 8);
+        });
+      },
+      onError: (_) {
+        // Keep the current settings if they cannot load.
       },
     );
 
@@ -205,6 +243,7 @@ class _HomePageState extends State<HomePage>
   @override
   void dispose() {
     _categorySubscription?.cancel();
+    _adSettingsSubscription?.cancel();
 
     _productSliderTimer?.cancel();
     _productSliderController.dispose();
@@ -1139,7 +1178,8 @@ class _HomePageState extends State<HomePage>
     final slivers = <Widget>[];
 
     var start = 0;
-    var nextAdAt = _firstAdPosition;
+    // When the Admin turns ads off, the first ad position is unreachable.
+    var nextAdAt = _adsEnabled ? _firstAdPosition : 1 << 30;
     var nextSliderAt = _feedSliderInterval;
     var adNo = 0;
 
