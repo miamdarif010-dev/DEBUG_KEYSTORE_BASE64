@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AppSettings {
@@ -57,10 +60,43 @@ class AppSettings {
     themeMode.value = value ? ThemeMode.dark : ThemeMode.light;
   }
 
+  /// Turns push notifications on/off for real:
+  ///  - saves the choice on the phone
+  ///  - tells the server (setPushEnabled) so it stops sending pushes
+  ///    to this user, on every device
+  ///  - removes / re-saves this phone's FCM token
   static Future<void> setNotifications(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('notifications', value);
     notifications.value = value;
+
+    try {
+      final fm = FirebaseMessaging.instance;
+      final loggedIn = FirebaseAuth.instance.currentUser != null;
+      final fn = FirebaseFunctions.instanceFor(region: 'asia-northeast3');
+
+      if (value) {
+        await fm.setAutoInitEnabled(true);
+        await fm.requestPermission();
+      }
+
+      final token = await fm.getToken();
+
+      if (loggedIn) {
+        await fn.httpsCallable('setPushEnabled').call({
+          'enabled': value,
+          'token': token,
+        });
+        if (value && token != null) {
+          await fn.httpsCallable('savePushToken').call({'token': token});
+        }
+      }
+
+      if (!value) {
+        await fm.setAutoInitEnabled(false);
+        await fm.deleteToken();
+      }
+    } catch (_) {}
   }
 
   static Future<void> setAutoPlayVideos(bool value) async {
@@ -177,5 +213,8 @@ class AppSettings {
     language.value = 'English';
     currency.value = 'KRW';
     textScale.value = 1.0;
+
+    // keep push state in sync with the default (on)
+    await setNotifications(true);
   }
 }
