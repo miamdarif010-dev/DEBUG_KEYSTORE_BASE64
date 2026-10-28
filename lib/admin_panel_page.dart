@@ -10,6 +10,7 @@ import 'admin_categories_page.dart';
 import 'admin_points_page.dart';
 import 'admin_reward_settings_page.dart';
 import 'admin_ads_settings_page.dart';
+
 // The big admin panel is split into part files.
 // They share this file's private members (_db, _toDouble, ...).
 part 'admin_monetization_part.dart';
@@ -494,6 +495,24 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                           Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (_) => const AdminPointsPage(),
+                            ),
+                          );
+                        },
+                      ),
+
+                      // ==================================================
+                      // NEW: AD SETTINGS (turn Home ads on/off, set position)
+                      // ==================================================
+
+                      _adminMenuBox(
+                        icon: Icons.ads_click_outlined,
+                        title: 'Ad Settings',
+                        subtitle: 'Turn ads on/off and set where they appear',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  const AdminAdsSettingsPage(),
                             ),
                           );
                         },
