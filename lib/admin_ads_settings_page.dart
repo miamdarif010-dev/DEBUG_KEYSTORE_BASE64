@@ -118,7 +118,7 @@ class _AdminAdsSettingsPageState extends State<AdminAdsSettingsPage> {
                       _enabled ? 'Ads are ON' : 'Ads are OFF',
                     ),
                     value: _enabled,
-                    activeColor: Colors.redAccent,
+                    activeThumbColor: Colors.redAccent,
                     onChanged: (v) => setState(() => _enabled = v),
                   ),
                 ),
