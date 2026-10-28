@@ -9,7 +9,7 @@ import 'admin_slider_products_page.dart';
 import 'admin_categories_page.dart';
 import 'admin_points_page.dart';
 import 'admin_reward_settings_page.dart';
-
+import 'admin_ads_settings_page.dart';
 // The big admin panel is split into part files.
 // They share this file's private members (_db, _toDouble, ...).
 part 'admin_monetization_part.dart';
