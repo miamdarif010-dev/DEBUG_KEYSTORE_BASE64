@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 import 'login_page.dart';
 import 'app_settings.dart';
+import 'app_strings.dart';
 
 /// TODO: put your real support email here.
 const String kSupportEmail = 'support@buynova.com';
@@ -27,7 +29,7 @@ class _SettingsPageState extends State<SettingsPage> {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(SnackBar(content: Text(message.tr)));
   }
 
   String _authError(FirebaseAuthException e) {
@@ -73,16 +75,16 @@ class _SettingsPageState extends State<SettingsPage> {
     final result = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
+        title: Text(title.tr),
+        content: Text(message.tr),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
+            child: Text('Cancel'.tr),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(confirmText),
+            child: Text(confirmText.tr),
           ),
         ],
       ),
@@ -102,14 +104,14 @@ class _SettingsPageState extends State<SettingsPage> {
     final result = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(title),
+        title: Text(title.tr),
         content: TextField(
           controller: controller,
           obscureText: obscure,
           keyboardType: keyboardType,
           autofocus: true,
           decoration: InputDecoration(
-            labelText: label,
+            labelText: label.tr,
             hintText: hint,
             border: const OutlineInputBorder(),
           ),
@@ -117,12 +119,12 @@ class _SettingsPageState extends State<SettingsPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
+            child: Text('Cancel'.tr),
           ),
           FilledButton(
             onPressed: () =>
                 Navigator.pop(dialogContext, controller.text.trim()),
-            child: Text(confirmText),
+            child: Text(confirmText.tr),
           ),
         ],
       ),
@@ -200,8 +202,8 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _deleteAccount() async {
     final ok = await _confirm(
       title: 'Delete Account',
-      message: 'Are you sure you want to delete your account?\n\n'
-          'This action cannot be undone.',
+      message: '${'Are you sure you want to delete your account?'.tr}\n\n'
+          '${'This action cannot be undone.'.tr}',
       confirmText: 'Delete',
     );
     if (!ok) return;
@@ -209,12 +211,24 @@ class _SettingsPageState extends State<SettingsPage> {
     final reauthed = await _reauthenticate();
     if (!reauthed) return;
 
+    _showMessage('Deleting account...');
+
+    // The server deletes your data AND the login account.
     try {
-      await FirebaseAuth.instance.currentUser?.delete();
-    } on FirebaseAuthException catch (e) {
-      _showMessage(_authError(e));
+      await FirebaseFunctions.instanceFor(region: 'asia-northeast3')
+          .httpsCallable('deleteMyAccount')
+          .call();
+    } on FirebaseFunctionsException catch (e) {
+      _showMessage(e.message ?? 'Could not delete the account.');
+      return;
+    } catch (_) {
+      _showMessage('Could not delete the account. Check your internet.');
       return;
     }
+
+    try {
+      await FirebaseAuth.instance.signOut();
+    } catch (_) {}
 
     if (!mounted) return;
 
@@ -251,7 +265,7 @@ class _SettingsPageState extends State<SettingsPage> {
         return StatefulBuilder(
           builder: (context, setLocal) {
             return AlertDialog(
-              title: const Text('Change Password'),
+              title: Text('Change Password'.tr),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -259,8 +273,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     TextField(
                       controller: current,
                       obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Current password',
+                      decoration: InputDecoration(
+                        labelText: 'Current password'.tr,
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -268,8 +282,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     TextField(
                       controller: newPass,
                       obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: 'New password',
+                      decoration: InputDecoration(
+                        labelText: 'New password'.tr,
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -278,7 +292,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       controller: confirm,
                       obscureText: true,
                       decoration: InputDecoration(
-                        labelText: 'Confirm new password',
+                        labelText: 'Confirm new password'.tr,
                         border: const OutlineInputBorder(),
                         errorText: error,
                       ),
@@ -287,7 +301,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       alignment: Alignment.centerLeft,
                       child: TextButton(
                         onPressed: () => Navigator.pop(dialogContext, 'reset'),
-                        child: const Text('Forgot? Send reset email'),
+                        child: Text('Forgot? Send reset email'.tr),
                       ),
                     ),
                   ],
@@ -296,7 +310,7 @@ class _SettingsPageState extends State<SettingsPage> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('Cancel'),
+                  child: Text('Cancel'.tr),
                 ),
                 FilledButton(
                   onPressed: () {
@@ -310,7 +324,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       Navigator.pop(dialogContext, 'save');
                     }
                   },
-                  child: const Text('Update'),
+                  child: Text('Update'.tr),
                 ),
               ],
             );
@@ -507,7 +521,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     width: double.infinity,
                     child: OutlinedButton.icon(
                       icon: const Icon(Icons.mark_email_read_outlined),
-                      label: const Text('Send verification email'),
+                      label: Text('Send verification email'.tr),
                       onPressed: () async {
                         try {
                           await user.sendEmailVerification();
@@ -522,7 +536,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   width: double.infinity,
                   child: TextButton.icon(
                     icon: const Icon(Icons.refresh),
-                    label: const Text('Refresh status'),
+                    label: Text('Refresh status'.tr),
                     onPressed: () async {
                       Navigator.pop(sheetContext);
                       await _refreshUser();
@@ -550,7 +564,7 @@ class _SettingsPageState extends State<SettingsPage> {
           valueListenable: AppSettings.language,
           builder: (context, language, child) {
             return AlertDialog(
-              title: const Text('Language'),
+              title: Text('Language'.tr),
               content: RadioGroup<String>(
                 groupValue: language,
                 onChanged: (value) {
@@ -591,7 +605,7 @@ class _SettingsPageState extends State<SettingsPage> {
           valueListenable: AppSettings.currency,
           builder: (context, currency, child) {
             return AlertDialog(
-              title: const Text('Currency'),
+              title: Text('Currency'.tr),
               content: RadioGroup<String>(
                 groupValue: currency,
                 onChanged: (value) {
@@ -640,7 +654,7 @@ class _SettingsPageState extends State<SettingsPage> {
           valueListenable: AppSettings.videoQuality,
           builder: (context, quality, child) {
             return AlertDialog(
-              title: const Text('Video Quality'),
+              title: Text('Video Quality'.tr),
               content: RadioGroup<String>(
                 groupValue: quality,
                 onChanged: (value) {
@@ -690,7 +704,7 @@ class _SettingsPageState extends State<SettingsPage> {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Media Permissions'),
+        title: Text('Media Permissions'.tr),
         content: const Text(
           'Photo, video and camera access is controlled by your phone.\n\n'
           'Android: Settings → Apps → BuyNova → Permissions\n'
@@ -699,7 +713,7 @@ class _SettingsPageState extends State<SettingsPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('OK'),
+            child: Text('OK'.tr),
           ),
         ],
       ),
@@ -710,14 +724,14 @@ class _SettingsPageState extends State<SettingsPage> {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Contact Support'),
-        content: const Column(
+        title: Text('Contact Support'.tr),
+        content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Email us at:'),
-            SizedBox(height: 8),
-            SelectableText(
+            Text('Email us at:'.tr),
+            const SizedBox(height: 8),
+            const SelectableText(
               kSupportEmail,
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
@@ -726,7 +740,7 @@ class _SettingsPageState extends State<SettingsPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Close'),
+            child: Text('Close'.tr),
           ),
           FilledButton(
             onPressed: () async {
@@ -736,7 +750,7 @@ class _SettingsPageState extends State<SettingsPage> {
               if (dialogContext.mounted) Navigator.pop(dialogContext);
               _showMessage('Email address copied.');
             },
-            child: const Text('Copy email'),
+            child: Text('Copy email'.tr),
           ),
         ],
       ),
@@ -749,7 +763,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final send = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Report a Problem'),
+        title: Text('Report a Problem'.tr),
         content: TextField(
           controller: controller,
           maxLines: 5,
@@ -762,11 +776,11 @@ class _SettingsPageState extends State<SettingsPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
+            child: Text('Cancel'.tr),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Copy report'),
+            child: Text('Copy report'.tr),
           ),
         ],
       ),
@@ -822,8 +836,8 @@ class _SettingsPageState extends State<SettingsPage> {
       builder: (context, value, child) {
         return SwitchListTile(
           secondary: Icon(icon),
-          title: Text(title),
-          subtitle: Text(subtitle),
+          title: Text(title.tr),
+          subtitle: Text(subtitle.tr),
           value: value,
           onChanged: (newValue) {
             AppSettings.haptic();
@@ -842,8 +856,8 @@ class _SettingsPageState extends State<SettingsPage> {
   }) {
     return ListTile(
       leading: Icon(icon),
-      title: Text(title),
-      subtitle: subtitle == null ? null : Text(subtitle),
+      title: Text(title.tr),
+      subtitle: subtitle == null ? null : Text(subtitle.tr),
       trailing: const Icon(Icons.chevron_right),
       onTap: () {
         AppSettings.haptic();
@@ -858,11 +872,18 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<String>(
+      valueListenable: AppSettings.language,
+      builder: (context, _, __) => _buildPage(context),
+    );
+  }
+
+  Widget _buildPage(BuildContext context) {
     final user = _user;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings'),
+        title: Text('Settings'.tr),
         centerTitle: true,
       ),
       body: ListView(
@@ -918,9 +939,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 secondary: Icon(
                   isDark ? Icons.dark_mode : Icons.light_mode_outlined,
                 ),
-                title: const Text('Dark Mode'),
+                title: Text('Dark Mode'.tr),
                 subtitle: Text(
-                  isDark ? 'Dark theme is enabled' : 'Use light theme',
+                  (isDark ? 'Dark theme is enabled' : 'Use light theme').tr,
                 ),
                 value: isDark,
                 onChanged: (value) {
@@ -936,7 +957,7 @@ class _SettingsPageState extends State<SettingsPage> {
             builder: (context, scale, child) {
               return ListTile(
                 leading: const Icon(Icons.text_fields),
-                title: const Text('Text Size'),
+                title: Text('Text Size'.tr),
                 subtitle: Slider(
                   value: scale,
                   min: 0.8,
@@ -1054,10 +1075,10 @@ class _SettingsPageState extends State<SettingsPage> {
               onTap: _deleteAccount,
             ),
           ] else
-            const ListTile(
-              leading: Icon(Icons.info_outline),
-              title: Text('You are not logged in'),
-              subtitle: Text('Login to manage your account'),
+            ListTile(
+              leading: const Icon(Icons.info_outline),
+              title: Text('You are not logged in'.tr),
+              subtitle: Text('Login to manage your account'.tr),
             ),
 
           // ================= PRIVACY =================
@@ -1074,7 +1095,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 title: 'Blocked Users',
                 subtitle: blocked.isEmpty
                     ? 'No blocked users'
-                    : '${blocked.length} blocked',
+                    : '${blocked.length} ${'blocked'.tr}',
                 onTap: () => _openPage(const _BlockedUsersPage()),
               );
             },
@@ -1177,7 +1198,7 @@ class _SettingsPageState extends State<SettingsPage> {
             const Divider(height: 30),
             ListTile(
               leading: const Icon(Icons.logout),
-              title: const Text('Logout'),
+              title: Text('Logout'.tr),
               onTap: _logout,
             ),
           ],
@@ -1206,7 +1227,7 @@ class _SectionTitle extends StatelessWidget {
           Icon(icon, size: 21),
           const SizedBox(width: 10),
           Text(
-            title,
+            title.tr,
             style: Theme.of(context)
                 .textTheme
                 .titleMedium
@@ -1257,12 +1278,12 @@ class _BlockedUsersPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Blocked Users')),
+      appBar: AppBar(title: Text('Blocked Users'.tr)),
       body: ValueListenableBuilder<List<String>>(
         valueListenable: AppSettings.blockedUsers,
         builder: (context, blocked, child) {
           if (blocked.isEmpty) {
-            return const Center(child: Text('You have not blocked anyone.'));
+            return Center(child: Text('You have not blocked anyone.'.tr));
           }
           return ListView.separated(
             itemCount: blocked.length,
@@ -1274,7 +1295,7 @@ class _BlockedUsersPage extends StatelessWidget {
                 title: Text(id),
                 trailing: TextButton(
                   onPressed: () => AppSettings.unblockUser(id),
-                  child: const Text('Unblock'),
+                  child: Text('Unblock'.tr),
                 ),
               );
             },
@@ -1324,7 +1345,7 @@ class _FaqPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('FAQ')),
+      appBar: AppBar(title: Text('FAQ'.tr)),
       body: ListView(
         children: [
           for (final item in _items)
@@ -1353,7 +1374,7 @@ class _TextPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(title: Text(title.tr)),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
