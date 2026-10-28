@@ -11,6 +11,10 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # Needed for the language setting (Bangla / Korean Material texts)
+  flutter_localizations:
+    sdk: flutter
+
   cupertino_icons: ^1.0.8
 
   # Firebase
