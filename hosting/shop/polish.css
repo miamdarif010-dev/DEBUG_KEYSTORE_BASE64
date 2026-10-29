@@ -1,0 +1,45 @@
+/* BuyNova shop: শুধু সৌন্দর্য বাড়ানোর স্টাইল (রঙ আগের মতোই) */
+html{scroll-behavior:smooth;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+body{background:linear-gradient(180deg,#fff8f8 0%,#ffeeee 100%) fixed}
+header{box-shadow:0 4px 18px rgba(255,82,82,.18)}
+.hb{background:linear-gradient(90deg,#ff5252,#ff7a7a)}
+.sr{box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.sr input:focus{box-shadow:inset 0 0 0 2px rgba(255,82,82,.35)}
+.ic{transition:transform .15s}.ic:active{transform:scale(.92)}
+.nl{transition:color .2s,border-color .2s}
+.hero{position:relative;box-shadow:0 8px 24px rgba(255,82,82,.16)}
+.hero:before{content:"";position:absolute;right:-60px;top:-60px;width:220px;height:220px;border-radius:50%;background:rgba(255,255,255,.35)}
+.hero:after{content:"";position:absolute;left:-40px;bottom:-70px;width:160px;height:160px;border-radius:50%;background:rgba(255,255,255,.25)}
+.hero>*{position:relative;z-index:1}
+.em{filter:drop-shadow(0 6px 10px rgba(0,0,0,.15))}
+.cr{box-shadow:inset 0 0 0 1px #ffe1e1}
+.ci i{box-shadow:0 3px 8px rgba(255,82,82,.15);transition:transform .15s}.ci:active i{transform:scale(.9)}
+.sh h2{display:flex;align-items:center;gap:8px}
+.sh h2:before{content:"";width:5px;height:22px;border-radius:3px;background:linear-gradient(#ff5252,#ff7a7a)}
+.c{transition:transform .2s,box-shadow .2s;background:#fff;border:1px solid #ffe3e3}
+.c:hover{transform:translateY(-3px);box-shadow:0 10px 22px rgba(255,82,82,.2)}
+.c:active{transform:scale(.98)}
+.im{background:linear-gradient(135deg,#fff0f0,#ffe0e0)}
+.im img{transition:transform .35s}.c:hover .im img{transform:scale(1.06)}
+.off{background:linear-gradient(90deg,#ff5252,#ff7a7a);color:#fff;box-shadow:0 2px 6px rgba(255,82,82,.35)}
+.pprice .off{color:#fff}
+.nm{color:#2a2733;font-weight:600}
+.ad{transition:transform .15s,box-shadow .15s;box-shadow:0 4px 10px rgba(255,82,82,.25)}
+.ad:active,.btn:active{transform:scale(.97)}
+.ad.go{box-shadow:none}
+.btn{transition:transform .15s,box-shadow .15s}
+.btn:hover{box-shadow:0 8px 20px rgba(255,82,82,.35)}
+.btn.out:hover{box-shadow:0 4px 12px rgba(255,82,82,.2)}
+.b{transition:transform .2s;box-shadow:0 4px 14px rgba(0,0,0,.06)}.b:hover{transform:translateY(-2px)}
+.more{transition:all .2s}.more:hover{background:#ff5252;color:#fff}
+.box{border:1px solid #ffeaea}
+.pimg{box-shadow:0 6px 18px rgba(255,82,82,.15)}
+.thumbs img{transition:transform .15s}.thumbs img:hover{transform:scale(1.06)}
+.cd{transition:transform .15s}.cd:hover{transform:scale(1.1)}
+.sz{transition:all .15s}.sz:hover{border-color:#ff5252}
+.opt{transition:border-color .15s,background .15s}
+input.t:focus,select.t:focus,textarea.t:focus{box-shadow:0 0 0 3px rgba(255,82,82,.15)}
+.toast{box-shadow:0 6px 18px rgba(0,0,0,.25)}
+footer{background:linear-gradient(180deg,#1a1e33,#12152a)}
+.sb{transition:background .2s}.sb:hover{background:#222}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
