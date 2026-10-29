@@ -11,6 +11,10 @@
     meta.name = "color-scheme"; meta.content = "only light";
     document.head.appendChild(meta);
     var st = document.createElement("style");
+    var th = document.createElement("meta");
+    th.name = "theme-color"; th.content = "#ff5252";
+    document.head.appendChild(th);
+    document.documentElement.style.colorScheme = "only light";
     st.textContent =
       ":root{color-scheme:only light!important}" +
       ".cbar{background:#fff3cd;color:#5c4400;padding:10px 14px;font-size:13.5px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}" +
