@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light only">
+<meta name="color-scheme" content="only light">
 <meta name="supported-color-schemes" content="light">
 <title>BuyNova</title>
 <meta name="description" content="BuyNova অ্যাপে সহজে কেনাকাটা করুন। পছন্দের পণ্য খুঁজুন, দেখুন এবং কেনাকাটা উপভোগ করুন।">
@@ -14,19 +14,20 @@
 <meta property="og:description" content="BuyNova অ্যাপে সহজে কেনাকাটা করুন।">
 <meta property="og:url" content="https://buynova-cc5dd.web.app/">
 <style>
-  :root { color-scheme:light; --brand:#ff5252; --brand2:#ff7a7a; --ink:#17151f; --muted:#5b5866; --pink:#fff0f0; }
+  :root { color-scheme:only light; --brand:#ff5252; --brand2:#ff7a7a; --ink:#17151f; --muted:#5b5866; --pink:#fff0f0; }
   * { box-sizing:border-box; }
   [hidden] { display:none !important; }
   body { margin:0; font-family:system-ui,-apple-system,"Noto Sans Bengali",sans-serif; color:var(--ink);
          background:linear-gradient(180deg,#fff8f8 0%,#ffeaea 100%) fixed; }
   .wrap { max-width:560px; margin:0 auto; padding:14px 14px 28px; }
-
+  .cbar{background:#fff3cd;color:#5c4400;border-radius:16px;padding:12px 14px;margin-bottom:10px;font-size:14px;line-height:1.5;display:flex;flex-direction:column;gap:8px}
+  .cbar button{border:0;background:var(--brand);color:#fff;border-radius:22px;padding:12px;font-weight:700;font-size:15px;font-family:inherit}
+  .cbar a{text-align:center;color:#5c4400;font-size:13px;text-decoration:underline}
   .top { display:flex; align-items:center; gap:12px; padding:6px 2px 12px; }
   .top svg { width:52px; height:52px; flex:none; }
   .brand { font-size:30px; font-weight:800; line-height:1.1; margin:0; }
   .brand b { color:var(--brand); }
   .sub { margin:2px 0 0; font-size:13px; color:var(--muted); }
-
   .hero { position:relative; overflow:hidden; border-radius:24px; padding:22px 18px;
           background:linear-gradient(120deg,#ffe6e6 0%,#ffd2d2 60%,#ffc9c9 100%); min-height:190px; }
   .hero .in { position:relative; z-index:1; max-width:62%; }
@@ -37,14 +38,12 @@
   .hero h2 b { color:var(--brand); }
   .hero p { margin:0; font-size:14px; line-height:1.55; color:#3a3744; }
   .hero img { position:absolute; right:0; bottom:0; height:100%; max-width:50%; object-fit:cover; object-position:top; }
-
   .feats { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:12px 0; }
   .feat { background:rgba(255,255,255,.85); border-radius:16px; padding:12px 4px; text-align:center;
           font-size:12.5px; font-weight:600; line-height:1.3; box-shadow:0 2px 10px rgba(255,82,82,.1); }
   .feat i { display:flex; align-items:center; justify-content:center; width:42px; height:42px; margin:0 auto 6px;
             border-radius:50%; background:var(--pink); }
   .feat svg { width:22px; height:22px; }
-
   .pcard { background:#fff; border-radius:24px; padding:16px; box-shadow:0 4px 18px rgba(255,82,82,.12); }
   .pgrid { display:grid; grid-template-columns:1fr 1.15fr; gap:14px; align-items:start; }
   .pimgbox { position:relative; border-radius:18px; overflow:hidden; aspect-ratio:1/1.1;
@@ -61,7 +60,6 @@
   .dh { display:flex; align-items:center; gap:8px; font-size:17px; font-weight:800; margin:16px 0 6px; }
   .dh:before { content:""; width:4px; height:20px; background:var(--brand); border-radius:2px; }
   .pdesc { margin:0; font-size:14px; line-height:1.6; color:#3a3744; white-space:pre-line; }
-
   .actions { margin-top:14px; }
   .btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:15px 10px;
          border-radius:30px; font-size:16px; font-weight:700; text-decoration:none; }
@@ -69,7 +67,6 @@
   .primary { background:linear-gradient(90deg,var(--brand),var(--brand2)); color:#fff; box-shadow:0 6px 16px rgba(255,82,82,.3); }
   .row { display:flex; gap:10px; margin-top:10px; }
   .row .btn { flex:1; background:#fff; color:var(--brand); border:2px solid var(--brand); font-size:15px; }
-
   .hint { margin-top:12px; background:#fff; border:2px dashed var(--brand); border-radius:18px; padding:14px; font-size:14px; line-height:1.55; }
   .hint b { color:var(--brand); }
   .hint .btn { margin-top:10px; font-size:14px; padding:12px 10px; background:#fff; color:var(--brand); border:2px solid var(--brand); }
@@ -77,7 +74,6 @@
   .msg { text-align:center; padding:28px 12px; color:var(--muted); }
   .foot { text-align:center; margin-top:18px; font-size:14px; color:var(--muted); }
   .foot b { color:var(--ink); }
-
   @media (max-width:380px) {
     .pgrid { grid-template-columns:1fr; }
     .hero h2 { font-size:36px; }
@@ -87,6 +83,11 @@
 </head>
 <body>
 <div class="wrap">
+  <div class="cbar" id="cbar" hidden>
+    <div>🌐 কেনাকাটা ও লগইন ঠিকমতো করতে <b>Chrome-এ খুলুন</b></div>
+    <button id="cbOpen">Chrome-এ খুলুন</button>
+    <a id="cbHere" href="#">এখানেই দেখুন</a>
+  </div>
 
   <div class="top">
     <svg viewBox="0 0 48 48" aria-hidden="true">
@@ -170,16 +171,13 @@
 </div>
 
 <script>
-// ===== CHANGE THESE =====
 var PROJECT_ID   = 'buynova-cc5dd';
 var REGION       = 'asia-northeast3';
 var PACKAGE      = 'com.buynova.app';
-// Direct download (Cloud Function streams the APK as a file)
 var DOWNLOAD_URL = 'https://asia-northeast3-buynova-cc5dd.cloudfunctions.net/downloadApp';
 var HERO_IMAGE   = '';
 var CURRENCY     = '৳';
 var WEBSITE_URL  = 'https://buynova-cc5dd.web.app/shop/';
-// ========================
 
 function $(id) { return document.getElementById(id); }
 function fail(t) { $('state').textContent = t; }
@@ -190,7 +188,6 @@ if (HERO_IMAGE.indexOf('https://') === 0) {
   $('hero').classList.remove('noimg');
 }
 
-// /r/<id> = reseller listing, /p/<id> = normal product
 var parts = location.pathname.split('/').filter(Boolean);
 var kind = parts[0];
 var listingId = ((kind === 'r' || kind === 'p') && parts[1])
@@ -206,12 +203,60 @@ var UA = navigator.userAgent || '';
 var IS_ANDROID = /Android/i.test(UA);
 var IN_APP = /FBAN|FBAV|FB_IAB|Messenger|Instagram|Line\/|TikTok|Snapchat|; wv\)/i.test(UA);
 
-// Link used to open the app
+var PLAIN_URL = location.origin + location.pathname;
+var SHOP_URL = WEBSITE_URL + (listingId ? '#/' + kind + '/' + encodeURIComponent(listingId) : '');
+var IS_BOT = /bot|crawler|spider|facebookexternalhit|facebot|whatsapp|preview/i.test(UA);
+
+// Normal browser (Chrome etc.): go straight to the shop product page.
+if (!IS_BOT && listingId && location.hash !== '#noapp' && !IN_APP) {
+  location.replace(SHOP_URL);
+}
+
+// Messenger / Facebook / Instagram in-app browser: show "open in Chrome" bar.
+if (IN_APP) {
+  $('cbar').hidden = false;
+  $('cbHere').href = SHOP_URL;
+  $('cbOpen').onclick = function () {
+    if (IS_ANDROID) {
+      window.location.href = 'intent://' + location.host + location.pathname +
+        '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' +
+        encodeURIComponent(PLAIN_URL) + ';end';
+      setTimeout(function () {
+        try { navigator.clipboard.writeText(PLAIN_URL); } catch (e) {}
+        alert('Chrome খোলেনি? উপরের ⋮ মেনু চাপুন, তারপর "Chrome-এ খুলুন" চাপুন। লিংক কপি করা হয়েছে।');
+      }, 1500);
+    } else {
+      try { navigator.clipboard.writeText(PLAIN_URL); } catch (e) {}
+      alert('লিংক কপি হয়েছে। Safari খুলে পেস্ট করুন।');
+    }
+  };
+}
+
+// "ওয়েবসাইট" বাটন: সাধারণ ব্রাউজারে সরাসরি প্রোডাক্ট পেজ, Messenger/Facebook-এর ভেতরে Chrome-এ খোলে
+$('website').href = SHOP_URL;
+$('website').addEventListener('click', function (e) {
+  if (!IN_APP) return;
+  e.preventDefault();
+  var u = WEBSITE_URL + (listingId
+    ? '?go=' + encodeURIComponent('/' + kind + '/' + encodeURIComponent(listingId))
+    : '');
+  if (IS_ANDROID) {
+    window.location.href = 'intent://' + u.replace(/^https?:\/\//, '') +
+      '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' +
+      encodeURIComponent(u) + ';end';
+    setTimeout(function () {
+      try { navigator.clipboard.writeText(u); } catch (x) {}
+      alert('Chrome খোলেনি? উপরের ⋮ মেনু চাপুন, তারপর "Chrome-এ খুলুন" চাপুন। লিংক কপি করা হয়েছে।');
+    }, 1500);
+  } else {
+    try { navigator.clipboard.writeText(u); } catch (x) {}
+    alert('লিংক কপি হয়েছে। Safari খুলে পেস্ট করুন।');
+  }
+});
+
 var SCHEME_URL = listingId
   ? 'buynova://' + kind + '/' + encodeURIComponent(listingId)
   : 'buynova://r';
-// If the phone cannot open the app, Chrome comes back to this page
-// (instead of the Play Store "Item not found" page).
 var BACK_URL = encodeURIComponent(location.href.split('#')[0] + '#noapp');
 var INTENT_URL = listingId
   ? 'intent://' + kind + '/' + encodeURIComponent(listingId) +
@@ -247,15 +292,12 @@ $('openApp').addEventListener('click', function (e) {
   window.addEventListener('pagehide', function () { left = true; });
   window.addEventListener('blur', function () { left = true; });
 
-  // Only real Chrome handles intent:// well. Other browsers (Samsung, Opera, UC,
-  // Mi, Vivo, Messenger...) get the plain buynova:// link first.
   var IS_CHROME = /Chrome\//i.test(UA) && !/SamsungBrowser|OPR\/|OPiOS|EdgA|UCBrowser|MiuiBrowser|VivoBrowser|HeyTap|Brave|DuckDuckGo/i.test(UA) && !IN_APP;
   var first  = IS_CHROME ? INTENT_URL : SCHEME_URL;
   var second = IS_CHROME ? SCHEME_URL : INTENT_URL;
 
   window.location.href = first;
 
-  // If nothing opened, try the other way once.
   setTimeout(function () {
     if (left || document.hidden) return;
     window.location.href = second;
@@ -277,7 +319,6 @@ if (location.hash === '#noapp') {
 }
 
 if (!listingId) {
-  // Home page (no product link)
   $('state').hidden = true;
 } else {
   var fn = kind === 'p' ? 'getProductListing' : 'getResellerListing';
