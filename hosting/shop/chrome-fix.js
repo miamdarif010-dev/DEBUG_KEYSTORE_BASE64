@@ -21,6 +21,9 @@
       ".cbar button{border:0;background:#ff5252;color:#fff;border-radius:18px;padding:8px 16px;font-weight:700;font-family:inherit;cursor:pointer}" +
       ".cbar .x{background:none;color:#5c4400;font-size:18px;padding:0 4px}";
     document.head.appendChild(st);
+    var lk = document.createElement("link");
+    lk.rel = "stylesheet"; lk.href = "polish.css";
+    document.head.appendChild(lk);
   } catch (e) {}
 
   // 2) Chrome-এ খুললে ?go=... থেকে প্রোডাক্ট রুট (#/p/ID) ফিরিয়ে আনা
