@@ -5,7 +5,7 @@ if (!admin.apps.length) admin.initializeApp();
 
 const db = admin.firestore();
 const REGION = 'asia-northeast3';
-const LIMIT = 500;
+const LIMIT = 1000;
 const CACHE_MS = 60 * 1000;
 
 let cache = { at: 0, items: null };
@@ -19,6 +19,9 @@ const pick = (...vals) =>
   vals.find((v) => v !== undefined && v !== null && v !== '');
 
 const isOff = (d) => d.isActive === false || d.active === false;
+
+// A product whose seller has not been approved must stay hidden.
+const isHidden = (d) => isOff(d) || d.sellerApproved === false;
 
 const millis = (v) =>
   v && typeof v.toMillis === 'function' ? v.toMillis() : 0;
@@ -74,8 +77,9 @@ const hasOptions = (p) =>
 // getShopProducts
 // Public product list for the customer website (/shop/).
 // Returns ONLY public fields: no supplier price, no profit.
-// Newest products first. Result is cached for 60 seconds per
-// server instance, so a new product shows up within a minute.
+// Newest first. Sorted in memory (not with orderBy) so products
+// without a createdAt field are never dropped from the query.
+// Cached for 60 seconds per server instance.
 // hasOptions = true means the buyer must pick a size / color,
 // so the website sends them to the product page first.
 // ============================================================
@@ -93,7 +97,7 @@ exports.getShopProducts = onCall({ region: REGION }, async () => {
     for (const doc of snap.docs) {
       if (seen.has(doc.id)) continue;
       const p = doc.data() || {};
-      if (isOff(p) || p.sellerApproved === false) continue;
+      if (isHidden(p)) continue;
 
       const price = toBdt(pick(p.price, p.sellingPrice), p.currency);
       if (!(price > 0)) continue;
@@ -143,7 +147,7 @@ exports.getShopProducts = onCall({ region: REGION }, async () => {
   listings.forEach((doc, i) => {
     const l = doc.data() || {};
     const s = supplierSnaps.get(supplierIds[i]);
-    if (!s || isOff(s)) return;
+    if (!s || isHidden(s)) return;
 
     const price = Number(pick(l.sellingPrice, l.price)) || 0;
     if (!(price > 0)) return;
