@@ -5,25 +5,26 @@
   var IS_ANDROID = /Android/i.test(UA);
 
   // 1) Chrome-এর Auto Dark Mode বন্ধ (সঠিক মান: "only light")
+  //    polish.css এখন index.html-এর <head> থেকেই লোড হয়, তাই পেজ আনস্টাইল্ড ঝলকে না।
   try {
     document.querySelectorAll('meta[name="color-scheme"]').forEach(function (m) { m.remove(); });
     var meta = document.createElement("meta");
     meta.name = "color-scheme"; meta.content = "only light";
     document.head.appendChild(meta);
-    var st = document.createElement("style");
+
     var th = document.createElement("meta");
     th.name = "theme-color"; th.content = "#ff5252";
     document.head.appendChild(th);
+
     document.documentElement.style.colorScheme = "only light";
+
+    var st = document.createElement("style");
     st.textContent =
       ":root{color-scheme:only light!important}" +
       ".cbar{background:#fff3cd;color:#5c4400;padding:10px 14px;font-size:13.5px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}" +
       ".cbar button{border:0;background:#ff5252;color:#fff;border-radius:18px;padding:8px 16px;font-weight:700;font-family:inherit;cursor:pointer}" +
       ".cbar .x{background:none;color:#5c4400;font-size:18px;padding:0 4px}";
     document.head.appendChild(st);
-    var lk = document.createElement("link");
-    lk.rel = "stylesheet"; lk.href = "polish.css";
-    document.head.appendChild(lk);
   } catch (e) {}
 
   // 2) Chrome-এ খুললে ?go=... থেকে প্রোডাক্ট রুট (#/p/ID) ফিরিয়ে আনা
