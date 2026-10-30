@@ -21,9 +21,15 @@ const COL = {
   resellerOrders: 'reseller_orders',
 };
 
+// Default delivery fees. Admin can override them in
+// platformSettings/monetization -> deliveryFeeInsideDhaka / deliveryFeeOutsideDhaka
 const FEE_INSIDE_DHAKA = 60;
 const FEE_OUTSIDE_DHAKA = 120;
 const PAYMENT_METHODS = ['Cash on Delivery', 'BuyNova Wallet'];
+
+// New email + password accounts made on/after this day must have entered the
+// email code (same date as the website: CODE_AFTER in hosting/shop/index.html).
+const EMAIL_CODE_AFTER = Date.UTC(2026, 9, 27);
 
 // ============================================================
 // HELPERS
@@ -79,6 +85,50 @@ const productImage = (d) =>
   (Array.isArray(d.images) && d.images.length ? d.images[0] : null) ??
   null;
 const productSeller = (d) => String(d.sellerId ?? d.ownerId ?? 'unknown_seller');
+
+// Delivery fees come from the admin settings; the constants above are the fallback.
+const getDeliveryFees = async () => {
+  try {
+    const snap = await db.doc('platformSettings/monetization').get();
+    const c = snap.exists ? snap.data() || {} : {};
+    const inside = num(c.deliveryFeeInsideDhaka);
+    const outside = num(c.deliveryFeeOutsideDhaka);
+    return {
+      inside: inside > 0 ? inside : FEE_INSIDE_DHAKA,
+      outside: outside > 0 ? outside : FEE_OUTSIDE_DHAKA,
+    };
+  } catch (e) {
+    console.warn('delivery fee config unavailable, using defaults', e);
+    return { inside: FEE_INSIDE_DHAKA, outside: FEE_OUTSIDE_DHAKA };
+  }
+};
+
+// The website asks brand-new email + password accounts for a 6-digit code.
+// Here the same rule is enforced on the server, so calling the function
+// directly cannot skip it. Google / older accounts are not affected.
+const assertEmailCodeDone = async (uid) => {
+  let authUser;
+  try {
+    authUser = await admin.auth().getUser(uid);
+  } catch (e) {
+    throw new HttpsError('unauthenticated', 'Please login again.');
+  }
+
+  const usesPassword = authUser.providerData.some(
+    (p) => p.providerId === 'password'
+  );
+  const created = Date.parse(authUser.metadata?.creationTime || '') || 0;
+
+  if (!usesPassword || created < EMAIL_CODE_AFTER) return;
+
+  const userSnap = await db.doc(`users/${uid}`).get();
+  if (!userSnap.exists || userSnap.data()?.emailCodeVerified !== true) {
+    throw new HttpsError(
+      'failed-precondition',
+      'Please verify your email code before placing an order.'
+    );
+  }
+};
 
 // ---------- size / color options ----------
 const listOf = (raw) => {
@@ -182,6 +232,9 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
     throw new HttpsError('invalid-argument', 'Invalid payment method.');
   }
 
+  // New email + password accounts must finish the email code first.
+  await assertEmailCodeDone(uid);
+
   // ---------------- Address (read from Firestore, not from client) ----
   let address;
   const cleanAddressId = safeId(addressId);
@@ -205,7 +258,8 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
       'Please edit your address and choose Inside Dhaka or Outside Dhaka.'
     );
   }
-  const deliveryFee = zone === 'inside_dhaka' ? FEE_INSIDE_DHAKA : FEE_OUTSIDE_DHAKA;
+  const fees = await getDeliveryFees();
+  const deliveryFee = zone === 'inside_dhaka' ? fees.inside : fees.outside;
 
   // ---------------- Items (prices from Firestore) ---------------------
   const lines = await Promise.all(
@@ -237,7 +291,7 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
         }
         const supplier = supplierSnap.data();
 
-        if (isOff(listing) || isOff(supplier)) {
+        if (isOff(listing) || isOff(supplier) || supplier.sellerApproved === false) {
           throw new HttpsError('failed-precondition', 'A product in your cart is unavailable.');
         }
         assertStock(supplier, quantity);
@@ -284,7 +338,7 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
       }
       const product = productSnap.data();
 
-      if (isOff(product)) {
+      if (isOff(product) || product.sellerApproved === false) {
         throw new HttpsError('failed-precondition', 'A product in your cart is unavailable.');
       }
       assertStock(product, quantity);
