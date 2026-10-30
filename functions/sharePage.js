@@ -6,8 +6,8 @@ const SITE = "https://buynova-cc5dd.web.app";
 const FN_BASE = `https://${REGION}-${PROJECT_ID}.cloudfunctions.net/`;
 
 const esc = (s) =>
-  String(s == null ? "" : s).replace(/[&<>"]/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])
+  String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
   );
 
 // Messenger/Facebook show the preview image only when it is a normal
@@ -34,7 +34,12 @@ exports.sharePage = onRequest(
   async (req, res) => {
     const parts = req.path.split("/").filter(Boolean);
     const kind = parts[0];
-    const id = parts[1] ? decodeURIComponent(parts[1]) : null;
+    let id = null;
+    try {
+      id = parts[1] ? decodeURIComponent(parts[1]) : null;
+    } catch (e) {
+      id = null;
+    }
 
     // The static landing page (hosting/index.html)
     let html;
@@ -112,10 +117,9 @@ exports.sharePage = onRequest(
             ""
           );
 
-          html = html.replace(
-            /<title>[^<]*<\/title>/i,
-            `<title>${esc(name)} | BuyNova</title>\n${tags}`
-          );
+          // Function replacer: "$&" or "$'" inside a product name stays literal.
+          const titleTag = `<title>${esc(name)} | BuyNova</title>\n${tags}`;
+          html = html.replace(/<title>[^<]*<\/title>/i, () => titleTag);
         }
       } catch (e) {
         console.error("sharePage error:", e);
