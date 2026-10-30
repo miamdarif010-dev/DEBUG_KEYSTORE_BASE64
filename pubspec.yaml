@@ -35,6 +35,7 @@ dependencies:
   # Media / Video
   video_player: ^2.9.2
   image_picker: ^1.1.2
+  cached_network_image: ^3.4.1
 
   # Image search / image labeling
   google_mlkit_image_labeling: ^0.14.2
