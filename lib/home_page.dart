@@ -2,8 +2,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_image_labeling/google_mlkit_image_labeling.dart';
 
@@ -23,9 +26,12 @@ import 'verify_code_page.dart';
 import 'product_share.dart';
 import 'native_ad_card.dart';
 import 'invite_page.dart';
+import 'app_shimmer.dart';
 
 part 'home_page_image_search.dart';
 part 'home_page_drawer.dart';
+
+typedef _Doc = QueryDocumentSnapshot<Map<String, dynamic>>;
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -51,9 +57,59 @@ class _HomePageState extends State<HomePage>
   // Distance scrolled in the same direction (to avoid tiny-move flicker).
   double _scrollAcc = 0;
 
+  // =========================================================
+  // SHARED DATA (one stream each, used by the whole page)
+  // =========================================================
+
+  User? _user = FirebaseAuth.instance.currentUser;
+
+  List<_Doc> _allProducts = [];
+  List<_Doc> _sliderDocs = [];
+
+  bool _productsLoaded = false;
+  bool _productsError = false;
+
+  // Computed once per data change (see _recompute), not on every build.
+  List<_Doc> _visibleProducts = []; // after own/category/search filters
+  List<_Doc> _picks = []; // Admin picks, in Admin order
+  Map<String, String> _categoryImages = {}; // lowercase category -> image
+  String? _allCategoryImage;
+
+  // Favorites live in a notifier, so toggling a heart rebuilds only
+  // the heart icon, not the whole page.
+  final ValueNotifier<Set<String>> _favoriteIds =
+      ValueNotifier<Set<String>>(<String>{});
+
+  StreamSubscription<User?>? _authSubscription;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _productsSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _sliderSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _favoritesSub;
+
+  // =========================================================
+  // PAGING (the feed shows 20 products at a time)
+  // =========================================================
+
+  static const int _pageSize = 20;
+  int _visibleCount = _pageSize;
+
+  final ScrollController _feedController = ScrollController();
+  final ValueNotifier<bool> _showTopButton = ValueNotifier<bool>(false);
+
+  // =========================================================
+  // SEARCH
+  // =========================================================
+
+  static const double _searchBarHeight = 64; // 2 + 50 + 12 (see _buildSearchBar)
+  static const String _recentKey = 'recent_searches';
+
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
+
+  Timer? _searchDebounce;
 
   String _searchQuery = '';
+  bool _searchFocused = false;
+  List<String> _recentSearches = [];
 
   late AnimationController _couponAnimationController;
   late Animation<double> _couponOpacity;
@@ -106,6 +162,38 @@ class _HomePageState extends State<HomePage>
   void initState() {
     super.initState();
 
+    // AUTH + FAVORITES
+    _bindFavorites(_user);
+
+    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((u) {
+      if (!mounted) return;
+
+      _bindFavorites(u);
+
+      setState(() {
+        _user = u;
+        _recompute();
+      });
+    });
+
+    // PRODUCTS + ADMIN SLIDER (one stream each for the whole page)
+    _subscribeProducts();
+
+    _sliderSub =
+        FirebaseFirestore.instance.collection('homeSlider').snapshots().listen(
+      (snap) {
+        if (!mounted) return;
+
+        setState(() {
+          _sliderDocs = snap.docs;
+          _recompute();
+        });
+      },
+      onError: (_) {
+        // Keep the current slider if it cannot load.
+      },
+    );
+
     // LOAD CATEGORIES FROM ADMIN
     _categorySubscription = CategoryService.stream().listen(
       (items) {
@@ -128,6 +216,8 @@ class _HomePageState extends State<HomePage>
           final newIndex = categories.indexOf(selectedName);
 
           _selectedCategory = newIndex == -1 ? 0 : newIndex;
+
+          _recompute();
         });
       },
       onError: (_) {
@@ -177,7 +267,24 @@ class _HomePageState extends State<HomePage>
         curve: Curves.easeInOut,
       ),
     );
+
     _startProductSliderTimer();
+
+    // Feed scroll: load more + "back to top" button.
+    _feedController.addListener(_onFeedScroll);
+
+    // Search focus: show the suggestions panel while typing.
+    _searchFocus.addListener(() {
+      if (!mounted) return;
+
+      setState(() {
+        _searchFocused = _searchFocus.hasFocus;
+
+        if (_searchFocused) _showHeader = true;
+      });
+    });
+
+    _loadRecentSearches();
 
     // New email + password accounts must enter the email code first.
     _checkEmailCode();
@@ -242,16 +349,149 @@ class _HomePageState extends State<HomePage>
 
   @override
   void dispose() {
+    _authSubscription?.cancel();
+    _productsSub?.cancel();
+    _sliderSub?.cancel();
+    _favoritesSub?.cancel();
+
     _categorySubscription?.cancel();
     _adSettingsSubscription?.cancel();
 
     _productSliderTimer?.cancel();
     _productSliderController.dispose();
 
-    _couponAnimationController.dispose();
+    _feedController.removeListener(_onFeedScroll);
+    _feedController.dispose();
+    _showTopButton.dispose();
+
+    _favoriteIds.dispose();
+
+    _searchDebounce?.cancel();
+    _searchFocus.dispose();
     _searchController.dispose();
 
+    _couponAnimationController.dispose();
+
     super.dispose();
+  }
+
+  // =========================================================
+  // DATA: products, favorites, derived lists
+  // =========================================================
+
+  /// Starts (or restarts) the one products stream.
+  /// The returned future completes on the first snapshot, so it can also
+  /// be used by pull-to-refresh.
+  Future<void> _subscribeProducts() {
+    _productsSub?.cancel();
+
+    final completer = Completer<void>();
+
+    _productsSub =
+        FirebaseFirestore.instance.collection('products').snapshots().listen(
+      (snap) {
+        if (!mounted) return;
+
+        setState(() {
+          _allProducts = snap.docs;
+          _productsLoaded = true;
+          _productsError = false;
+          _recompute();
+        });
+
+        if (!completer.isCompleted) completer.complete();
+      },
+      onError: (_) {
+        if (!mounted) return;
+
+        setState(() {
+          _productsLoaded = true;
+          _productsError = true;
+        });
+
+        if (!completer.isCompleted) completer.complete();
+      },
+    );
+
+    return completer.future.timeout(
+      const Duration(seconds: 6),
+      onTimeout: () {},
+    );
+  }
+
+  void _bindFavorites(User? u) {
+    _favoritesSub?.cancel();
+    _favoritesSub = null;
+
+    if (u == null) {
+      _favoriteIds.value = <String>{};
+      return;
+    }
+
+    _favoritesSub = FirebaseFirestore.instance
+        .collection('users')
+        .doc(u.uid)
+        .collection('favorites')
+        .snapshots()
+        .listen(
+      (snap) {
+        _favoriteIds.value = snap.docs.map((d) => d.id).toSet();
+      },
+      onError: (_) {
+        // Keep the current favorites if they cannot load.
+      },
+    );
+  }
+
+  /// Rebuilds every derived list in ONE pass.
+  /// Call it inside setState whenever products, Admin picks, user,
+  /// categories, selected category or the search text change.
+  void _recompute() {
+    _picks = _adminPicks(_sliderDocs, _allProducts);
+
+    final out = <_Doc>[];
+    final images = <String, String>{};
+    String? firstImage;
+
+    for (final doc in _allProducts) {
+      final data = doc.data();
+
+      // Nobody sees their own product.
+      if (_isOwnProduct(data)) continue;
+
+      // Category bar images (first product image of each category).
+      final img = data['imageUrl']?.toString().trim() ?? '';
+
+      if (img.isNotEmpty) {
+        firstImage ??= img;
+
+        final cat = data['category']?.toString().trim().toLowerCase() ?? '';
+
+        if (cat.isNotEmpty) images.putIfAbsent(cat, () => img);
+      }
+
+      if (!_matchesCategory(data)) continue;
+
+      if (_searchQuery.isNotEmpty) {
+        final name = data['name']?.toString().toLowerCase() ?? '';
+
+        if (!name.contains(_searchQuery)) continue;
+      }
+
+      out.add(doc);
+    }
+
+    _visibleProducts = out;
+    _categoryImages = images;
+    _allCategoryImage = firstImage;
+  }
+
+  Future<void> _refresh() async {
+    HapticFeedback.selectionClick();
+
+    _visibleCount = _pageSize;
+
+    await _subscribeProducts();
   }
 
   // =========================================================
@@ -274,19 +514,37 @@ class _HomePageState extends State<HomePage>
   // =========================================================
 
   bool _matchesCategory(Map<String, dynamic> productData) {
-    final selectedCategory = categories[_selectedCategory];
-
-    if (selectedCategory == 'All') {
+    // Index 0 is always "All".
+    if (_selectedCategory == 0 || _selectedCategory >= categories.length) {
       return true;
     }
 
-    final productCategory = productData['category']?.toString().trim() ?? '';
+    final productCategory =
+        productData['category']?.toString().trim().toLowerCase() ?? '';
 
     if (productCategory.isEmpty) {
       return false;
     }
 
-    return productCategory.toLowerCase() == selectedCategory.toLowerCase();
+    return productCategory == categories[_selectedCategory].toLowerCase();
+  }
+
+  void _selectCategory(int index) {
+    if (index < 0 || index >= categories.length) return;
+    if (index == _selectedCategory) return;
+
+    HapticFeedback.selectionClick();
+
+    setState(() {
+      _selectedCategory = index;
+      _visibleCount = _pageSize;
+      _showHeader = true;
+      _recompute();
+    });
+
+    if (_feedController.hasClients) {
+      _feedController.jumpTo(0);
+    }
   }
 
   IconData _categoryIcon(String category) {
@@ -306,30 +564,43 @@ class _HomePageState extends State<HomePage>
     return Icons.category;
   }
 
-  String? _getCategoryImageUrl(
-    String category,
-    List<QueryDocumentSnapshot> products,
-  ) {
-    final normalizedCategory = category.trim().toLowerCase();
+  String? _getCategoryImageUrl(String category) {
+    final lower = category.trim().toLowerCase();
 
-    for (final product in products) {
-      final data = product.data() as Map<String, dynamic>;
+    if (lower == 'all') return _allCategoryImage;
 
-      final imageUrl = data['imageUrl']?.toString().trim() ?? '';
+    return _categoryImages[lower];
+  }
 
-      if (imageUrl.isEmpty) {
-        continue;
-      }
+  // =========================================================
+  // IMAGE (cached + shimmer while loading + soft fade-in)
+  // =========================================================
 
-      final productCategory =
-          data['category']?.toString().trim().toLowerCase() ?? '';
-
-      if (normalizedCategory == 'all' || productCategory == normalizedCategory) {
-        return imageUrl;
-      }
-    }
-
-    return null;
+  Widget _netImage(
+    String url, {
+    BoxFit fit = BoxFit.cover,
+    double? width,
+    double? height,
+    int? cacheWidth,
+    Widget? fallback,
+  }) {
+    return CachedNetworkImage(
+      imageUrl: url,
+      fit: fit,
+      width: width,
+      height: height,
+      memCacheWidth: cacheWidth,
+      fadeInDuration: const Duration(milliseconds: 220),
+      fadeOutDuration: const Duration(milliseconds: 120),
+      placeholder: (context, _) => const ShimmerBox(),
+      errorWidget: (context, _, __) =>
+          fallback ??
+          Container(
+            color: Colors.grey.shade200,
+            alignment: Alignment.center,
+            child: const Icon(Icons.image, size: 40, color: Colors.grey),
+          ),
+    );
   }
 
   // =========================================================
@@ -426,21 +697,26 @@ class _HomePageState extends State<HomePage>
   }) async {
     final favoriteRef = _favoriteReference(user.uid, productId);
 
-    try {
-      final favoriteSnapshot = await favoriteRef.get();
+    // The notifier already knows the current state, so no extra read.
+    final isFavorite = _favoriteIds.value.contains(productId);
 
-      if (favoriteSnapshot.exists) {
+    HapticFeedback.lightImpact();
+
+    try {
+      if (isFavorite) {
         await favoriteRef.delete();
 
         if (!mounted) return;
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Removed from Favorites'),
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 1),
-          ),
-        );
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text('Removed from Favorites'),
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 1),
+            ),
+          );
       } else {
         final name = productData['name']?.toString() ?? 'Unnamed Product';
 
@@ -464,13 +740,15 @@ class _HomePageState extends State<HomePage>
 
         if (!mounted) return;
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Added to Favorites ❤️'),
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 1),
-          ),
-        );
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text('Added to Favorites ❤️'),
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 1),
+            ),
+          );
       }
     } catch (e) {
       if (!mounted) return;
@@ -541,10 +819,6 @@ class _HomePageState extends State<HomePage>
         builder: (context) => const GlobalNotificationsPage(),
       ),
     );
-
-    if (mounted) {
-      setState(() {});
-    }
   }
 
   // =========================================================
@@ -559,17 +833,158 @@ class _HomePageState extends State<HomePage>
   }
 
   // =========================================================
+  // SEARCH: debounce, recent searches, suggestions
+  // =========================================================
+
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+
+      _applySearch(value);
+    });
+  }
+
+  void _applySearch(String raw) {
+    _searchDebounce?.cancel();
+
+    final q = raw.trim().toLowerCase();
+
+    if (q == _searchQuery) return;
+
+    setState(() {
+      _searchQuery = q;
+      _visibleCount = _pageSize;
+      _recompute();
+    });
+
+    if (_feedController.hasClients) {
+      _feedController.jumpTo(0);
+    }
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    _applySearch('');
+  }
+
+  void _submitSearch(String raw) {
+    _applySearch(raw);
+    _saveRecentSearch(raw);
+    _searchFocus.unfocus();
+  }
+
+  void _useSuggestion(String text) {
+    _searchController.text = text;
+    _searchController.selection = TextSelection.collapsed(
+      offset: text.length,
+    );
+
+    _submitSearch(text);
+  }
+
+  Future<void> _loadRecentSearches() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = prefs.getStringList(_recentKey) ?? <String>[];
+
+      if (!mounted) return;
+
+      setState(() => _recentSearches = list);
+    } catch (_) {
+      // Recent searches are optional.
+    }
+  }
+
+  Future<void> _saveRecentSearch(String raw) async {
+    final q = raw.trim();
+
+    if (q.length < 2) return;
+
+    final list = [
+      q,
+      ..._recentSearches.where((r) => r.toLowerCase() != q.toLowerCase()),
+    ].take(8).toList();
+
+    setState(() => _recentSearches = list);
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_recentKey, list);
+    } catch (_) {
+      // Recent searches are optional.
+    }
+  }
+
+  Future<void> _clearRecentSearches() async {
+    setState(() => _recentSearches = []);
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_recentKey);
+    } catch (_) {
+      // Recent searches are optional.
+    }
+  }
+
+  List<String> _suggestions() {
+    final q = _searchQuery;
+
+    if (q.isEmpty) return const [];
+
+    final seen = <String>{};
+    final out = <String>[];
+
+    for (final doc in _allProducts) {
+      final data = doc.data();
+
+      if (_isOwnProduct(data)) continue;
+
+      final name = data['name']?.toString().trim() ?? '';
+
+      if (name.isEmpty) continue;
+
+      final lower = name.toLowerCase();
+
+      if (lower.contains(q) && seen.add(lower)) {
+        out.add(name);
+
+        if (out.length >= 6) break;
+      }
+    }
+
+    return out;
+  }
+
+  // =========================================================
   // BOTTOM NAVIGATION
   // =========================================================
 
   Future<void> _onNavTap(int index) async {
+    HapticFeedback.selectionClick();
+
+    if (index == 0) {
+      // Tapping Home again scrolls the feed back to the top.
+      if (_selectedIndex == 0 && _feedController.hasClients) {
+        _feedController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeOut,
+        );
+      }
+
+      setState(() {
+        _selectedIndex = 0;
+        _showHeader = true;
+      });
+
+      return;
+    }
+
     setState(() {
       _selectedIndex = index;
     });
-
-    if (index == 0) {
-      return;
-    }
 
     if (index == 1) {
       final result = await Navigator.push<String>(
@@ -581,9 +996,7 @@ class _HomePageState extends State<HomePage>
         final matchIndex = categories.indexOf(result);
 
         if (matchIndex != -1) {
-          setState(() {
-            _selectedCategory = matchIndex;
-          });
+          _selectCategory(matchIndex);
         }
       }
 
@@ -740,94 +1153,25 @@ class _HomePageState extends State<HomePage>
   }
 
   // =========================================================
-  // CART BADGE
-  // =========================================================
-
-  Widget _buildCartNavIcon(User? user) {
-    if (user == null) {
-      return const Icon(Icons.shopping_cart_outlined);
-    }
-
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('cart')
-          .snapshots(),
-      builder: (context, snapshot) {
-        int cartCount = 0;
-
-        if (snapshot.hasData) {
-          for (final doc in snapshot.data!.docs) {
-            final data = doc.data();
-
-            final quantity = data['quantity'];
-
-            if (quantity is num) {
-              cartCount += quantity.toInt();
-            } else {
-              cartCount += 1;
-            }
-          }
-        }
-
-        return Stack(
-          clipBehavior: Clip.none,
-          children: [
-            const Icon(Icons.shopping_cart_outlined),
-            if (cartCount > 0)
-              Positioned(
-                right: -9,
-                top: -9,
-                child: Container(
-                  constraints: const BoxConstraints(
-                    minWidth: 18,
-                    minHeight: 18,
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 2,
-                  ),
-                  decoration: const BoxDecoration(
-                    color: Colors.redAccent,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Text(
-                    cartCount > 99 ? '99+' : '$cartCount',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-
-  // =========================================================
   // CATEGORY WIDGET
   // =========================================================
 
   Widget _buildCategoryItem({
     required String category,
     required int index,
-    required List<QueryDocumentSnapshot> products,
   }) {
     final isSelected = _selectedCategory == index;
 
-    final imageUrl = _getCategoryImageUrl(category, products);
+    final imageUrl = _getCategoryImageUrl(category);
+
+    final iconFallback = Icon(
+      _categoryIcon(category),
+      color: isSelected ? Colors.redAccent : Colors.grey.shade600,
+      size: 28,
+    );
 
     return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedCategory = index;
-        });
-      },
+      onTap: () => _selectCategory(index),
       child: SizedBox(
         width: 78,
         child: Column(
@@ -857,28 +1201,14 @@ class _HomePageState extends State<HomePage>
               ),
               child: ClipOval(
                 child: imageUrl != null && imageUrl.isNotEmpty
-                    ? Image.network(
+                    ? _netImage(
                         imageUrl,
                         width: 60,
                         height: 60,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Icon(
-                            _categoryIcon(category),
-                            color: isSelected
-                                ? Colors.redAccent
-                                : Colors.grey.shade600,
-                            size: 28,
-                          );
-                        },
+                        cacheWidth: 140,
+                        fallback: Center(child: iconFallback),
                       )
-                    : Icon(
-                        _categoryIcon(category),
-                        color: isSelected
-                            ? Colors.redAccent
-                            : Colors.grey.shade600,
-                        size: 28,
-                      ),
+                    : Center(child: iconFallback),
               ),
             ),
             const SizedBox(height: 5),
@@ -916,10 +1246,12 @@ class _HomePageState extends State<HomePage>
   /// Products the Admin added to `homeSlider`, in the order the
   /// Admin added them. Deleted products and the user's own products
   /// are skipped.
-  List<QueryDocumentSnapshot> _adminPicks(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> sliderDocs,
-    List<QueryDocumentSnapshot> allDocs,
+  List<_Doc> _adminPicks(
+    List<_Doc> sliderDocs,
+    List<_Doc> allDocs,
   ) {
+    if (sliderDocs.isEmpty || allDocs.isEmpty) return <_Doc>[];
+
     final sorted = List.of(sliderDocs)
       ..sort((a, b) {
         final oa = a.data()['order'];
@@ -931,11 +1263,11 @@ class _HomePageState extends State<HomePage>
         return na.compareTo(nb);
       });
 
-    final byId = <String, QueryDocumentSnapshot>{
+    final byId = <String, _Doc>{
       for (final d in allDocs) d.id: d,
     };
 
-    final result = <QueryDocumentSnapshot>[];
+    final result = <_Doc>[];
 
     for (final s in sorted) {
       final doc = byId[s.id];
@@ -944,7 +1276,7 @@ class _HomePageState extends State<HomePage>
       if (doc == null) continue;
 
       // Nobody sees their own product.
-      if (_isOwnProduct(doc.data() as Map<String, dynamic>)) continue;
+      if (_isOwnProduct(doc.data())) continue;
 
       result.add(doc);
     }
@@ -955,11 +1287,11 @@ class _HomePageState extends State<HomePage>
   /// One small product card, used by the top slider and the feed sliders.
   /// Total width on screen = width + 8 (right margin).
   Widget _sliderCard({
-    required QueryDocumentSnapshot doc,
+    required _Doc doc,
     required double width,
     required double imageHeight,
   }) {
-    final data = doc.data() as Map<String, dynamic>;
+    final data = doc.data();
 
     final name = data['name']?.toString() ?? 'Unnamed Product';
 
@@ -1002,12 +1334,10 @@ class _HomePageState extends State<HomePage>
                 fit: StackFit.expand,
                 children: [
                   imageUrl.isNotEmpty
-                      ? Image.network(
+                      ? _netImage(
                           imageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return placeholder;
-                          },
+                          cacheWidth: 300,
+                          fallback: placeholder,
                         )
                       : placeholder,
                   if (discount > 0)
@@ -1052,33 +1382,10 @@ class _HomePageState extends State<HomePage>
 
   /// Top slider: auto-scrolling, shows Admin products 1-10.
   Widget _buildSliderSection() {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance.collection('homeSlider').snapshots(),
-      builder: (context, sliderSnapshot) {
-        if (sliderSnapshot.hasError ||
-            (sliderSnapshot.data?.docs ?? []).isEmpty) {
-          _productSliderCount = 0;
-          return const SizedBox.shrink();
-        }
-
-        final sliderDocs = sliderSnapshot.data!.docs;
-
-        return StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('products').snapshots(),
-          builder: (context, productSnapshot) {
-            final picks = _adminPicks(
-              sliderDocs,
-              productSnapshot.data?.docs ?? <QueryDocumentSnapshot>[],
-            ).take(_sliderSize).toList();
-
-            return _buildProductAutoSlider(picks);
-          },
-        );
-      },
-    );
+    return _buildProductAutoSlider(_picks.take(_sliderSize).toList());
   }
 
-  Widget _buildProductAutoSlider(List<QueryDocumentSnapshot> sliderProducts) {
+  Widget _buildProductAutoSlider(List<_Doc> sliderProducts) {
     _productSliderCount = sliderProducts.length;
 
     if (_productSliderCount == 0) {
@@ -1112,7 +1419,7 @@ class _HomePageState extends State<HomePage>
 
   /// Horizontal slider shown inside the product feed.
   /// It has no shared controller, so it can appear many times.
-  Widget _buildAdminPickSlider(List<QueryDocumentSnapshot> picks) {
+  Widget _buildAdminPickSlider(List<_Doc> picks) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
       padding: const EdgeInsets.only(top: 8, bottom: 6),
@@ -1127,17 +1434,17 @@ class _HomePageState extends State<HomePage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12),
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.local_fire_department_rounded,
                   color: Colors.deepOrange,
                   size: 19,
                 ),
-                const SizedBox(width: 4),
-                const Text(
+                SizedBox(width: 4),
+                Text(
                   'বাছাই করা পণ্য',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                 ),
@@ -1171,9 +1478,9 @@ class _HomePageState extends State<HomePage>
 
   List<Widget> _buildFeedSlivers({
     required User? user,
-    required List<QueryDocumentSnapshot> docs,
-    required Set<String> favoriteIds,
-    required List<QueryDocumentSnapshot> picks,
+    required List<_Doc> docs,
+    required List<_Doc> picks,
+    required bool hasMore,
   }) {
     final slivers = <Widget>[];
 
@@ -1205,8 +1512,7 @@ class _HomePageState extends State<HomePage>
             vertical: 4,
           ),
           sliver: SliverGrid(
-            gridDelegate:
-                const SliverGridDelegateWithFixedCrossAxisCount(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
               childAspectRatio: 0.70,
               crossAxisSpacing: 8,
@@ -1215,14 +1521,11 @@ class _HomePageState extends State<HomePage>
             delegate: SliverChildBuilderDelegate(
               (context, i) {
                 final productDoc = docs[from + i];
-                final data =
-                    productDoc.data() as Map<String, dynamic>;
 
                 return _buildProductCard(
                   user: user,
                   productId: productDoc.id,
-                  data: data,
-                  isFavorite: favoriteIds.contains(productDoc.id),
+                  data: productDoc.data(),
                 );
               },
               childCount: end - from,
@@ -1284,96 +1587,134 @@ class _HomePageState extends State<HomePage>
       }
     }
 
-    // Small space under the last product.
-    slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 16)));
+    // Small spinner while the next page is coming, otherwise a small space.
+    slivers.add(
+      SliverToBoxAdapter(
+        child: hasMore
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 18),
+                child: Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Colors.redAccent,
+                    ),
+                  ),
+                ),
+              )
+            : const SizedBox(height: 16),
+      ),
+    );
 
     return slivers;
   }
 
-  // =========================================================
-  // NOTIFICATION BELL
-  // =========================================================
+  Widget _buildFeed(User? user) {
+    if (!_productsLoaded) {
+      return const _SkeletonGrid();
+    }
 
-  Widget _buildNotificationAction(User? user) {
-    if (user == null) {
-      return IconButton(
-        icon: const Icon(Icons.notifications_outlined, color: Colors.white),
-        onPressed: _openGlobalNotifications,
+    if (_productsError && _allProducts.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.wifi_off_rounded, size: 56, color: Colors.grey.shade400),
+            const SizedBox(height: 10),
+            const Text(
+              'Failed to load products',
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+            const SizedBox(height: 6),
+            TextButton(
+              onPressed: () {
+                setState(() => _productsLoaded = false);
+                _subscribeProducts();
+              },
+              child: const Text('Try again'),
+            ),
+          ],
+        ),
       );
     }
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('global_notifications')
-          .where('active', isEqualTo: true)
-          .snapshots(),
-      builder: (context, notificationSnapshot) {
-        final notifications = notificationSnapshot.data?.docs ?? [];
+    if (_visibleProducts.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            _searchQuery.isNotEmpty
+                ? 'No products found for "$_searchQuery"'
+                : _selectedCategory == 0
+                    ? 'No products found yet'
+                    : 'No products found in ${categories[_selectedCategory]}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 16, color: Colors.grey),
+          ),
+        ),
+      );
+    }
 
-        return StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .collection('globalNotificationReads')
-              .snapshots(),
-          builder: (context, readSnapshot) {
-            final readIds = <String>{};
+    final hasMore = _visibleCount < _visibleProducts.length;
 
-            for (final readDoc in readSnapshot.data?.docs ?? []) {
-              readIds.add(readDoc.id);
-            }
+    final shown =
+        hasMore ? _visibleProducts.sublist(0, _visibleCount) : _visibleProducts;
 
-            int unreadCount = 0;
+    return Stack(
+      children: [
+        RefreshIndicator(
+          color: Colors.redAccent,
+          onRefresh: _refresh,
+          child: NotificationListener<ScrollNotification>(
+            onNotification: _onProductScroll,
+            child: CustomScrollView(
+              controller: _feedController,
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: _buildFeedSlivers(
+                user: user,
+                docs: shown,
+                picks: _picks,
+                hasMore: hasMore,
+              ),
+            ),
+          ),
+        ),
 
-            for (final notification in notifications) {
-              if (!readIds.contains(notification.id)) {
-                unreadCount++;
-              }
-            }
-
-            return Stack(
-              clipBehavior: Clip.none,
-              children: [
-                IconButton(
-                  icon: const Icon(
-                    Icons.notifications_outlined,
-                    color: Colors.white,
+        // BACK TO TOP
+        Positioned(
+          right: 14,
+          bottom: user == null ? 70 : 14,
+          child: ValueListenableBuilder<bool>(
+            valueListenable: _showTopButton,
+            builder: (context, show, _) {
+              return AnimatedScale(
+                scale: show ? 1 : 0,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutBack,
+                child: FloatingActionButton.small(
+                  heroTag: null,
+                  elevation: 3,
+                  backgroundColor: Colors.white,
+                  onPressed: () {
+                    _feedController.animateTo(
+                      0,
+                      duration: const Duration(milliseconds: 450),
+                      curve: Curves.easeOut,
+                    );
+                  },
+                  child: const Icon(
+                    Icons.keyboard_arrow_up_rounded,
+                    color: Colors.redAccent,
+                    size: 28,
                   ),
-                  onPressed: _openGlobalNotifications,
                 ),
-                if (unreadCount > 0)
-                  Positioned(
-                    right: 4,
-                    top: 4,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 2,
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 17,
-                        minHeight: 17,
-                      ),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Text(
-                        unreadCount > 99 ? '99+' : '$unreadCount',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.redAccent,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            );
-          },
-        );
-      },
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -1385,13 +1726,14 @@ class _HomePageState extends State<HomePage>
     required User? user,
     required String productId,
     required Map<String, dynamic> data,
-    required bool isFavorite,
   }) {
     final name = data['name']?.toString() ?? 'Unnamed Product';
 
     final imageUrl = data['imageUrl']?.toString();
 
     final discount = _discountPercent(data);
+
+    final originalPrice = _displayOriginalBdtPrice(data);
 
     return Container(
       clipBehavior: Clip.antiAlias,
@@ -1418,30 +1760,24 @@ class _HomePageState extends State<HomePage>
               Expanded(
                 child: Stack(
                   children: [
-                    Container(
+                    SizedBox(
                       width: double.infinity,
-                      decoration: BoxDecoration(color: Colors.grey[200]),
+                      height: double.infinity,
                       child: imageUrl != null && imageUrl.isNotEmpty
-                          ? Image.network(
+                          ? _netImage(
                               imageUrl,
-                              fit: BoxFit.cover,
                               width: double.infinity,
                               height: double.infinity,
-                              errorBuilder: (context, error, stackTrace) {
-                                return const Center(
-                                  child: Icon(
-                                    Icons.image,
-                                    size: 50,
-                                    color: Colors.grey,
-                                  ),
-                                );
-                              },
+                              cacheWidth: 500,
                             )
-                          : const Center(
-                              child: Icon(
-                                Icons.image,
-                                size: 50,
-                                color: Colors.grey,
+                          : Container(
+                              color: Colors.grey[200],
+                              child: const Center(
+                                child: Icon(
+                                  Icons.image,
+                                  size: 50,
+                                  color: Colors.grey,
+                                ),
                               ),
                             ),
                     ),
@@ -1476,7 +1812,7 @@ class _HomePageState extends State<HomePage>
                         child: _discountBadge(discount),
                       ),
 
-                    // FAVORITE
+                    // FAVORITE (only this icon rebuilds when favorites change)
                     Positioned(
                       top: 8,
                       right: 8,
@@ -1507,13 +1843,30 @@ class _HomePageState extends State<HomePage>
                           },
                           child: Padding(
                             padding: const EdgeInsets.all(7),
-                            child: Icon(
-                              isFavorite
-                                  ? Icons.favorite
-                                  : Icons.favorite_border,
-                              color:
-                                  isFavorite ? Colors.redAccent : Colors.grey,
-                              size: 21,
+                            child: ValueListenableBuilder<Set<String>>(
+                              valueListenable: _favoriteIds,
+                              builder: (context, ids, _) {
+                                final isFavorite = ids.contains(productId);
+
+                                return AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 180),
+                                  transitionBuilder: (child, animation) =>
+                                      ScaleTransition(
+                                    scale: animation,
+                                    child: child,
+                                  ),
+                                  child: Icon(
+                                    isFavorite
+                                        ? Icons.favorite
+                                        : Icons.favorite_border,
+                                    key: ValueKey(isFavorite),
+                                    color: isFavorite
+                                        ? Colors.redAccent
+                                        : Colors.grey,
+                                    size: 21,
+                                  ),
+                                );
+                              },
                             ),
                           ),
                         ),
@@ -1572,9 +1925,8 @@ class _HomePageState extends State<HomePage>
                         Flexible(
                           child: PriceTag(
                             price: _displayBdtPrice(data),
-                            originalPrice: _displayOriginalBdtPrice(data) > 0
-                                ? _displayOriginalBdtPrice(data)
-                                : null,
+                            originalPrice:
+                                originalPrice > 0 ? originalPrice : null,
                             fontSize: 15,
                             color: Colors.redAccent,
                           ),
@@ -1645,12 +1997,10 @@ class _HomePageState extends State<HomePage>
         ),
         child: TextField(
           controller: _searchController,
+          focusNode: _searchFocus,
           textInputAction: TextInputAction.search,
-          onChanged: (value) {
-            setState(() {
-              _searchQuery = value.trim().toLowerCase();
-            });
-          },
+          onChanged: _onSearchChanged,
+          onSubmitted: _submitSearch,
           decoration: InputDecoration(
             hintText: 'Search products...',
             hintStyle: TextStyle(
@@ -1670,43 +2020,43 @@ class _HomePageState extends State<HomePage>
               minWidth: 46,
               minHeight: 50,
             ),
-            suffixIcon: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (_searchQuery.isNotEmpty)
-                  IconButton(
-                    tooltip: 'Clear',
-                    splashRadius: 20,
-                    icon: Icon(
-                      Icons.close_rounded,
-                      color: Colors.grey.shade600,
-                      size: 20,
+            // Only the icons rebuild while typing, not the whole page.
+            suffixIcon: ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _searchController,
+              builder: (context, value, _) {
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (value.text.isNotEmpty)
+                      IconButton(
+                        tooltip: 'Clear',
+                        splashRadius: 20,
+                        icon: Icon(
+                          Icons.close_rounded,
+                          color: Colors.grey.shade600,
+                          size: 20,
+                        ),
+                        onPressed: _clearSearch,
+                      ),
+                    Container(
+                      height: 26,
+                      width: 1,
+                      color: Colors.grey.shade300,
                     ),
-                    onPressed: () {
-                      _searchController.clear();
-
-                      setState(() {
-                        _searchQuery = '';
-                      });
-                    },
-                  ),
-                Container(
-                  height: 26,
-                  width: 1,
-                  color: Colors.grey.shade300,
-                ),
-                IconButton(
-                  tooltip: 'Search by camera',
-                  splashRadius: 20,
-                  icon: Icon(
-                    Icons.camera_alt_outlined,
-                    color: Colors.grey.shade700,
-                    size: 21,
-                  ),
-                  onPressed: _openCameraSearch,
-                ),
-                const SizedBox(width: 4),
-              ],
+                    IconButton(
+                      tooltip: 'Search by camera',
+                      splashRadius: 20,
+                      icon: Icon(
+                        Icons.camera_alt_outlined,
+                        color: Colors.grey.shade700,
+                        size: 21,
+                      ),
+                      onPressed: _openCameraSearch,
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                );
+              },
             ),
             suffixIconConstraints: const BoxConstraints(
               minWidth: 0,
@@ -1725,42 +2075,134 @@ class _HomePageState extends State<HomePage>
     );
   }
 
+  /// Recent searches (empty box) or product-name suggestions (while typing).
+  /// Shown over the feed while the search field has focus.
+  Widget _buildSearchPanel() {
+    final showRecent = _searchQuery.isEmpty;
+    final suggestions = showRecent ? const <String>[] : _suggestions();
+
+    return Material(
+      color: Colors.white,
+      child: ListView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
+        children: [
+          if (showRecent) ...[
+            if (_recentSearches.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                child: Text(
+                  'Type a product name to search',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
+              )
+            else ...[
+              Row(
+                children: [
+                  const Text(
+                    'Recent searches',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: _clearRecentSearches,
+                    child: const Text('Clear'),
+                  ),
+                ],
+              ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final r in _recentSearches)
+                    ActionChip(
+                      avatar: const Icon(Icons.history, size: 16),
+                      label: Text(r),
+                      onPressed: () => _useSuggestion(r),
+                    ),
+                ],
+              ),
+            ],
+          ] else if (suggestions.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              child: Text(
+                'No suggestions',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
+            )
+          else
+            for (final s in suggestions)
+              ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.search, color: Colors.grey.shade600),
+                title: Text(s, maxLines: 1, overflow: TextOverflow.ellipsis),
+                trailing: Icon(
+                  Icons.north_west_rounded,
+                  size: 16,
+                  color: Colors.grey.shade500,
+                ),
+                onTap: () => _useSuggestion(s),
+              ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: () => _searchFocus.unfocus(),
+              child: const Text('Close'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // =========================================================
   // CATEGORIES BAR
   // =========================================================
 
   Widget _buildCategoriesBar() {
-    return SizedBox(
+    return Container(
       height: 108,
-      child: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('products').snapshots(),
-        builder: (context, categorySnapshot) {
-          final categoryProducts = (categorySnapshot.data?.docs ?? [])
-              .where(
-                (d) => !_isOwnProduct(d.data() as Map<String, dynamic>),
-              )
-              .toList();
-
-          return Container(
-            color: Colors.white,
-            padding: const EdgeInsets.only(top: 4),
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              itemCount: categories.length,
-              itemBuilder: (context, index) {
-                return _buildCategoryItem(
-                  category: categories[index],
-                  index: index,
-                  products: categoryProducts,
-                );
-              },
-            ),
+      color: Colors.white,
+      padding: const EdgeInsets.only(top: 4),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        itemCount: categories.length,
+        itemBuilder: (context, index) {
+          return _buildCategoryItem(
+            category: categories[index],
+            index: index,
           );
         },
       ),
     );
+  }
+
+  // =========================================================
+  // SCROLL: load more + back-to-top button
+  // =========================================================
+
+  void _onFeedScroll() {
+    if (!_feedController.hasClients) return;
+
+    final p = _feedController.position;
+
+    // Near the bottom -> show 20 more products.
+    if (p.pixels > p.maxScrollExtent - 700 &&
+        _visibleCount < _visibleProducts.length) {
+      setState(() => _visibleCount += _pageSize);
+    }
+
+    final showTop = p.pixels > 900;
+
+    if (_showTopButton.value != showTop) {
+      _showTopButton.value = showTop;
+    }
   }
 
   // =========================================================
@@ -1817,64 +2259,137 @@ class _HomePageState extends State<HomePage>
   }
 
   // =========================================================
+  // BOTTOM NAVIGATION BAR
+  // =========================================================
+
+  Widget _buildNavigationBar(User? user) {
+    const red = Colors.redAccent;
+
+    return NavigationBarTheme(
+      data: NavigationBarThemeData(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        elevation: 8,
+        height: 66,
+        indicatorColor: red.withValues(alpha: 0.12),
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+
+          return TextStyle(
+            fontSize: 11,
+            fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+            color: selected ? red : Colors.grey.shade600,
+          );
+        }),
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+
+          return IconThemeData(
+            size: 24,
+            color: selected ? red : Colors.grey.shade600,
+          );
+        }),
+      ),
+      child: NavigationBar(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: _onNavTap,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        destinations: [
+          const NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home_rounded),
+            label: 'Home',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.grid_view_outlined),
+            selectedIcon: Icon(Icons.grid_view_rounded),
+            label: 'Categories',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.video_library_outlined),
+            selectedIcon: Icon(Icons.video_library),
+            label: 'Videos',
+          ),
+          NavigationDestination(
+            icon: _CartNavIcon(key: ValueKey('cart_${user?.uid}'), user: user),
+            selectedIcon:
+                _CartNavIcon(key: ValueKey('cart_s_${user?.uid}'), user: user),
+            label: 'Cart',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.person_outline_rounded),
+            selectedIcon: Icon(Icons.person_rounded),
+            label: 'Profile',
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =========================================================
   // BUILD
   // =========================================================
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, authSnapshot) {
-        final user = authSnapshot.data;
+    final user = _user;
 
-        final isLoggedIn = user != null;
+    final isLoggedIn = user != null;
 
-        return Scaffold(
-          backgroundColor: _pageBackground,
+    return Scaffold(
+      backgroundColor: _pageBackground,
 
-          // SIDE MENU (see home_page_drawer.dart)
-          drawer: _HomeDrawer(
-            isLoggedIn: isLoggedIn,
-            onAccount: () => _openAccount(isLoggedIn),
-            onHome: () => setState(() => _selectedIndex = 0),
-            onVideos: _openVideos,
-            onCategorySelected: (result) {
-              final i = categories.indexOf(result);
+      // SIDE MENU (see home_page_drawer.dart)
+      drawer: _HomeDrawer(
+        isLoggedIn: isLoggedIn,
+        onAccount: () => _openAccount(isLoggedIn),
+        onHome: () => setState(() => _selectedIndex = 0),
+        onVideos: _openVideos,
+        onCategorySelected: (result) {
+          final i = categories.indexOf(result);
 
-              if (i != -1) setState(() => _selectedCategory = i);
-            },
-          ),
+          if (i != -1) _selectCategory(i);
+        },
+      ),
 
-          // APP BAR
-          appBar: AppBar(
-            backgroundColor: Colors.redAccent,
-            elevation: 0,
-            flexibleSpace: Container(
-              decoration: const BoxDecoration(gradient: _headerGradient),
-            ),
-            leading: Builder(
-              builder: (context) {
-                return IconButton(
-                  icon: const Icon(Icons.menu, color: Colors.white),
-                  onPressed: () {
-                    Scaffold.of(context).openDrawer();
-                  },
-                );
+      // APP BAR
+      appBar: AppBar(
+        backgroundColor: Colors.redAccent,
+        elevation: 0,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(gradient: _headerGradient),
+        ),
+        leading: Builder(
+          builder: (context) {
+            return IconButton(
+              icon: const Icon(Icons.menu, color: Colors.white),
+              onPressed: () {
+                Scaffold.of(context).openDrawer();
               },
-            ),
-            titleSpacing: 0,
-            title: Row(
-              children: [
-                _buildBuyNovaLogo(),
-                const SizedBox(width: 10),
-                _buildGetCoupon(),
-              ],
-            ),
-            actions: [_buildNotificationAction(user)],
+            );
+          },
+        ),
+        titleSpacing: 0,
+        title: Row(
+          children: [
+            _buildBuyNovaLogo(),
+            const SizedBox(width: 10),
+            _buildGetCoupon(),
+          ],
+        ),
+        actions: [
+          _NotificationBell(
+            key: ValueKey('bell_${user?.uid}'),
+            user: user,
+            onPressed: _openGlobalNotifications,
           ),
+        ],
+      ),
 
-          // BODY
-          body: Column(
+      // BODY
+      body: Stack(
+        children: [
+          Column(
             children: [
               // HEADER: search + categories + slider.
               // Slides up when scrolling down, back when scrolling up.
@@ -1883,7 +2398,7 @@ class _HomePageState extends State<HomePage>
                   duration: const Duration(milliseconds: 250),
                   curve: Curves.easeInOut,
                   alignment: Alignment.topCenter,
-                  heightFactor: _showHeader ? 1.0 : 0.0,
+                  heightFactor: (_showHeader || _searchFocused) ? 1.0 : 0.0,
                   child: SizedBox(
                     width: double.infinity,
                     child: Column(
@@ -1899,185 +2414,180 @@ class _HomePageState extends State<HomePage>
               ),
 
               // PRODUCTS
-              Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('products')
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (snapshot.hasError) {
-                      return const Center(
-                        child: Text(
-                          'Failed to load products',
-                          style: TextStyle(fontSize: 16, color: Colors.grey),
-                        ),
-                      );
-                    }
-
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const _SkeletonGrid();
-                    }
-
-                    final allDocs = snapshot.data?.docs ?? [];
-
-                    final filteredDocs = allDocs.where((doc) {
-                      final data = doc.data() as Map<String, dynamic>;
-
-                      // Nobody sees their own product.
-                      if (_isOwnProduct(data)) {
-                        return false;
-                      }
-
-                      if (!_matchesCategory(data)) {
-                        return false;
-                      }
-
-                      if (_searchQuery.isEmpty) {
-                        return true;
-                      }
-
-                      final productName =
-                          data['name']?.toString().toLowerCase() ?? '';
-
-                      return productName.contains(_searchQuery);
-                    }).toList();
-
-                    if (filteredDocs.isEmpty) {
-                      return Center(
-                        child: Text(
-                          _searchQuery.isNotEmpty
-                              ? 'No products found for "$_searchQuery"'
-                              : _selectedCategory == 0
-                                  ? 'No products found yet'
-                                  : 'No products found in ${categories[_selectedCategory]}',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey,
-                          ),
-                        ),
-                      );
-                    }
-
-                    return StreamBuilder<QuerySnapshot>(
-                      stream: user == null
-                          ? null
-                          : FirebaseFirestore.instance
-                              .collection('users')
-                              .doc(user.uid)
-                              .collection('favorites')
-                              .snapshots(),
-                      builder: (context, favoriteSnapshot) {
-                        final favoriteIds = <String>{};
-
-                        for (final favoriteDoc
-                            in favoriteSnapshot.data?.docs ?? []) {
-                          favoriteIds.add(favoriteDoc.id);
-                        }
-
-                        // Admin-chosen products (homeSlider collection).
-                        return StreamBuilder<
-                            QuerySnapshot<Map<String, dynamic>>>(
-                          stream: FirebaseFirestore.instance
-                              .collection('homeSlider')
-                              .snapshots(),
-                          builder: (context, sliderSnapshot) {
-                            final picks = _adminPicks(
-                              sliderSnapshot.data?.docs ?? [],
-                              allDocs,
-                            );
-
-                            return NotificationListener<ScrollNotification>(
-                              onNotification: _onProductScroll,
-                              child: CustomScrollView(
-                                slivers: _buildFeedSlivers(
-                                  user: user,
-                                  docs: filteredDocs,
-                                  favoriteIds: favoriteIds,
-                                  picks: picks,
-                                ),
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
+              Expanded(child: _buildFeed(user)),
             ],
           ),
 
-          // SIGN-IN BANNER
-          bottomSheet: isLoggedIn
-              ? null
-              : Container(
-                  color: Colors.orangeAccent,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'Sign in for best experience!',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.orangeAccent,
-                        ),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const LoginPage(),
-                            ),
-                          );
-                        },
-                        child: const Text('Sign In'),
-                      ),
-                    ],
-                  ),
-                ),
+          // SEARCH SUGGESTIONS (covers the feed, below the search bar)
+          if (_searchFocused)
+            Positioned(
+              left: 0,
+              right: 0,
+              top: _searchBarHeight,
+              bottom: 0,
+              child: _buildSearchPanel(),
+            ),
+        ],
+      ),
 
-          // BOTTOM NAVIGATION
-          bottomNavigationBar: BottomNavigationBar(
-            currentIndex: _selectedIndex,
-            onTap: _onNavTap,
-            selectedItemColor: Colors.redAccent,
-            unselectedItemColor: Colors.grey,
-            type: BottomNavigationBarType.fixed,
-            items: [
-              const BottomNavigationBarItem(
-                icon: Icon(Icons.home),
-                label: 'Home',
+      // SIGN-IN BANNER
+      bottomSheet: isLoggedIn
+          ? null
+          : Container(
+              color: Colors.orangeAccent,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 8,
               ),
-              const BottomNavigationBarItem(
-                icon: Icon(Icons.category),
-                label: 'Categories',
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Sign in for best experience!',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.orangeAccent,
+                    ),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const LoginPage(),
+                        ),
+                      );
+                    },
+                    child: const Text('Sign In'),
+                  ),
+                ],
               ),
-              const BottomNavigationBarItem(
-                icon: Icon(Icons.video_library),
-                label: 'Videos',
-              ),
-              BottomNavigationBarItem(
-                icon: _buildCartNavIcon(user),
-                label: 'Cart',
-              ),
-              const BottomNavigationBarItem(
-                icon: Icon(Icons.person),
-                label: 'Profile',
-              ),
-            ],
-          ),
+            ),
+
+      // BOTTOM NAVIGATION
+      bottomNavigationBar: _buildNavigationBar(user),
+    );
+  }
+}
+
+// ===================================================================
+// NOTIFICATION BELL
+// Streams are created once (initState). The parent gives it a key with
+// the user id, so it is recreated only when the user changes.
+// ===================================================================
+
+class _NotificationBell extends StatefulWidget {
+  final User? user;
+  final VoidCallback onPressed;
+
+  const _NotificationBell({
+    super.key,
+    required this.user,
+    required this.onPressed,
+  });
+
+  @override
+  State<_NotificationBell> createState() => _NotificationBellState();
+}
+
+class _NotificationBellState extends State<_NotificationBell> {
+  Stream<QuerySnapshot>? _notificationStream;
+  Stream<QuerySnapshot>? _readStream;
+
+  @override
+  void initState() {
+    super.initState();
+
+    final user = widget.user;
+
+    if (user != null) {
+      _notificationStream = FirebaseFirestore.instance
+          .collection('global_notifications')
+          .where('active', isEqualTo: true)
+          .snapshots();
+
+      _readStream = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('globalNotificationReads')
+          .snapshots();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bell = IconButton(
+      icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+      onPressed: widget.onPressed,
+    );
+
+    if (_notificationStream == null || _readStream == null) {
+      return bell;
+    }
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: _notificationStream,
+      builder: (context, notificationSnapshot) {
+        final notifications = notificationSnapshot.data?.docs ?? [];
+
+        return StreamBuilder<QuerySnapshot>(
+          stream: _readStream,
+          builder: (context, readSnapshot) {
+            final readIds = <String>{};
+
+            for (final readDoc in readSnapshot.data?.docs ?? []) {
+              readIds.add(readDoc.id);
+            }
+
+            int unreadCount = 0;
+
+            for (final notification in notifications) {
+              if (!readIds.contains(notification.id)) {
+                unreadCount++;
+              }
+            }
+
+            return Stack(
+              clipBehavior: Clip.none,
+              children: [
+                bell,
+                if (unreadCount > 0)
+                  Positioned(
+                    right: 4,
+                    top: 4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 2,
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 17,
+                        minHeight: 17,
+                      ),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        unreadCount > 99 ? '99+' : '$unreadCount',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.redAccent,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
         );
       },
     );
@@ -2085,88 +2595,147 @@ class _HomePageState extends State<HomePage>
 }
 
 // ===================================================================
-// LOADING SKELETON (grey pulsing cards while products load)
+// CART ICON WITH BADGE (own stream, created once)
 // ===================================================================
 
-class _SkeletonGrid extends StatefulWidget {
-  const _SkeletonGrid();
+class _CartNavIcon extends StatefulWidget {
+  final User? user;
+
+  const _CartNavIcon({super.key, required this.user});
 
   @override
-  State<_SkeletonGrid> createState() => _SkeletonGridState();
+  State<_CartNavIcon> createState() => _CartNavIconState();
 }
 
-class _SkeletonGridState extends State<_SkeletonGrid>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 900),
-  )..repeat(reverse: true);
-
-  late final Animation<double> _opacity = Tween<double>(
-    begin: 0.45,
-    end: 1.0,
-  ).animate(
-    CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-  );
+class _CartNavIconState extends State<_CartNavIcon> {
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _cartStream;
 
   @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+  void initState() {
+    super.initState();
 
-  Widget _bar(double width) {
-    return Container(
-      height: 11,
-      width: width,
-      decoration: BoxDecoration(
-        color: Colors.grey.shade300,
-        borderRadius: BorderRadius.circular(6),
-      ),
-    );
+    final user = widget.user;
+
+    if (user != null) {
+      _cartStream = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('cart')
+          .snapshots();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _opacity,
-      child: GridView.builder(
-        physics: const NeverScrollableScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          childAspectRatio: 0.70,
-          crossAxisSpacing: 8,
-          mainAxisSpacing: 8,
-        ),
-        itemCount: 6,
-        itemBuilder: (context, index) {
-          return Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: Container(color: Colors.grey.shade200)),
-                Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _bar(110),
-                      const SizedBox(height: 8),
-                      _bar(60),
-                    ],
+    final stream = _cartStream;
+
+    if (stream == null) {
+      return const Icon(Icons.shopping_cart_outlined);
+    }
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: stream,
+      builder: (context, snapshot) {
+        int cartCount = 0;
+
+        if (snapshot.hasData) {
+          for (final doc in snapshot.data!.docs) {
+            final quantity = doc.data()['quantity'];
+
+            if (quantity is num) {
+              cartCount += quantity.toInt();
+            } else {
+              cartCount += 1;
+            }
+          }
+        }
+
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            const Icon(Icons.shopping_cart_outlined),
+            if (cartCount > 0)
+              Positioned(
+                right: -9,
+                top: -9,
+                child: Container(
+                  constraints: const BoxConstraints(
+                    minWidth: 18,
+                    minHeight: 18,
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 2,
+                  ),
+                  decoration: const BoxDecoration(
+                    color: Colors.redAccent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(
+                    cartCount > 99 ? '99+' : '$cartCount',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-              ],
-            ),
-          );
-        },
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+// ===================================================================
+// LOADING SKELETON (shimmer cards while products load)
+// ===================================================================
+
+class _SkeletonGrid extends StatelessWidget {
+  const _SkeletonGrid();
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(6);
+
+    return GridView.builder(
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        childAspectRatio: 0.70,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
       ),
+      itemCount: 6,
+      itemBuilder: (context, index) {
+        return Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Expanded(child: ShimmerBox(width: double.infinity)),
+              Padding(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ShimmerBox(width: 110, height: 11, borderRadius: radius),
+                    const SizedBox(height: 8),
+                    ShimmerBox(width: 60, height: 11, borderRadius: radius),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
