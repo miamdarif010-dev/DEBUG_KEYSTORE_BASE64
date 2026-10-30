@@ -441,6 +441,13 @@ exports.placeWalletOrder = onCall(async (request) => {
       );
     }
 
+    if (String(orderData.orderStatus || "").toLowerCase() === "cancelled") {
+      throw new HttpsError(
+        "failed-precondition",
+        "This order has been cancelled."
+      );
+    }
+
     if (orderData.paymentStatus === "paid") {
       return {
         alreadyPaid: true,
@@ -1845,6 +1852,7 @@ async function deleteUserSubcollections(userRef) {
 }
 
 exports.adminDeleteUser = onCall(
+  { timeoutSeconds: 540, memory: "512MiB" },
   async (request) => {
     // ========================================================
     // ADMIN ONLY
