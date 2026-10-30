@@ -1,45 +1,114 @@
-/* BuyNova shop: শুধু সৌন্দর্য বাড়ানোর স্টাইল (রঙ আগের মতোই) */
+/* BuyNova shop: সৌন্দর্য ও ইউনিক লুক (ব্র্যান্ড রঙ আগের মতোই: #ff5252) */
+@import url("https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Baloo+Da+2:wght@700;800&display=swap");
+
+:root{
+  --brand:#ff5252;--brand2:#ff7a7a;--brand-deep:#e03a3a;
+  --blush:#fff0f0;--line:#ffd6d6;--ink:#17151f;
+  --r-card:22px 22px 14px 14px;
+  --shadow-soft:0 10px 28px -12px rgba(255,82,82,.45);
+}
 html{scroll-behavior:smooth;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
-body{background:linear-gradient(180deg,#fff8f8 0%,#ffeeee 100%) fixed}
-header{box-shadow:0 4px 18px rgba(255,82,82,.18)}
-.hb{background:linear-gradient(90deg,#ff5252,#ff7a7a)}
-.sr{box-shadow:0 2px 8px rgba(0,0,0,.08)}
-.sr input:focus{box-shadow:inset 0 0 0 2px rgba(255,82,82,.35)}
+body{
+  font-family:"Hind Siliguri",system-ui,-apple-system,"Noto Sans Bengali",sans-serif;
+  background:
+    radial-gradient(circle at 12% 0%,rgba(255,122,122,.14),transparent 38%),
+    radial-gradient(circle at 100% 30%,rgba(255,213,79,.10),transparent 34%),
+    #fff8f8;
+  background-attachment:fixed;
+}
+
+/* ---------- হেডার ---------- */
+header{box-shadow:0 6px 22px -10px rgba(224,58,58,.5)}
+.hb{background:linear-gradient(95deg,#ff4b4b 0%,#ff6a6a 55%,#ff8a7a 100%)}
+.logo{font-family:"Baloo Da 2","Hind Siliguri",sans-serif;letter-spacing:-.02em}
+.lg{transform:rotate(-6deg);box-shadow:0 4px 10px rgba(0,0,0,.18)}
+.sr{box-shadow:0 3px 14px rgba(0,0,0,.12)}
+.sr input:focus{box-shadow:inset 0 0 0 2px rgba(255,82,82,.4)}
 .ic{transition:transform .15s}.ic:active{transform:scale(.92)}
-.nl{transition:color .2s,border-color .2s}
-.hero{position:relative;box-shadow:0 8px 24px rgba(255,82,82,.16)}
-.hero:before{content:"";position:absolute;right:-60px;top:-60px;width:220px;height:220px;border-radius:50%;background:rgba(255,255,255,.35)}
-.hero:after{content:"";position:absolute;left:-40px;bottom:-70px;width:160px;height:160px;border-radius:50%;background:rgba(255,255,255,.25)}
+.nv{background:#fff}
+.nl{transition:color .2s,border-color .2s;font-weight:600}
+.allc{box-shadow:0 4px 10px rgba(255,82,82,.3)}
+
+/* ---------- হিরো ---------- */
+.hero{
+  position:relative;
+  background:
+    radial-gradient(rgba(255,82,82,.16) 1.4px,transparent 1.6px) 0 0/16px 16px,
+    linear-gradient(120deg,#ffe9e6,#ffc7c2);
+  box-shadow:0 14px 34px -16px rgba(255,82,82,.55);
+  border:1px solid rgba(255,255,255,.7);
+}
+.hero:before{content:"";position:absolute;right:-70px;top:-70px;width:240px;height:240px;border-radius:50%;background:rgba(255,255,255,.4)}
+.hero:after{content:"";position:absolute;left:-50px;bottom:-80px;width:170px;height:170px;border-radius:50%;background:rgba(255,255,255,.3)}
 .hero>*{position:relative;z-index:1}
-.em{filter:drop-shadow(0 6px 10px rgba(0,0,0,.15))}
-.cr{box-shadow:inset 0 0 0 1px #ffe1e1}
-.ci i{box-shadow:0 3px 8px rgba(255,82,82,.15);transition:transform .15s}.ci:active i{transform:scale(.9)}
-.sh h2{display:flex;align-items:center;gap:8px}
-.sh h2:before{content:"";width:5px;height:22px;border-radius:3px;background:linear-gradient(#ff5252,#ff7a7a)}
-.c{transition:transform .2s,box-shadow .2s;background:#fff;border:1px solid #ffe3e3}
-.c:hover{transform:translateY(-3px);box-shadow:0 10px 22px rgba(255,82,82,.2)}
-.c:active{transform:scale(.98)}
-.im{background:linear-gradient(135deg,#fff0f0,#ffe0e0)}
-.im img{transition:transform .35s}.c:hover .im img{transform:scale(1.06)}
-.off{background:linear-gradient(90deg,#ff5252,#ff7a7a);color:#fff;box-shadow:0 2px 6px rgba(255,82,82,.35)}
-.pprice .off{color:#fff}
+.hero h1{font-family:"Baloo Da 2","Hind Siliguri",sans-serif;font-weight:800;letter-spacing:-.03em}
+.hero small{display:inline-block;background:#fff;border-radius:20px;padding:3px 12px;box-shadow:0 2px 8px rgba(255,82,82,.2)}
+.em{filter:drop-shadow(0 10px 14px rgba(0,0,0,.18));transform:rotate(-5deg)}
+.tr span{background:rgba(255,255,255,.7);border-radius:16px;padding:4px 10px}
+
+/* ---------- ক্যাটাগরি ---------- */
+.cr{box-shadow:inset 0 0 0 1px #ffe1e1;scrollbar-width:none}.cr::-webkit-scrollbar{display:none}
+.ci i{box-shadow:0 4px 10px rgba(255,82,82,.18);transition:transform .15s,background .2s}
+.ci:active i{transform:scale(.9)}
+.ci.on{color:var(--brand-deep)}
+
+/* ---------- সেকশন শিরোনাম ---------- */
+.sh h2{display:flex;align-items:center;gap:9px;font-weight:700}
+.sh h2:before{content:"";width:6px;height:22px;border-radius:4px;background:linear-gradient(var(--brand),var(--brand2))}
+
+/* ---------- পণ্য কার্ড ---------- */
+.g{gap:14px}
+.c{
+  background:#fff;border:1px solid #ffe3e3;border-radius:var(--r-card);
+  transition:transform .2s,box-shadow .2s;
+}
+.c:hover{transform:translateY(-3px);box-shadow:var(--shadow-soft)}
+.c:active{transform:scale(.985)}
+.im{background:linear-gradient(135deg,#fff3f1,#ffe2df)}
+.im img{transition:transform .4s}.c:hover .im img{transform:scale(1.06)}
+.off{
+  background:linear-gradient(90deg,var(--brand),var(--brand2));color:#fff;
+  border-radius:0 0 0 12px;right:0;top:0;padding:5px 10px;
+  box-shadow:0 3px 8px rgba(255,82,82,.35);
+}
+.pprice .off{color:#fff;border-radius:12px}
 .nm{color:#2a2733;font-weight:600}
-.ad{transition:transform .15s,box-shadow .15s;box-shadow:0 4px 10px rgba(255,82,82,.25)}
+.tx{border-top:2px dashed #ffe0e0}
+.pr{font-family:"Baloo Da 2","Hind Siliguri",sans-serif;font-size:17px;letter-spacing:-.01em}
+.ad{border-radius:12px;box-shadow:0 5px 12px -4px rgba(255,82,82,.55);transition:transform .15s,box-shadow .15s}
 .ad:active,.btn:active{transform:scale(.97)}
 .ad.go{box-shadow:none}
-.btn{transition:transform .15s,box-shadow .15s}
-.btn:hover{box-shadow:0 8px 20px rgba(255,82,82,.35)}
-.btn.out:hover{box-shadow:0 4px 12px rgba(255,82,82,.2)}
-.b{transition:transform .2s;box-shadow:0 4px 14px rgba(0,0,0,.06)}.b:hover{transform:translateY(-2px)}
-.more{transition:all .2s}.more:hover{background:#ff5252;color:#fff}
-.box{border:1px solid #ffeaea}
-.pimg{box-shadow:0 6px 18px rgba(255,82,82,.15)}
+
+/* ---------- ব্যানার ও বাটন ---------- */
+.b{box-shadow:0 8px 20px -12px rgba(0,0,0,.25);transition:transform .2s;border:1px solid rgba(255,255,255,.7)}
+.b:hover{transform:translateY(-2px)}
+.btn{transition:transform .15s,box-shadow .15s;font-weight:700}
+.btn:hover{box-shadow:0 10px 22px -6px rgba(255,82,82,.55)}
+.btn.out:hover{box-shadow:0 5px 14px rgba(255,82,82,.2)}
+.more{transition:all .2s}.more:hover{background:var(--brand);color:#fff}
+
+/* ---------- প্রোডাক্ট পেজ ---------- */
+.box{border:1px solid #ffeaea;box-shadow:0 12px 30px -18px rgba(255,82,82,.5)}
+.pimg{box-shadow:var(--shadow-soft)}
+.pname{font-weight:700;line-height:1.25}
+.pprice{font-family:"Baloo Da 2","Hind Siliguri",sans-serif}
 .thumbs img{transition:transform .15s}.thumbs img:hover{transform:scale(1.06)}
-.cd{transition:transform .15s}.cd:hover{transform:scale(1.1)}
-.sz{transition:all .15s}.sz:hover{border-color:#ff5252}
+.cd{transition:transform .15s}.cd:hover{transform:scale(1.12)}
+.sz{transition:all .15s}.sz:hover{border-color:var(--brand)}
 .opt{transition:border-color .15s,background .15s}
-input.t:focus,select.t:focus,textarea.t:focus{box-shadow:0 0 0 3px rgba(255,82,82,.15)}
-.toast{box-shadow:0 6px 18px rgba(0,0,0,.25)}
+input.t:focus,select.t:focus,textarea.t:focus{box-shadow:0 0 0 4px rgba(255,82,82,.14)}
+
+/* ---------- মোবাইল ---------- */
+@media(max-width:699px){
+  .g{gap:10px}
+  .hero{padding:26px 20px;border-radius:18px}
+  .box{border-radius:18px}
+  /* ফোনে প্রোডাক্ট পেজের বাটন নিচে স্টিকি */
+  .pgrid .row:first-of-type{position:sticky;bottom:0;background:linear-gradient(transparent,#fff 28%);padding:14px 0 6px;z-index:5}
+}
+
+.toast{box-shadow:0 8px 22px rgba(0,0,0,.28)}
 footer{background:linear-gradient(180deg,#1a1e33,#12152a)}
 .sb{transition:background .2s}.sb:hover{background:#222}
-@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+:focus-visible{outline:3px solid rgba(255,82,82,.55);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
