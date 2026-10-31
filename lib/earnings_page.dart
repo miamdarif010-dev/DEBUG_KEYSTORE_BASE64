@@ -142,6 +142,9 @@ class EarningsPage extends StatelessWidget {
       case 'cancelled':
         return Colors.red;
 
+      case 'returned':
+        return Colors.deepOrange;
+
       default:
         return Colors.grey;
     }
@@ -167,6 +170,9 @@ class EarningsPage extends StatelessWidget {
 
       case 'cancelled':
         return 'Cancelled';
+
+      case 'returned':
+        return 'Returned';
 
       default:
         return 'Placed';
@@ -359,7 +365,7 @@ class EarningsPage extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '₩${total.toStringAsFixed(0)}',
+                  '৳${total.toStringAsFixed(0)}',
                   style: const TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.bold,
@@ -484,6 +490,12 @@ class EarningsPage extends StatelessWidget {
               continue;
             }
 
+            // A fully returned order is money that went back to the
+            // customer. It is shown in the Return / Refund card below.
+            if (status == 'returned') {
+              continue;
+            }
+
             totalSales += amount;
 
             if (status == 'delivered') {
@@ -496,73 +508,73 @@ class EarningsPage extends StatelessWidget {
           }
 
           // ===================================================
-          // RETURN / REFUND
+          // REAL EARNINGS (from the wallet)
           // ===================================================
+          //
+          // The money that really reached the seller wallet is recorded as
+          // "sale_earning" transactions (already AFTER BuyNova's commission),
+          // and money taken back for returns as "return_deduction".
 
           return StreamBuilder<
               QuerySnapshot<
                   Map<String, dynamic>>>(
             stream: FirebaseFirestore.instance
-                .collection(
-                  'return_refund_requests',
-                )
+                .collection('users')
+                .doc(user.uid)
+                .collection('walletTransactions')
                 .where(
-                  'sellerId',
-                  isEqualTo: user.uid,
+                  'source',
+                  whereIn: const [
+                    'sale_earning',
+                    'return_deduction',
+                  ],
                 )
                 .snapshots(),
             builder: (
               context,
-              requestSnapshot,
+              walletSnapshot,
             ) {
+              double netEarned = 0;
+              double commissionPaid = 0;
               double returnRefundAmount = 0;
 
-              if (requestSnapshot.hasError) {
-                return _buildEarningsContent(
-                  context,
-                  documents,
-                  totalSales,
-                  deliveredSales,
-                  pendingSales,
-                  cancelledSales,
-                  returnRefundAmount,
-                  totalOrders,
-                  deliveredOrders,
-                  pendingOrders,
-                  cancelledOrders,
-                  user.uid,
-                );
-              }
-
-              if (requestSnapshot.connectionState ==
-                  ConnectionState.waiting) {
+              if (walletSnapshot.connectionState ==
+                      ConnectionState.waiting &&
+                  !walletSnapshot.hasData) {
                 return const Center(
                   child:
                       CircularProgressIndicator(),
                 );
               }
 
-              final requests =
-                  requestSnapshot.data?.docs ??
+              // On an error the numbers below simply stay 0.
+              final walletDocs =
+                  walletSnapshot.data?.docs ??
                       [];
 
-              for (final request
-                  in requests) {
-                final data =
-                    request.data();
+              for (final doc
+                  in walletDocs) {
+                final data = doc.data();
 
-                final status =
-                    data['status']
-                            ?.toString()
-                            .toLowerCase() ??
-                        'pending';
+                final source =
+                    data['source']
+                            ?.toString() ??
+                        '';
 
-                if (status == 'approved' ||
-                    status == 'completed') {
-                  final amount =
-                      _number(data['price']) *
-                          _int(data['quantity']);
+                final amount =
+                    _number(data['amount']);
 
+                if (source ==
+                    'sale_earning') {
+                  netEarned += amount;
+
+                  commissionPaid += _number(
+                    data['commissionAmount'],
+                  );
+                } else if (source ==
+                        'return_deduction' &&
+                    data['subOrderCollection'] ==
+                        'seller_orders') {
                   returnRefundAmount += amount;
                 }
               }
@@ -580,6 +592,8 @@ class EarningsPage extends StatelessWidget {
                 pendingOrders,
                 cancelledOrders,
                 user.uid,
+                netEarned,
+                commissionPaid,
               );
             },
           );
@@ -607,9 +621,11 @@ class EarningsPage extends StatelessWidget {
     int pendingOrders,
     int cancelledOrders,
     String sellerId,
+    double netEarned,
+    double commissionPaid,
   ) {
     final actualEarnings =
-        deliveredSales - returnRefundAmount;
+        netEarned - returnRefundAmount;
 
     final safeEarnings =
         actualEarnings < 0
@@ -665,7 +681,7 @@ class EarningsPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  '₩${safeEarnings.toStringAsFixed(0)}',
+                  '৳${safeEarnings.toStringAsFixed(0)}',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 30,
@@ -674,9 +690,9 @@ class EarningsPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Based on delivered sales '
-                  'minus approved/completed returns '
-                  'and refunds.',
+                  'Money credited to your BuyNova Wallet '
+                  'after BuyNova commission, minus '
+                  'returns and refunds.',
                   style: TextStyle(
                     color: Colors.white
                         .withValues(alpha: 0.88),
@@ -699,7 +715,7 @@ class EarningsPage extends StatelessWidget {
                 child: _summaryCard(
                   title: 'Total Sales',
                   value:
-                      '₩${totalSales.toStringAsFixed(0)}',
+                      '৳${totalSales.toStringAsFixed(0)}',
                   icon:
                       Icons.trending_up_outlined,
                   color: Colors.blue,
@@ -710,7 +726,7 @@ class EarningsPage extends StatelessWidget {
                 child: _summaryCard(
                   title: 'Delivered',
                   value:
-                      '₩${deliveredSales.toStringAsFixed(0)}',
+                      '৳${deliveredSales.toStringAsFixed(0)}',
                   icon:
                       Icons.check_circle_outline,
                   color: Colors.green,
@@ -727,7 +743,7 @@ class EarningsPage extends StatelessWidget {
                 child: _summaryCard(
                   title: 'Pending',
                   value:
-                      '₩${pendingSales.toStringAsFixed(0)}',
+                      '৳${pendingSales.toStringAsFixed(0)}',
                   icon:
                       Icons.hourglass_empty,
                   color: Colors.orange,
@@ -738,7 +754,7 @@ class EarningsPage extends StatelessWidget {
                 child: _summaryCard(
                   title: 'Cancelled',
                   value:
-                      '₩${cancelledSales.toStringAsFixed(0)}',
+                      '৳${cancelledSales.toStringAsFixed(0)}',
                   icon:
                       Icons.cancel_outlined,
                   color: Colors.red,
@@ -750,12 +766,22 @@ class EarningsPage extends StatelessWidget {
           const SizedBox(height: 10),
 
           _summaryCard(
-            title: 'Return / Refund',
+            title: 'Return / Refund (taken back)',
             value:
-                '₩${returnRefundAmount.toStringAsFixed(0)}',
+                '৳${returnRefundAmount.toStringAsFixed(0)}',
             icon:
                 Icons.assignment_return_outlined,
             color: Colors.deepOrange,
+          ),
+
+          const SizedBox(height: 10),
+
+          _summaryCard(
+            title: 'BuyNova Commission Paid',
+            value:
+                '৳${commissionPaid.toStringAsFixed(2)}',
+            icon: Icons.percent,
+            color: Colors.purple,
           ),
 
           const SizedBox(height: 22),
@@ -899,11 +925,12 @@ class EarningsPage extends StatelessWidget {
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Earnings shown here are calculated '
-                    'from your BuyNova seller orders. '
-                    'Actual money transfer or payout '
-                    'requires a payment/payout system '
-                    'to be connected later.',
+                    'Seller Earnings is the money already added '
+                    'to your BuyNova Wallet when orders were '
+                    'delivered, after BuyNova commission. '
+                    'The sales cards below show order amounts '
+                    'before commission. You can withdraw from '
+                    'your wallet.',
                     style: TextStyle(
                       fontSize: 12,
                     ),
