@@ -2610,7 +2610,7 @@ class _HomePageState extends State<HomePage>
 
     return PopScope(
       canPop: !_searchFocused && _searchQuery.isEmpty,
-      onPopInvoked: (didPop) {
+      onPopInvokedWithResult: (didPop, result) {
         if (!didPop) _handleBack();
       },
       child: AnnotatedRegion<SystemUiOverlayStyle>(
