@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -424,6 +425,94 @@ class SellerReturnRefundPage extends StatelessWidget {
   }
 
   // =========================================================
+  // COMPLETE + REFUND (server moves the money)
+  // =========================================================
+  //
+  // "Completed" is no longer a plain status change. The Cloud Function
+  // completeReturnRefund refunds the customer's BuyNova Wallet and takes the
+  // same amount back from the seller's earning (and BuyNova's commission),
+  // all in one step, and then marks the request completed.
+
+  Future<void> _completeWithRefund(
+    BuildContext context, {
+    required String requestId,
+    required Map<String, dynamic> requestData,
+  }) async {
+    final type = _requestTypeText(
+      requestData['requestType']?.toString() ?? 'return',
+    );
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text('Complete $type & Refund'),
+          content: const Text(
+            'The customer will be refunded to the BuyNova Wallet and '
+            'the same amount will be taken back from your earnings. '
+            'This cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Refund'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      final result = await FirebaseFunctions.instanceFor(
+        region: 'asia-northeast3',
+      ).httpsCallable('completeReturnRefund').call({
+        'requestId': requestId,
+      });
+
+      final data = result.data is Map
+          ? Map<String, dynamic>.from(result.data as Map)
+          : <String, dynamic>{};
+
+      final amount = (data['refundAmount'] as num?)?.toDouble() ?? 0;
+
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            data['alreadyDone'] == true
+                ? 'This request was already refunded.'
+                : '$type completed. ৳${amount.toStringAsFixed(2)} '
+                    'was refunded to the customer.',
+          ),
+        ),
+      );
+    } on FirebaseFunctionsException catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            e.message ?? 'Could not complete the refund.',
+          ),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Could not complete the refund.\n$e'),
+        ),
+      );
+    }
+  }
+
+  // =========================================================
   // STATUS MENU
   // =========================================================
 
@@ -509,6 +598,15 @@ class SellerReturnRefundPage extends StatelessWidget {
 
                         if (status ==
                             currentStatus) {
+                          return;
+                        }
+
+                        if (status == 'completed') {
+                          await _completeWithRefund(
+                            context,
+                            requestId: requestId,
+                            requestData: requestData,
+                          );
                           return;
                         }
 
@@ -823,19 +921,34 @@ class SellerReturnRefundPage extends StatelessWidget {
                         height: 3,
                       ),
                       Text(
-                        'Price: ₩${price.toStringAsFixed(0)}',
+                        'Price: ৳${price.toStringAsFixed(0)}',
                       ),
                       const SizedBox(
                         height: 3,
                       ),
                       Text(
-                        'Total: ₩${total.toStringAsFixed(0)}',
+                        'Total: ৳${total.toStringAsFixed(0)}',
                         style:
                             const TextStyle(
                           fontWeight:
                               FontWeight.bold,
                         ),
                       ),
+                      if (data['refundAmount'] is num &&
+                          (data['refundAmount'] as num) > 0) ...[
+                        const SizedBox(
+                          height: 3,
+                        ),
+                        Text(
+                          'Refunded: ৳${(data['refundAmount'] as num).toStringAsFixed(2)}',
+                          style:
+                              const TextStyle(
+                            color: Colors.green,
+                            fontWeight:
+                                FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
