@@ -104,6 +104,29 @@ class _WalletPageState extends State<WalletPage> {
     final source = data['source']?.toString() ?? '';
     final type = data['type']?.toString() ?? '';
 
+    if (source == 'commission') {
+      return type == 'debit' ? 'Commission Reversed' : 'Commission Earned';
+    }
+
+    switch (source) {
+      case 'sale_earning':
+        return 'Sale Earning';
+      case 'supplier_payout':
+        return 'Supplier Earning';
+      case 'reseller_profit':
+        return 'Reseller Profit';
+      case 'order_payment':
+        return 'Order Payment';
+      case 'order_refund':
+        return 'Order Refund';
+      case 'return_refund':
+        return 'Return Refund';
+      case 'return_deduction':
+        return 'Return Deduction';
+      case 'membership_registration':
+        return 'Membership Fee';
+    }
+
     if (source == 'deposit' || type == 'credit') {
       return 'Add Money';
     }
@@ -118,6 +141,26 @@ class _WalletPageState extends State<WalletPage> {
   IconData _transactionIcon(Map<String, dynamic> data) {
     final source = data['source']?.toString() ?? '';
     final type = data['type']?.toString() ?? '';
+
+    if (source == 'commission') {
+      return type == 'debit' ? Icons.undo : Icons.percent;
+    }
+
+    switch (source) {
+      case 'sale_earning':
+      case 'supplier_payout':
+      case 'reseller_profit':
+        return Icons.payments;
+      case 'order_payment':
+        return Icons.shopping_bag;
+      case 'order_refund':
+      case 'return_refund':
+        return Icons.replay;
+      case 'return_deduction':
+        return Icons.undo;
+      case 'membership_registration':
+        return Icons.card_membership;
+    }
 
     if (source == 'deposit' || type == 'credit') {
       return Icons.add_circle;
@@ -831,9 +874,13 @@ class _WalletPageState extends State<WalletPage> {
                   CrossAxisAlignment.start,
               children: [
                 Text(
-                  isWithdrawal
-                      ? 'Withdrawal Details'
-                      : 'Add Money Details',
+                  source != 'deposit' &&
+                          source != 'withdrawal' &&
+                          source.isNotEmpty
+                      ? '${_transactionTitle(data)} Details'
+                      : isWithdrawal
+                          ? 'Withdrawal Details'
+                          : 'Add Money Details',
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
