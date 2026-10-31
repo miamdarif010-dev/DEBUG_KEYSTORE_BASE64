@@ -56,6 +56,9 @@ Object.assign(exports, require("./cloudinary_functions"));
 Object.assign(exports, require("./shop"));
 Object.assign(exports, require("./push"));
 Object.assign(exports, require("./emailcode"));
+// Return / refund money flow (buyer refund + payout take-back).
+// File name in the repo: functions/returns.js
+Object.assign(exports, require("./returns"));
 // ============================================================
 // CLOUDINARY SECRETS
 // ============================================================
@@ -660,6 +663,10 @@ async function refundCancelledSubOrder(orderId, collectionName, subOrderId) {
         subBase * (1 - Math.min(discount, orderSubtotal) / orderSubtotal);
     }
 
+    // The buyer service fee belongs to its own sub-order, so it is refunded
+    // together with that sub-order (the last cancel refunds whatever is left).
+    share += Number(sub.serviceFeeShare) || 0;
+
     const allSubOrders = [
       ...sellerOrdersSnap.docs,
       ...resellerOrdersSnap.docs,
@@ -854,6 +861,26 @@ function percentValue(value) {
   return Math.min(100, Math.max(0, Number(value) || 0));
 }
 
+// The BuyNova admin wallet receives every commission and the buyer service
+// fee. Its uid is looked up once from the admin e-mail and then cached.
+const ADMIN_EMAIL = "miamdarif010@gmail.com";
+
+let adminUidCache = "";
+
+async function getAdminUid() {
+  if (adminUidCache) return adminUidCache;
+
+  try {
+    const user = await admin.auth().getUserByEmail(ADMIN_EMAIL);
+
+    adminUidCache = user.uid;
+  } catch (error) {
+    console.error("Admin wallet lookup failed:", error);
+  }
+
+  return adminUidCache;
+}
+
 async function payoutDeliveredSubOrder(
   collectionName,
   subOrderId,
@@ -864,6 +891,8 @@ async function payoutDeliveredSubOrder(
   const subRef = db.collection(collectionName).doc(subOrderId);
 
   const configRef = db.collection("platformSettings").doc("monetization");
+
+  const adminUid = await getAdminUid();
 
   return db.runTransaction(async (transaction) => {
     const subSnap = await transaction.get(subRef);
@@ -952,7 +981,25 @@ async function payoutDeliveredSubOrder(
       });
     }
 
+    // The admin wallet is read here too (all reads before any write).
+    if (adminUid && !wallets.has(adminUid)) {
+      const ref = db.collection("users").doc(adminUid);
+
+      const snap = await transaction.get(ref);
+
+      const data = snap.exists ? snap.data() || {} : {};
+
+      wallets.set(adminUid, {
+        ref,
+        exists: snap.exists,
+        balance: Number(data.cashBalance ?? data.walletBalance ?? 0),
+        changed: false,
+      });
+    }
+
     const paidTo = [];
+
+    let totalCommission = 0;
 
     for (const payee of payees) {
       const wallet = wallets.get(payee.uid);
@@ -1020,6 +1067,8 @@ async function payoutDeliveredSubOrder(
       });
 
       if (commission > 0) {
+        totalCommission = roundMoney(totalCommission + commission);
+
         transaction.set(
           db
             .collection("buyNovaProfitLedger")
@@ -1045,14 +1094,97 @@ async function payoutDeliveredSubOrder(
       paidTo.push({ uid: payee.uid, role: payee.role, amount: net });
     }
 
+    // ---- BuyNova income: seller/reseller commission + buyer service fee ----
+    const serviceFee = roundMoney(sub.serviceFeeShare);
+
+    if (serviceFee > 0) {
+      transaction.set(
+        db.collection("buyNovaProfitLedger").doc(`${subOrderId}_service_fee`),
+        {
+          orderId: sub.orderId || null,
+          subOrderId: subOrderId,
+          subOrderCollection: collectionName,
+          source: "buyer_service_fee",
+          category: "service_fee",
+          amount: serviceFee,
+          profitAmount: serviceFee,
+          currency: "BDT",
+          currencySymbol: "৳",
+          createdAt: serverTimestamp(),
+        }
+      );
+    }
+
+    const adminIncome = roundMoney(totalCommission + serviceFee);
+
+    const adminWallet = adminUid ? wallets.get(adminUid) : null;
+
+    if (adminIncome > 0) {
+      if (!adminWallet || !adminWallet.exists) {
+        console.warn(
+          "Admin income not credited, admin wallet missing:",
+          collectionName,
+          subOrderId,
+          adminIncome
+        );
+      } else if (!Number.isFinite(adminWallet.balance)) {
+        throw new HttpsError("failed-precondition", "Invalid admin wallet.");
+      } else {
+        const adminBefore = adminWallet.balance;
+
+        const adminAfter = roundMoney(adminBefore + adminIncome);
+
+        adminWallet.balance = adminAfter;
+
+        adminWallet.changed = true;
+
+        adminWallet.income = roundMoney(
+          (adminWallet.income || 0) + adminIncome
+        );
+
+        transaction.set(
+          adminWallet.ref
+            .collection("walletTransactions")
+            .doc(`commission_${subOrderId}`),
+          {
+            type: "credit",
+            source: "commission",
+            status: "approved",
+            amount: adminIncome,
+            commissionAmount: totalCommission,
+            serviceFeeAmount: serviceFee,
+            currency: "BDT",
+            currencySymbol: "৳",
+            userId: adminUid,
+            orderId: sub.orderId || null,
+            subOrderId: subOrderId,
+            subOrderCollection: collectionName,
+            balanceBefore: adminBefore,
+            balanceAfter: adminAfter,
+            description: `BuyNova income for delivered order ${sub.orderId || subOrderId}`,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          }
+        );
+      }
+    }
+
     for (const wallet of wallets.values()) {
       if (!wallet.changed) continue;
 
-      transaction.update(wallet.ref, {
+      const update = {
         cashBalance: wallet.balance,
         walletBalance: wallet.balance,
         updatedAt: serverTimestamp(),
-      });
+      };
+
+      if (wallet.income > 0) {
+        update.totalCommissionEarned = admin.firestore.FieldValue.increment(
+          wallet.income
+        );
+      }
+
+      transaction.update(wallet.ref, update);
     }
 
     transaction.update(subRef, {
