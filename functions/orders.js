@@ -103,6 +103,27 @@ const getDeliveryFees = async () => {
   }
 };
 
+// Buyer service fee: BuyNova's own income from the buyer. Admin controls it in
+// platformSettings/monetization:
+//   buyerServiceFeeEnabled (bool), buyerServiceFeePercent (0-100),
+//   buyerServiceFeeMax (BDT cap per order, 0 = no cap)
+// Missing or disabled = no fee.
+const getServiceFeeConfig = async () => {
+  try {
+    const snap = await db.doc('platformSettings/monetization').get();
+    const c = snap.exists ? snap.data() || {} : {};
+    const percent = Math.min(100, Math.max(0, num(c.buyerServiceFeePercent)));
+    return {
+      enabled: c.buyerServiceFeeEnabled === true && percent > 0,
+      percent,
+      max: Math.max(0, num(c.buyerServiceFeeMax)),
+    };
+  } catch (e) {
+    console.warn('service fee config unavailable, no fee charged', e);
+    return { enabled: false, percent: 0, max: 0 };
+  }
+};
+
 // The website asks brand-new email + password accounts for a 6-digit code.
 // Here the same rule is enforced on the server, so calling the function
 // directly cannot skip it. Google / older accounts are not affected.
@@ -260,6 +281,7 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
   }
   const fees = await getDeliveryFees();
   const deliveryFee = zone === 'inside_dhaka' ? fees.inside : fees.outside;
+  const feeConfig = await getServiceFeeConfig();
 
   // ---------------- Items (prices from Firestore) ---------------------
   const lines = await Promise.all(
@@ -401,10 +423,12 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
   let discount = 0;
   let appliedCode = null;
   let grandTotal = 0;
+  let serviceFee = 0;
 
   await db.runTransaction(async (tx) => {
     discount = 0;
     appliedCode = null;
+    serviceFee = 0;
 
     // ----- Coupon (all reads before writes) -----
     const code = String(couponCode || '').trim().toUpperCase();
@@ -456,7 +480,18 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
       tx.update(couponRef, { usedCount: FieldValue.increment(1) });
     }
 
-    grandTotal = Math.max(0, round2(subtotal + deliveryFee - discount));
+    // Service fee is charged on what the buyer pays for the goods (after the
+    // coupon), never on the delivery fee, and never above the admin's cap.
+    if (feeConfig.enabled) {
+      let fee = ((subtotal - discount) * feeConfig.percent) / 100;
+      if (feeConfig.max > 0 && fee > feeConfig.max) fee = feeConfig.max;
+      serviceFee = Math.max(0, round2(fee));
+    }
+
+    grandTotal = Math.max(
+      0,
+      round2(subtotal + deliveryFee - discount + serviceFee)
+    );
 
     // ----- Main order -----
     // The buyer can read this document, so it must NOT contain the
@@ -486,6 +521,8 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
       deliveryFee,
       deliveryZone: zone,
       discount,
+      serviceFee,
+      serviceFeePercent: serviceFee > 0 ? feeConfig.percent : 0,
       total: grandTotal,
       grandTotal,
       currency: 'BDT',
@@ -538,6 +575,27 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
       allocated = round2(allocated + p.discountShare);
     });
 
+    // ----- Split the buyer service fee -----
+    // Each sub-order carries its share (in proportion to what the buyer pays
+    // for its goods), so it can be credited to BuyNova on delivery and
+    // refunded on cancel together with that sub-order.
+    const paidForGoods = round2(subtotal - discount);
+    let feeAllocated = 0;
+    parts.forEach((p, i) => {
+      let share;
+      if (i === parts.length - 1) {
+        share = round2(serviceFee - feeAllocated); // remainder
+      } else {
+        share =
+          paidForGoods > 0
+            ? round2((serviceFee * (p.base - p.discountShare)) / paidForGoods)
+            : 0;
+      }
+
+      p.serviceFeeShare = Math.max(0, share);
+      feeAllocated = round2(feeAllocated + p.serviceFeeShare);
+    });
+
     // ----- Seller orders -----
     for (const p of parts.filter((x) => x.type === 'seller')) {
       const group = p.group;
@@ -562,6 +620,7 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
         subtotal: p.base,
         discountShare: p.discountShare,
         sellerEarning: round2(p.base - p.discountShare),
+        serviceFeeShare: p.serviceFeeShare,
         currency: 'BDT',
         paymentMethod,
         paymentStatus: 'pending',
@@ -623,6 +682,7 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
         discountShare: p.discountShare,
         resellerProfit: profit,
         profit,
+        serviceFeeShare: p.serviceFeeShare,
         currency: 'BDT',
         paymentMethod,
         paymentStatus: 'pending',
@@ -633,7 +693,15 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
     }
   });
 
-  return { success: true, orderId, subtotal, deliveryFee, discount, total: grandTotal };
+  return {
+    success: true,
+    orderId,
+    subtotal,
+    deliveryFee,
+    discount,
+    serviceFee,
+    total: grandTotal,
+  };
 });
 
 // ============================================================
