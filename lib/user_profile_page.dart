@@ -9,6 +9,7 @@ import 'buyer_page.dart';
 import 'edit_profile_page.dart';
 import 'settings_page.dart';
 import 'admin_panel_page.dart';
+import 'admin_commission_page.dart';
 import 'entrepreneur_page.dart';
 import 'login_page.dart';
 import 'public_store_products.dart';
@@ -308,6 +309,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   void _openAdmin() {
     _push(const AdminPanelPage());
+  }
+
+  void _openCommission() {
+    _push(const AdminCommissionPage());
   }
 
   void _openBuyer() {
@@ -920,6 +925,12 @@ class _UserProfilePageState extends State<UserProfilePage> {
                             title: 'Admin Panel',
                             subtitle: 'Manage BuyNova',
                             onTap: _openAdmin,
+                          ),
+                          _menuItem(
+                            icon: Icons.percent,
+                            title: 'BuyNova Income',
+                            subtitle: 'Commission & service fee earnings, withdraw',
+                            onTap: _openCommission,
                           ),
                         ],
                       ),
