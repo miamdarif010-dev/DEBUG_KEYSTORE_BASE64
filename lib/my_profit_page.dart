@@ -204,7 +204,6 @@ class MyProfitPage extends StatelessWidget {
 
           final docs = snapshot.data?.docs ?? [];
 
-          double earned = 0;
           double pending = 0;
           int deliveredCount = 0;
           int pendingCount = 0;
@@ -217,7 +216,6 @@ class MyProfitPage extends StatelessWidget {
             final profit = _profitOf(data);
 
             if (status == 'delivered') {
-              earned += profit;
               deliveredCount++;
             } else if (status == 'cancelled' ||
                 status == 'returned' ||
@@ -243,6 +241,41 @@ class MyProfitPage extends StatelessWidget {
             return bDate.compareTo(aDate);
           });
 
+          // Real profit = what reached the reseller wallet (after BuyNova
+          // commission, "reseller_profit") minus what was taken back for
+          // returns ("return_deduction" on reseller orders).
+          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('users')
+                .doc(user.uid)
+                .collection('walletTransactions')
+                .where(
+                  'source',
+                  whereIn: const ['reseller_profit', 'return_deduction'],
+                )
+                .snapshots(),
+            builder: (context, walletSnapshot) {
+              double netProfit = 0;
+              double commissionPaid = 0;
+              double returned = 0;
+
+              for (final doc in walletSnapshot.data?.docs ?? []) {
+                final data = doc.data();
+                final source = data['source']?.toString() ?? '';
+                final amount = _toDouble(data['amount']);
+
+                if (source == 'reseller_profit') {
+                  netProfit += amount;
+                  commissionPaid += _toDouble(data['commissionAmount']);
+                } else if (source == 'return_deduction' &&
+                    data['subOrderCollection'] == 'reseller_orders' &&
+                    data['role'] == 'reseller') {
+                  returned += amount;
+                }
+              }
+
+              final earned = netProfit - returned;
+
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -266,9 +299,30 @@ class MyProfitPage extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 10),
+              Row(
+                children: [
+                  _summaryCard(
+                    title: 'BuyNova Commission Paid',
+                    value: _money(commissionPaid),
+                    subtitle: 'already taken from your profit',
+                    color: Colors.purple,
+                  ),
+                  const SizedBox(width: 10),
+                  _summaryCard(
+                    title: 'Returned (taken back)',
+                    value: _money(returned),
+                    subtitle: 'from returns and refunds',
+                    color: Colors.deepOrange,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
               Text(
-                'Profit is counted as earned only after an order is '
-                'delivered. Cancelled, returned and refunded orders '
+                'Earned Profit is the money already added to your '
+                'BuyNova Wallet when orders were delivered, after '
+                'BuyNova commission, minus returns and refunds. '
+                'Pending Profit and the order list show profit '
+                'before commission. Cancelled and returned orders '
                 'are not counted.',
                 style: TextStyle(
                   fontSize: 12,
@@ -298,6 +352,8 @@ class MyProfitPage extends StatelessWidget {
                   (doc) => _orderTile(doc.id, doc.data()),
                 ),
             ],
+          );
+            },
           );
         },
       ),
