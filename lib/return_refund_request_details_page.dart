@@ -399,6 +399,11 @@ class ReturnRefundRequestDetailsPage
                       ?.toDouble() ??
                   price * quantity;
 
+          final refundAmount =
+              (data['refundAmount'] as num?)
+                      ?.toDouble() ??
+                  0;
+
           final createdAt =
               data['createdAt'] as Timestamp?;
 
@@ -506,17 +511,30 @@ class ReturnRefundRequestDetailsPage
                                 ),
                                 const SizedBox(height: 6),
                                 Text(
-                                  'Price: ₩${price.toStringAsFixed(0)}',
+                                  'Price: ৳${price.toStringAsFixed(0)}',
                                 ),
                                 const SizedBox(height: 6),
                                 Text(
-                                  'Total: ₩${total.toStringAsFixed(0)}',
+                                  'Total: ৳${total.toStringAsFixed(0)}',
                                   style:
                                       const TextStyle(
                                     fontWeight:
                                         FontWeight.bold,
                                   ),
                                 ),
+                                if (refundAmount > 0) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Refunded to your wallet: '
+                                    '৳${refundAmount.toStringAsFixed(2)}',
+                                    style:
+                                        const TextStyle(
+                                      color: Colors.green,
+                                      fontWeight:
+                                          FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
