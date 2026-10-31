@@ -88,6 +88,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
   double _walletBalance = 0;
   bool _loadingWalletBalance = false;
 
+  // Buyer service fee. The admin sets it in
+  // platformSettings/monetization; the server calculates the real fee when
+  // the order is created. This copy is only used to SHOW the fee and the
+  // total here, using the same formula as the server.
+  bool _serviceFeeEnabled = false;
+  double _serviceFeePercent = 0;
+  double _serviceFeeMax = 0;
+
   Map<String, dynamic>? _selectedAddress;
   String? _selectedAddressId;
 
@@ -146,11 +154,58 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
   }
 
+  // Service fee = percent of what the buyer pays for the goods (after the
+  // coupon), capped by the admin's maximum. Never charged on delivery.
+  double get serviceFee {
+    if (!_serviceFeeEnabled || _serviceFeePercent <= 0) {
+      return 0;
+    }
+
+    final base = subtotal - _discount;
+
+    if (base <= 0) {
+      return 0;
+    }
+
+    var fee = base * _serviceFeePercent / 100;
+
+    if (_serviceFeeMax > 0 && fee > _serviceFeeMax) {
+      fee = _serviceFeeMax;
+    }
+
+    return _roundMoney(fee);
+  }
+
   double get grandTotal {
     final value =
-        subtotal + _deliveryFee - _discount;
+        subtotal + _deliveryFee - _discount + serviceFee;
 
     return value < 0 ? 0 : value;
+  }
+
+  Future<void> _loadServiceFeeConfig() async {
+    try {
+      final snapshot = await _firestore
+          .doc('platformSettings/monetization')
+          .get();
+
+      final data = snapshot.data() ?? <String, dynamic>{};
+
+      final percent = _toDouble(data['buyerServiceFeePercent']);
+
+      if (!mounted) return;
+
+      setState(() {
+        _serviceFeeEnabled =
+            data['buyerServiceFeeEnabled'] == true && percent > 0;
+        _serviceFeePercent = percent.clamp(0.0, 100.0).toDouble();
+        _serviceFeeMax = _toDouble(data['buyerServiceFeeMax']);
+      });
+    } catch (e) {
+      // If the settings cannot be read, no fee is shown here. The server
+      // still adds the real fee to the order total.
+      debugPrint('Service fee config error: $e');
+    }
   }
 
   // ============================================================
@@ -179,6 +234,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     _loadDefaultAddress();
     _loadWalletBalance();
     _loadSavedCoupon();
+    _loadServiceFeeConfig();
   }
 
   @override
@@ -1611,6 +1667,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 -_discount,
                 color:
                     Colors.green,
+              ),
+            ],
+            if (serviceFee > 0) ...[
+              const SizedBox(height: 8),
+              _summaryRow(
+                'Service Fee '
+                '(${_serviceFeePercent.toStringAsFixed(_serviceFeePercent == _serviceFeePercent.roundToDouble() ? 0 : 2)}%)',
+                serviceFee,
               ),
             ],
             const Divider(
