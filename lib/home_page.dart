@@ -45,17 +45,25 @@ class _HomePageState extends State<HomePage>
   int _selectedIndex = 0;
   int _selectedCategory = 0;
 
-  // Search bar + categories + slider hide when scrolling down,
-  // and come back when scrolling up.
-  bool _showHeader = true;
+  // The top area (logo row + search bar + categories) is one collapsing
+  // header inside the feed's CustomScrollView. While the user scrolls down
+  // it shrinks step by step: the logo row disappears, the search bar gets
+  // thinner and the categories turn into thin chips that stay pinned under
+  // the search bar. Scrolling up opens it again.
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  // While the header animates, the list size changes and fires fake scroll
-  // events. We ignore scroll events until this time, so the header does not
-  // jump back (feedback loop).
-  DateTime _headerLockUntil = DateTime.fromMillisecondsSinceEpoch(0);
+  static const double _logoRowMax = 38;
+  static const double _searchRowMax = 44;
+  static const double _searchRowMin = 38;
+  static const double _catRowMax = 70;
+  static const double _catRowMin = 34;
 
-  // Distance scrolled in the same direction (to avoid tiny-move flicker).
-  double _scrollAcc = 0;
+  // How far the header can shrink (set in _buildFeed).
+  double _headerRange = 0;
+
+  final ScrollController _catScroll = ScrollController();
+  final GlobalKey _catListKey = GlobalKey();
+  final Map<int, GlobalKey> _categoryKeys = <int, GlobalKey>{};
 
   // =========================================================
   // SHARED DATA (one stream each, used by the whole page)
@@ -99,7 +107,6 @@ class _HomePageState extends State<HomePage>
   // SEARCH
   // =========================================================
 
-  static const double _searchBarHeight = 64; // 2 + 50 + 12 (see _buildSearchBar)
   static const String _recentKey = 'recent_searches';
 
   final TextEditingController _searchController = TextEditingController();
@@ -279,9 +286,18 @@ class _HomePageState extends State<HomePage>
 
       setState(() {
         _searchFocused = _searchFocus.hasFocus;
-
-        if (_searchFocused) _showHeader = true;
       });
+
+      // Open the header fully while the user is typing.
+      if (_searchFocused &&
+          _feedController.hasClients &&
+          _feedController.offset > 0) {
+        _feedController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      }
     });
 
     _loadRecentSearches();
@@ -362,6 +378,7 @@ class _HomePageState extends State<HomePage>
 
     _feedController.removeListener(_onFeedScroll);
     _feedController.dispose();
+    _catScroll.dispose();
     _showTopButton.dispose();
 
     _favoriteIds.dispose();
@@ -538,13 +555,54 @@ class _HomePageState extends State<HomePage>
     setState(() {
       _selectedCategory = index;
       _visibleCount = _pageSize;
-      _showHeader = true;
       _recompute();
     });
 
-    if (_feedController.hasClients) {
-      _feedController.jumpTo(0);
-    }
+    _resetFeedScroll();
+    _ensureCategoryVisible(index);
+  }
+
+  /// After a category change the feed starts again from its top.
+  /// If the header was already collapsed it stays collapsed.
+  void _resetFeedScroll() {
+    if (!_feedController.hasClients) return;
+
+    final offset = _feedController.offset;
+
+    _feedController.jumpTo(offset > _headerRange ? _headerRange : 0.0);
+  }
+
+  GlobalKey _categoryKey(int index) {
+    return _categoryKeys.putIfAbsent(index, () => GlobalKey());
+  }
+
+  /// Slides the category bar so the chosen category is in the middle.
+  void _ensureCategoryVisible(int index) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_catScroll.hasClients) return;
+
+      final itemBox = _categoryKeys[index]?.currentContext?.findRenderObject();
+      final listBox = _catListKey.currentContext?.findRenderObject();
+
+      if (itemBox is! RenderBox || listBox is! RenderBox) return;
+      if (!itemBox.attached || !listBox.attached) return;
+
+      final itemLeft =
+          itemBox.localToGlobal(Offset.zero, ancestor: listBox).dx;
+
+      final target = (_catScroll.offset +
+              itemLeft +
+              itemBox.size.width / 2 -
+              listBox.size.width / 2)
+          .clamp(0.0, _catScroll.position.maxScrollExtent)
+          .toDouble();
+
+      _catScroll.animateTo(
+        target,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    });
   }
 
   IconData _categoryIcon(String category) {
@@ -976,7 +1034,6 @@ class _HomePageState extends State<HomePage>
 
       setState(() {
         _selectedIndex = 0;
-        _showHeader = true;
       });
 
       return;
@@ -1099,7 +1156,7 @@ class _HomePageState extends State<HomePage>
     return RichText(
       text: const TextSpan(
         style: TextStyle(
-          fontSize: 21,
+          fontSize: 24,
           fontWeight: FontWeight.w900,
           letterSpacing: -0.4,
         ),
@@ -1156,84 +1213,106 @@ class _HomePageState extends State<HomePage>
   // CATEGORY WIDGET
   // =========================================================
 
+  double _lerp(double a, double b, double t) => a + (b - a) * t;
+
+  /// One category. `t` is 0 when the header is open (round picture with the
+  /// name below) and 1 when it is collapsed (a thin chip with only the name).
   Widget _buildCategoryItem({
     required String category,
     required int index,
+    required double t,
   }) {
     final isSelected = _selectedCategory == index;
+
+    final circle = _lerp(44, 0, t);
 
     final imageUrl = _getCategoryImageUrl(category);
 
     final iconFallback = Icon(
       _categoryIcon(category),
       color: isSelected ? Colors.redAccent : Colors.grey.shade600,
-      size: 28,
+      size: circle * 0.55,
     );
 
+    final labelColor = isSelected
+        ? Color.lerp(Colors.white, Colors.redAccent, t)!
+        : Colors.white;
+
+    final chipColor = isSelected
+        ? Colors.white.withValues(alpha: t)
+        : Colors.white.withValues(alpha: 0.20 * t);
+
     return GestureDetector(
+      key: _categoryKey(index),
+      behavior: HitTestBehavior.opaque,
       onTap: () => _selectCategory(index),
-      child: SizedBox(
-        width: 78,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.grey.shade100,
-                border: Border.all(
-                  color: isSelected ? Colors.redAccent : Colors.grey.shade200,
-                  width: isSelected ? 2.5 : 1,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: _lerp(7, 4, t)),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              circle > 2
+                  ? Container(
+                      width: circle,
+                      height: circle,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white,
+                        border: Border.all(
+                          color: isSelected
+                              ? Colors.yellowAccent
+                              : Colors.white.withValues(alpha: 0.45),
+                          width: isSelected ? 2.5 : 1.2,
+                        ),
+                        boxShadow: isSelected
+                            ? [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.18),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: ClipOval(
+                        child: imageUrl != null && imageUrl.isNotEmpty
+                            ? _netImage(
+                                imageUrl,
+                                width: circle,
+                                height: circle,
+                                cacheWidth: 120,
+                                fallback: Center(child: iconFallback),
+                              )
+                            : Center(child: iconFallback),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+              SizedBox(height: _lerp(3, 0, t)),
+              Container(
+                constraints: const BoxConstraints(maxWidth: 86),
+                padding: EdgeInsets.symmetric(
+                  horizontal: _lerp(0, 12, t),
+                  vertical: _lerp(0, 5, t),
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: isSelected
-                        ? Colors.redAccent.withValues(alpha: 0.28)
-                        : Colors.black.withValues(alpha: 0.06),
-                    blurRadius: isSelected ? 9 : 5,
-                    spreadRadius: isSelected ? 1 : 0,
-                    offset: const Offset(0, 2),
+                decoration: BoxDecoration(
+                  color: chipColor,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  category,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: labelColor,
+                    fontSize: _lerp(10.5, 12, t),
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                   ),
-                ],
+                ),
               ),
-              child: ClipOval(
-                child: imageUrl != null && imageUrl.isNotEmpty
-                    ? _netImage(
-                        imageUrl,
-                        width: 60,
-                        height: 60,
-                        cacheWidth: 140,
-                        fallback: Center(child: iconFallback),
-                      )
-                    : Center(child: iconFallback),
-              ),
-            ),
-            const SizedBox(height: 5),
-            Text(
-              category,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: isSelected ? Colors.redAccent : Colors.black87,
-                fontSize: 11,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 3),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              height: 3,
-              width: isSelected ? 24 : 0,
-              decoration: BoxDecoration(
-                color: Colors.redAccent,
-                borderRadius: BorderRadius.circular(3),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1612,72 +1691,116 @@ class _HomePageState extends State<HomePage>
   }
 
   Widget _buildFeed(User? user) {
+    final topPad = MediaQuery.of(context).padding.top;
+
+    final headerMax = topPad + _logoRowMax + _searchRowMax + _catRowMax;
+    final headerMin = topPad + _searchRowMin + _catRowMin;
+
+    _headerRange = headerMax - headerMin;
+
+    // Everything below the header and the Admin slider.
+    final List<Widget> body;
+
     if (!_productsLoaded) {
-      return const _SkeletonGrid();
-    }
-
-    if (_productsError && _allProducts.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.wifi_off_rounded, size: 56, color: Colors.grey.shade400),
-            const SizedBox(height: 10),
-            const Text(
-              'Failed to load products',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
+      body = [const SliverToBoxAdapter(child: _SkeletonGrid())];
+    } else if (_productsError && _allProducts.isEmpty) {
+      body = [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.wifi_off_rounded,
+                  size: 56,
+                  color: Colors.grey.shade400,
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Failed to load products',
+                  style: TextStyle(fontSize: 16, color: Colors.grey),
+                ),
+                const SizedBox(height: 6),
+                TextButton(
+                  onPressed: () {
+                    setState(() => _productsLoaded = false);
+                    _subscribeProducts();
+                  },
+                  child: const Text('Try again'),
+                ),
+              ],
             ),
-            const SizedBox(height: 6),
-            TextButton(
-              onPressed: () {
-                setState(() => _productsLoaded = false);
-                _subscribeProducts();
-              },
-              child: const Text('Try again'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_visibleProducts.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            _searchQuery.isNotEmpty
-                ? 'No products found for "$_searchQuery"'
-                : _selectedCategory == 0
-                    ? 'No products found yet'
-                    : 'No products found in ${categories[_selectedCategory]}',
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 16, color: Colors.grey),
           ),
         ),
+      ];
+    } else if (_visibleProducts.isEmpty) {
+      body = [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                _searchQuery.isNotEmpty
+                    ? 'No products found for "$_searchQuery"'
+                    : _selectedCategory == 0
+                        ? 'No products found yet'
+                        : 'No products found in ${categories[_selectedCategory]}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 16, color: Colors.grey),
+              ),
+            ),
+          ),
+        ),
+      ];
+    } else {
+      final hasMore = _visibleCount < _visibleProducts.length;
+
+      final shown = hasMore
+          ? _visibleProducts.sublist(0, _visibleCount)
+          : _visibleProducts;
+
+      body = _buildFeedSlivers(
+        user: user,
+        docs: shown,
+        picks: _picks,
+        hasMore: hasMore,
       );
     }
-
-    final hasMore = _visibleCount < _visibleProducts.length;
-
-    final shown =
-        hasMore ? _visibleProducts.sublist(0, _visibleCount) : _visibleProducts;
 
     return Stack(
       children: [
         RefreshIndicator(
           color: Colors.redAccent,
+          edgeOffset: headerMax,
           onRefresh: _refresh,
-          child: NotificationListener<ScrollNotification>(
-            onNotification: _onProductScroll,
+          // Swipe left / right on the products to change the category.
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onHorizontalDragEnd: (details) {
+              final v = details.primaryVelocity ?? 0;
+
+              if (v.abs() < 350) return;
+
+              _selectCategory(_selectedCategory + (v < 0 ? 1 : -1));
+            },
             child: CustomScrollView(
               controller: _feedController,
               physics: const AlwaysScrollableScrollPhysics(),
-              slivers: _buildFeedSlivers(
-                user: user,
-                docs: shown,
-                picks: _picks,
-                hasMore: hasMore,
-              ),
+              slivers: [
+                SliverPersistentHeader(
+                  pinned: true,
+                  floating: true,
+                  delegate: _HomeHeaderDelegate(
+                    minH: headerMin,
+                    maxH: headerMax,
+                    builder: (t) => _buildCollapsingHeader(t, topPad),
+                  ),
+                ),
+                SliverToBoxAdapter(child: _buildSliderSection()),
+                ...body,
+              ],
             ),
           ),
         ),
@@ -1978,98 +2101,109 @@ class _HomePageState extends State<HomePage>
   // SEARCH BAR
   // =========================================================
 
+  /// Thin search pill with a thin border in the BuyNova logo colors.
+  /// It fills the space the parent gives it (see _buildSearchRow).
   Widget _buildSearchBar() {
     return Container(
-      decoration: const BoxDecoration(gradient: _headerGradient),
-      padding: const EdgeInsets.fromLTRB(14, 2, 14, 12),
-      child: Container(
-        height: 50,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(25),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.14),
-              blurRadius: 9,
-              offset: const Offset(0, 3),
-            ),
+      padding: const EdgeInsets.all(1.5),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(30),
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFFFFEB3B),
+            Color(0xFFFF9800),
+            Color(0xFF69F0AE),
+            Color(0xFF40C4FF),
+            Color(0xFF18FFFF),
           ],
         ),
-        child: TextField(
-          controller: _searchController,
-          focusNode: _searchFocus,
-          textInputAction: TextInputAction.search,
-          onChanged: _onSearchChanged,
-          onSubmitted: _submitSearch,
-          decoration: InputDecoration(
-            hintText: 'Search products...',
-            hintStyle: TextStyle(
-              color: Colors.grey.shade500,
-              fontSize: 14,
-              fontWeight: FontWeight.w400,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.14),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(30),
+        ),
+        child: Row(
+          children: [
+            const SizedBox(width: 10),
+            const Icon(
+              Icons.search_rounded,
+              color: Colors.redAccent,
+              size: 19,
             ),
-            prefixIcon: const Padding(
-              padding: EdgeInsets.only(left: 4, right: 2),
-              child: Icon(
-                Icons.search_rounded,
-                color: Colors.redAccent,
-                size: 24,
+            const SizedBox(width: 6),
+            Expanded(
+              child: TextField(
+                controller: _searchController,
+                focusNode: _searchFocus,
+                textInputAction: TextInputAction.search,
+                onChanged: _onSearchChanged,
+                onSubmitted: _submitSearch,
+                style: const TextStyle(fontSize: 13),
+                decoration: InputDecoration(
+                  isCollapsed: true,
+                  hintText: 'Search products...',
+                  hintStyle: TextStyle(
+                    color: Colors.grey.shade500,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w400,
+                  ),
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                ),
               ),
             ),
-            prefixIconConstraints: const BoxConstraints(
-              minWidth: 46,
-              minHeight: 50,
-            ),
-            // Only the icons rebuild while typing, not the whole page.
-            suffixIcon: ValueListenableBuilder<TextEditingValue>(
+            // Only this part rebuilds while typing, not the whole page.
+            ValueListenableBuilder<TextEditingValue>(
               valueListenable: _searchController,
               builder: (context, value, _) {
-                return Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (value.text.isNotEmpty)
-                      IconButton(
-                        tooltip: 'Clear',
-                        splashRadius: 20,
-                        icon: Icon(
-                          Icons.close_rounded,
-                          color: Colors.grey.shade600,
-                          size: 20,
-                        ),
-                        onPressed: _clearSearch,
-                      ),
-                    Container(
-                      height: 26,
-                      width: 1,
-                      color: Colors.grey.shade300,
+                if (value.text.isEmpty) return const SizedBox.shrink();
+
+                return InkWell(
+                  onTap: _clearSearch,
+                  customBorder: const CircleBorder(),
+                  child: Padding(
+                    padding: const EdgeInsets.all(3),
+                    child: Icon(
+                      Icons.close_rounded,
+                      size: 17,
+                      color: Colors.grey.shade600,
                     ),
-                    IconButton(
-                      tooltip: 'Search by camera',
-                      splashRadius: 20,
-                      icon: Icon(
-                        Icons.camera_alt_outlined,
-                        color: Colors.grey.shade700,
-                        size: 21,
-                      ),
-                      onPressed: _openCameraSearch,
-                    ),
-                    const SizedBox(width: 4),
-                  ],
+                  ),
                 );
               },
             ),
-            suffixIconConstraints: const BoxConstraints(
-              minWidth: 0,
-              minHeight: 50,
+            Container(
+              height: 14,
+              width: 1,
+              margin: const EdgeInsets.symmetric(horizontal: 2),
+              color: Colors.grey.shade300,
             ),
-            border: InputBorder.none,
-            enabledBorder: InputBorder.none,
-            focusedBorder: InputBorder.none,
-            contentPadding: const EdgeInsets.symmetric(
-              vertical: 14,
-              horizontal: 4,
+            InkWell(
+              onTap: _openCameraSearch,
+              customBorder: const CircleBorder(),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 3,
+                ),
+                child: Icon(
+                  Icons.camera_alt_outlined,
+                  size: 18,
+                  color: Colors.grey.shade700,
+                ),
+              ),
             ),
-          ),
+            const SizedBox(width: 2),
+          ],
         ),
       ),
     );
@@ -2163,22 +2297,119 @@ class _HomePageState extends State<HomePage>
   // CATEGORIES BAR
   // =========================================================
 
-  Widget _buildCategoriesBar() {
-    return Container(
-      height: 108,
-      color: Colors.white,
-      padding: const EdgeInsets.only(top: 4),
+  Widget _buildCategoriesBar(double t, double height) {
+    return SizedBox(
+      key: _catListKey,
+      width: double.infinity,
+      height: height,
       child: ListView.builder(
+        controller: _catScroll,
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 10),
+        padding: EdgeInsets.symmetric(horizontal: _lerp(8, 6, t)),
         itemCount: categories.length,
         itemBuilder: (context, index) {
           return _buildCategoryItem(
             category: categories[index],
             index: index,
+            t: t,
           );
         },
+      ),
+    );
+  }
+
+  // =========================================================
+  // COLLAPSING HEADER (logo row + search bar + categories)
+  // =========================================================
+
+  Widget _buildLogoRow(double t, double height) {
+    return SizedBox(
+      width: double.infinity,
+      height: height,
+      child: ClipRect(
+        child: Opacity(
+          opacity: (1 - t * 1.8).clamp(0.0, 1.0).toDouble(),
+          child: OverflowBox(
+            alignment: Alignment.topCenter,
+            minHeight: 0,
+            maxHeight: _logoRowMax,
+            child: SizedBox(
+              height: _logoRowMax,
+              child: Row(
+                children: [
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 44,
+                      minHeight: _logoRowMax,
+                    ),
+                    icon: const Icon(Icons.menu_rounded, color: Colors.white),
+                    onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                  ),
+                  _buildBuyNovaLogo(),
+                  const SizedBox(width: 10),
+                  _buildGetCoupon(),
+                  const Spacer(),
+                  _NotificationBell(
+                    key: ValueKey('bell_${_user?.uid}'),
+                    user: _user,
+                    onPressed: _openGlobalNotifications,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchRow(double t, double height) {
+    return SizedBox(
+      width: double.infinity,
+      height: height,
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: _lerp(14, 10, t),
+          vertical: _lerp(5, 4, t),
+        ),
+        child: _buildSearchBar(),
+      ),
+    );
+  }
+
+  /// `t` = 0 : header fully open.  `t` = 1 : header fully collapsed.
+  Widget _buildCollapsingHeader(double t, double topPad) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: _headerGradient,
+        borderRadius: BorderRadius.vertical(
+          bottom: Radius.circular(_lerp(22, 12, t)),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: EdgeInsets.only(top: topPad),
+      child: ClipRect(
+        child: OverflowBox(
+          alignment: Alignment.topCenter,
+          minHeight: 0,
+          maxHeight: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildLogoRow(t, _lerp(_logoRowMax, 0, t)),
+              _buildSearchRow(t, _lerp(_searchRowMax, _searchRowMin, t)),
+              _buildCategoriesBar(t, _lerp(_catRowMax, _catRowMin, t)),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2203,59 +2434,6 @@ class _HomePageState extends State<HomePage>
     if (_showTopButton.value != showTop) {
       _showTopButton.value = showTop;
     }
-  }
-
-  // =========================================================
-  // SCROLL: hide / show the header
-  // =========================================================
-  //
-  // Why the old version jumped back: hiding the header changes the list
-  // height, which fires extra scroll notifications, which toggled the header
-  // again (a loop). Fixes:
-  //   1. react only to real finger drags (dragDetails != null)
-  //   2. lock for 400 ms after each toggle (animation time)
-  //   3. need 40 px of movement in one direction before toggling
-
-  bool _onProductScroll(ScrollNotification n) {
-    if (n.metrics.axis != Axis.vertical) return false;
-
-    if (n is! ScrollUpdateNotification || n.dragDetails == null) {
-      return false;
-    }
-
-    // Ignore the layout-change shake while the header is animating.
-    if (DateTime.now().isBefore(_headerLockUntil)) return false;
-
-    final delta = n.scrollDelta ?? 0;
-    final pixels = n.metrics.pixels;
-
-    // Distance in the same direction; reset when direction changes.
-    if (delta != 0 && (_scrollAcc > 0) != (delta > 0)) {
-      _scrollAcc = 0;
-    }
-
-    _scrollAcc += delta;
-
-    void setHeader(bool show) {
-      if (_showHeader == show) return;
-
-      _headerLockUntil = DateTime.now().add(const Duration(milliseconds: 400));
-      _scrollAcc = 0;
-
-      setState(() => _showHeader = show);
-    }
-
-    if (pixels <= 0) {
-      setHeader(true);
-    } else if (_scrollAcc > 40 && pixels > 120) {
-      // scrolling down -> hide, more room for products
-      setHeader(false);
-    } else if (_scrollAcc < -40) {
-      // scrolling up -> show
-      setHeader(true);
-    }
-
-    return false;
   }
 
   // =========================================================
@@ -2336,144 +2514,137 @@ class _HomePageState extends State<HomePage>
 
     final isLoggedIn = user != null;
 
-    return Scaffold(
-      backgroundColor: _pageBackground,
+    final topPad = MediaQuery.of(context).padding.top;
 
-      // SIDE MENU (see home_page_drawer.dart)
-      drawer: _HomeDrawer(
-        isLoggedIn: isLoggedIn,
-        onAccount: () => _openAccount(isLoggedIn),
-        onHome: () => setState(() => _selectedIndex = 0),
-        onVideos: _openVideos,
-        onCategorySelected: (result) {
-          final i = categories.indexOf(result);
-
-          if (i != -1) _selectCategory(i);
-        },
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      // The header is red now, so the status bar icons are white.
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
       ),
+      child: Scaffold(
+        key: _scaffoldKey,
+        backgroundColor: _pageBackground,
 
-      // APP BAR
-      appBar: AppBar(
-        backgroundColor: Colors.redAccent,
-        elevation: 0,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(gradient: _headerGradient),
-        ),
-        leading: Builder(
-          builder: (context) {
-            return IconButton(
-              icon: const Icon(Icons.menu, color: Colors.white),
-              onPressed: () {
-                Scaffold.of(context).openDrawer();
-              },
-            );
+        // SIDE MENU (see home_page_drawer.dart)
+        drawer: _HomeDrawer(
+          isLoggedIn: isLoggedIn,
+          onAccount: () => _openAccount(isLoggedIn),
+          onHome: () => setState(() => _selectedIndex = 0),
+          onVideos: _openVideos,
+          onCategorySelected: (result) {
+            final i = categories.indexOf(result);
+
+            if (i != -1) _selectCategory(i);
           },
         ),
-        titleSpacing: 0,
-        title: Row(
+
+        // BODY (the header is the first part of the feed's scroll view)
+        body: Stack(
           children: [
-            _buildBuyNovaLogo(),
-            const SizedBox(width: 10),
-            _buildGetCoupon(),
+            _buildFeed(user),
+
+            // SEARCH SUGGESTIONS (covers the feed, below the search bar)
+            if (_searchFocused)
+              Positioned(
+                left: 0,
+                right: 0,
+                top: topPad + _logoRowMax + _searchRowMax,
+                bottom: 0,
+                child: _buildSearchPanel(),
+              ),
           ],
         ),
-        actions: [
-          _NotificationBell(
-            key: ValueKey('bell_${user?.uid}'),
-            user: user,
-            onPressed: _openGlobalNotifications,
-          ),
-        ],
-      ),
 
-      // BODY
-      body: Stack(
-        children: [
-          Column(
-            children: [
-              // HEADER: search + categories + slider.
-              // Slides up when scrolling down, back when scrolling up.
-              ClipRect(
-                child: AnimatedAlign(
-                  duration: const Duration(milliseconds: 250),
-                  curve: Curves.easeInOut,
-                  alignment: Alignment.topCenter,
-                  heightFactor: (_showHeader || _searchFocused) ? 1.0 : 0.0,
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _buildSearchBar(),
-                        _buildCategoriesBar(),
-                        _buildSliderSection(),
-                      ],
+        // SIGN-IN BANNER
+        bottomSheet: isLoggedIn
+            ? null
+            : Container(
+                color: Colors.orangeAccent,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Sign in for best experience!',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
-                  ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.orangeAccent,
+                      ),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const LoginPage(),
+                          ),
+                        );
+                      },
+                      child: const Text('Sign In'),
+                    ),
+                  ],
                 ),
               ),
 
-              // PRODUCTS
-              Expanded(child: _buildFeed(user)),
-            ],
-          ),
-
-          // SEARCH SUGGESTIONS (covers the feed, below the search bar)
-          if (_searchFocused)
-            Positioned(
-              left: 0,
-              right: 0,
-              top: _searchBarHeight,
-              bottom: 0,
-              child: _buildSearchPanel(),
-            ),
-        ],
+        // BOTTOM NAVIGATION
+        bottomNavigationBar: _buildNavigationBar(user),
       ),
-
-      // SIGN-IN BANNER
-      bottomSheet: isLoggedIn
-          ? null
-          : Container(
-              color: Colors.orangeAccent,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 8,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Sign in for best experience!',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.orangeAccent,
-                    ),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const LoginPage(),
-                        ),
-                      );
-                    },
-                    child: const Text('Sign In'),
-                  ),
-                ],
-              ),
-            ),
-
-      // BOTTOM NAVIGATION
-      bottomNavigationBar: _buildNavigationBar(user),
     );
   }
+}
+
+// ===================================================================
+// COLLAPSING HEADER DELEGATE
+// Gives the builder a number `t` from 0 (open) to 1 (collapsed).
+// Used with pinned + floating: it stays on top, shrinks while scrolling
+// down and opens again as soon as the user scrolls up.
+// ===================================================================
+
+class _HomeHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final double minH;
+  final double maxH;
+  final Widget Function(double t) builder;
+
+  _HomeHeaderDelegate({
+    required this.minH,
+    required this.maxH,
+    required this.builder,
+  });
+
+  @override
+  double get minExtent => minH;
+
+  @override
+  double get maxExtent => maxH;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    final range = maxH - minH;
+
+    final t = range <= 0
+        ? 1.0
+        : (shrinkOffset / range).clamp(0.0, 1.0).toDouble();
+
+    return builder(t);
+  }
+
+  @override
+  bool shouldRebuild(covariant _HomeHeaderDelegate oldDelegate) => true;
 }
 
 // ===================================================================
@@ -2701,6 +2872,7 @@ class _SkeletonGrid extends StatelessWidget {
     final radius = BorderRadius.circular(6);
 
     return GridView.builder(
+      shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
