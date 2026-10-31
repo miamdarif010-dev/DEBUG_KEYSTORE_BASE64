@@ -481,11 +481,11 @@ class _ReturnRefundRequestPageState
                           Text('Quantity: $quantity'),
                           const SizedBox(height: 4),
                           Text(
-                            'Price: ₩${price.toStringAsFixed(0)}',
+                            'Price: ৳${price.toStringAsFixed(0)}',
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Total: ₩${total.toStringAsFixed(0)}',
+                            'Total: ৳${total.toStringAsFixed(0)}',
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
                             ),
