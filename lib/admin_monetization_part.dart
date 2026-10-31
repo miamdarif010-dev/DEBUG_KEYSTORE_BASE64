@@ -33,6 +33,17 @@ extension _AdminMonetizationPart on _AdminPanelPageState {
           data['commissionPercent'],
         );
 
+        final serviceFeeEnabled =
+            data['buyerServiceFeeEnabled'] == true;
+
+        final serviceFeePercent = _toDouble(
+          data['buyerServiceFeePercent'],
+        );
+
+        final serviceFeeMax = _toDouble(
+          data['buyerServiceFeeMax'],
+        );
+
         final freeCampaignEnabled =
             data['freeCampaignEnabled'] == true;
 
@@ -173,7 +184,105 @@ extension _AdminMonetizationPart on _AdminPanelPageState {
                           'BuyNova takes this percentage from whoever sells: '
                           'the seller\'s earning on their own products, or the '
                           'reseller\'s profit on reseller products. It is taken '
-                          'when an order is delivered, using the rate set at that time.',
+                          'when an order is delivered, using the rate set at that time. '
+                          'The commission is credited to the admin wallet '
+                          '(see Profile → BuyNova Income).',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 10),
+
+            // ======================================================
+            // BUYER SERVICE FEE (charged to the buyer on every order)
+            // ======================================================
+
+            _detailCard(
+              title: 'Buyer Service Fee',
+              icon: Icons.receipt_long_outlined,
+              children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text(
+                    'Charge buyers a service fee',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  subtitle: Text(
+                    serviceFeeEnabled
+                        ? 'Added to the total of every NEW order.'
+                        : 'No service fee is charged.',
+                  ),
+                  value: serviceFeeEnabled,
+                  onChanged: (value) async {
+                    await _updateMonetizationSettings({
+                      'buyerServiceFeeEnabled': value,
+                    });
+                  },
+                ),
+                const Divider(height: 1),
+                _monetizationSettingTile(
+                  icon: Icons.percent_outlined,
+                  title: 'Service Fee Percentage',
+                  subtitle:
+                      'Taken from what the buyer pays for the goods (after coupon). Not on delivery fee.',
+                  value: '${serviceFeePercent.toStringAsFixed(2)}%',
+                  onTap: () => _editMonetizationNumber(
+                    field: 'buyerServiceFeePercent',
+                    title: 'Buyer Service Fee',
+                    currentValue: serviceFeePercent,
+                    min: 0,
+                    max: 100,
+                    isPercent: true,
+                  ),
+                ),
+                const Divider(height: 1),
+                _monetizationSettingTile(
+                  icon: Icons.vertical_align_top_outlined,
+                  title: 'Maximum Fee Per Order',
+                  subtitle: 'Cap for one order. Set 0 for no cap.',
+                  value: serviceFeeMax > 0
+                      ? '৳${serviceFeeMax.toStringAsFixed(0)}'
+                      : 'No cap',
+                  onTap: () => _editMonetizationNumber(
+                    field: 'buyerServiceFeeMax',
+                    title: 'Maximum Service Fee Per Order',
+                    currentValue: serviceFeeMax,
+                    min: 0,
+                    max: 1000000,
+                    isPercent: false,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .primary
+                        .withValues(alpha: 0.06),
+                  ),
+                  child: const Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        size: 20,
+                      ),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'The fee is shown to the buyer at checkout and added '
+                          'to the order total. BuyNova receives it in the admin '
+                          'wallet when the order is delivered. If the order is '
+                          'cancelled, the fee is refunded to the buyer.',
                         ),
                       ),
                     ],
@@ -303,6 +412,13 @@ extension _AdminMonetizationPart on _AdminPanelPageState {
                 _summaryRow(
                   'BuyNova Commission',
                   '${commission.toStringAsFixed(2)}%',
+                ),
+                _summaryRow(
+                  'Buyer Service Fee',
+                  serviceFeeEnabled
+                      ? '${serviceFeePercent.toStringAsFixed(2)}%'
+                          '${serviceFeeMax > 0 ? ' (max ৳${serviceFeeMax.toStringAsFixed(0)})' : ''}'
+                      : 'Off',
                 ),
                 _summaryRow(
                   'Free Campaign',
