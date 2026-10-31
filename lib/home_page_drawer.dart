@@ -2,8 +2,8 @@ part of 'home_page.dart';
 
 // ===================================================================
 // HOME PAGE SIDE MENU (Drawer) - separate file
-// Cart is replaced by Invite. Invite reads the numbers the Admin sets
-// in Admin Panel > Reward Settings.
+// Categories are small chips (like the Home page). Tapping one closes
+// the menu and shows that category's products on the Home page.
 // ===================================================================
 
 class _HomeDrawer extends StatelessWidget {
@@ -20,6 +20,81 @@ class _HomeDrawer extends StatelessWidget {
     required this.onVideos,
     required this.onCategorySelected,
   });
+
+  // One small category chip.
+  Widget _chip({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: Colors.redAccent),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // All categories (Admin list), shown as small chips.
+  Widget _buildCategoryChips(NavigatorState nav) {
+    return StreamBuilder<List<CategoryItem>>(
+      stream: CategoryService.stream(),
+      builder: (context, snapshot) {
+        // (name, icon) pairs. "All" is always first.
+        final entries = <MapEntry<String, IconData>>[
+          const MapEntry(CategoryService.allName, Icons.apps_rounded),
+        ];
+
+        final items = snapshot.data;
+
+        if (items != null) {
+          for (final item in items) {
+            entries.add(MapEntry(item.name, item.icon));
+          }
+        } else {
+          // Until the Admin list arrives, show the default names.
+          for (final d in CategoryService.defaults) {
+            entries.add(MapEntry(d['name']!, Icons.category));
+          }
+        }
+
+        return Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final e in entries)
+              _chip(
+                icon: e.value,
+                label: e.key,
+                onTap: () {
+                  nav.pop();
+                  onCategorySelected(e.key);
+                },
+              ),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -65,21 +140,24 @@ class _HomeDrawer extends StatelessWidget {
                 onHome();
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.category_outlined),
-              title: const Text('Categories'),
-              onTap: () async {
-                nav.pop();
 
-                final result = await nav.push<String>(
-                  MaterialPageRoute(
-                    builder: (context) => const CategoriesPage(),
-                  ),
-                );
-
-                if (result != null) onCategorySelected(result);
-              },
+            // CATEGORIES (small chips, open the list on the Home page)
+            Theme(
+              data: Theme.of(context).copyWith(
+                dividerColor: Colors.transparent,
+              ),
+              child: ExpansionTile(
+                leading: const Icon(Icons.category_outlined),
+                title: const Text('Categories'),
+                initiallyExpanded: true,
+                expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                children: [
+                  _buildCategoryChips(nav),
+                ],
+              ),
             ),
+
             if (isLoggedIn)
               ListTile(
                 leading: const Icon(Icons.add_circle_outline),
