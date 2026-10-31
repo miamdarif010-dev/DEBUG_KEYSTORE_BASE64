@@ -49,6 +49,14 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
   bool _videoReady = false;
   late List<ColorVariant> _colorVariants;
 
+  // SIMILAR PRODUCTS (same category first, then the rest)
+  static const int _relatedPageSize = 20;
+
+  final ScrollController _scrollController = ScrollController();
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _related = [];
+  bool _relatedLoading = true;
+  int _relatedVisible = _relatedPageSize;
+
   // =========================================================
   // OWN PRODUCT (nobody can buy their own product)
   // =========================================================
@@ -193,10 +201,15 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
     _prepareMedia();
     _initInlineVideo();
     _loadFavoriteStatus();
+
+    _scrollController.addListener(_onScroll);
+    _loadRelated();
   }
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     _videoController?.dispose();
     super.dispose();
   }
@@ -830,6 +843,227 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
             onCartTap: _openCart,
           );
         },
+      ),
+    );
+  }
+
+  // =========================================================
+  // SIMILAR PRODUCTS (same category first, then the rest)
+  // =========================================================
+
+  Future<void> _loadRelated() async {
+    try {
+      final snap =
+          await FirebaseFirestore.instance.collection('products').get();
+
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      final cat = category.trim().toLowerCase();
+
+      final same = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+      final others = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+
+      for (final d in snap.docs) {
+        // Not the product that is already open.
+        if (d.id == widget.productId) continue;
+
+        final data = d.data();
+
+        // Nobody sees their own product.
+        if (uid != null &&
+            (data['sellerId'] == uid ||
+                data['ownerId'] == uid ||
+                data['entrepreneurUid'] == uid ||
+                data['supplierSellerId'] == uid)) {
+          continue;
+        }
+
+        final c = data['category']?.toString().trim().toLowerCase() ?? '';
+
+        if (cat.isNotEmpty && c == cat) {
+          same.add(d);
+        } else {
+          others.add(d);
+        }
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _related = [...same, ...others];
+        _relatedLoading = false;
+      });
+    } catch (e) {
+      debugPrint('Related load failed: $e');
+
+      if (!mounted) return;
+
+      setState(() {
+        _relatedLoading = false;
+      });
+    }
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+
+    final p = _scrollController.position;
+
+    // Near the bottom -> show 20 more products.
+    if (p.pixels > p.maxScrollExtent - 600 &&
+        _relatedVisible < _related.length) {
+      setState(() {
+        _relatedVisible += _relatedPageSize;
+      });
+    }
+  }
+
+  /// Price of a product map in BDT (key: 'price' or 'originalPrice').
+  double _bdtOf(Map<String, dynamic> data, String key) {
+    final v = data[key];
+
+    final raw = v is num ? v.toDouble() : double.tryParse('${v ?? ''}') ?? 0;
+
+    if (raw <= 0) return 0;
+
+    final cur = data['currency']?.toString().trim().toUpperCase();
+
+    return (cur == 'BDT' || cur == '৳') ? raw : raw * 0.09;
+  }
+
+  Widget _buildRelatedSection() {
+    if (_relatedLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_related.isEmpty) return const SizedBox.shrink();
+
+    final shown = _related.take(_relatedVisible).toList();
+    final hasMore = _relatedVisible < _related.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 28),
+        const Text(
+          'Similar products',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: shown.length,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            childAspectRatio: 0.70,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+          ),
+          itemBuilder: (context, i) => _relatedCard(shown[i]),
+        ),
+        if (hasMore)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 18),
+            child: Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _relatedCard(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data();
+
+    final name = data['name']?.toString() ?? 'Unnamed Product';
+    final img = data['imageUrl']?.toString().trim() ?? '';
+    final p = _bdtOf(data, 'price');
+    final orig = _bdtOf(data, 'originalPrice');
+
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.07),
+            blurRadius: 9,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.white,
+        child: InkWell(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    ProductDetailsPage(productId: doc.id, product: data),
+              ),
+            );
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: SizedBox(
+                  width: double.infinity,
+                  child: img.isEmpty
+                      ? Container(
+                          color: Colors.grey.shade200,
+                          child: const Icon(Icons.image, color: Colors.grey),
+                        )
+                      : Image.network(
+                          img,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            color: Colors.grey.shade200,
+                            child: const Icon(
+                              Icons.broken_image_outlined,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(9, 8, 8, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        height: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    PriceTag(
+                      price: p,
+                      originalPrice: orig > p ? orig : null,
+                      fontSize: 15,
+                      color: Colors.redAccent,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2242,6 +2476,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
         ],
       ),
       body: SingleChildScrollView(
+        controller: _scrollController,
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 30),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2277,6 +2512,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
             ],
             _buildSellerCard(),
             _buildReviewsSection(),
+            if (widget.onAddToStore == null) _buildRelatedSection(),
           ],
         ),
       ),
