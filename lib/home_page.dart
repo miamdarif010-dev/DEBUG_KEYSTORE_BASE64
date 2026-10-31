@@ -53,8 +53,8 @@ class _HomePageState extends State<HomePage>
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   static const double _logoRowMax = 38;
-  static const double _searchRowMax = 44;
-  static const double _searchRowMin = 38;
+  static const double _searchRowMax = 38;
+  static const double _searchRowMin = 32;
   static const double _catRowMax = 70;
   static const double _catRowMin = 34;
 
@@ -288,10 +288,9 @@ class _HomePageState extends State<HomePage>
         _searchFocused = _searchFocus.hasFocus;
       });
 
-      // Open the header fully while the user is typing.
-      if (_searchFocused &&
-          _feedController.hasClients &&
-          _feedController.offset > 0) {
+      // Open the header fully while typing and again when search closes,
+      // so the header is never left cut off.
+      if (_feedController.hasClients && _feedController.offset > 0) {
         _feedController.animateTo(
           0,
           duration: const Duration(milliseconds: 200),
@@ -922,6 +921,19 @@ class _HomePageState extends State<HomePage>
     }
   }
 
+  /// Back button: first close the keyboard / suggestions, then clear the
+  /// search results, and only then leave the page.
+  void _handleBack() {
+    if (_searchFocus.hasFocus) {
+      _searchFocus.unfocus();
+      return;
+    }
+
+    if (_searchQuery.isNotEmpty) {
+      _clearSearch();
+    }
+  }
+
   void _clearSearch() {
     _searchController.clear();
     _applySearch('');
@@ -1261,9 +1273,9 @@ class _HomePageState extends State<HomePage>
                         color: Colors.white,
                         border: Border.all(
                           color: isSelected
-                              ? Colors.yellowAccent
-                              : Colors.white.withValues(alpha: 0.45),
-                          width: isSelected ? 2.5 : 1.2,
+                              ? Colors.white
+                              : Colors.white.withValues(alpha: 0.35),
+                          width: isSelected ? 3 : 1,
                         ),
                         boxShadow: isSelected
                             ? [
@@ -2372,7 +2384,7 @@ class _HomePageState extends State<HomePage>
       child: Padding(
         padding: EdgeInsets.symmetric(
           horizontal: _lerp(14, 10, t),
-          vertical: _lerp(5, 4, t),
+          vertical: _lerp(4, 3, t),
         ),
         child: _buildSearchBar(),
       ),
@@ -2508,6 +2520,86 @@ class _HomePageState extends State<HomePage>
   // BUILD
   // =========================================================
 
+  Widget _buildSignInBanner() {
+    return Container(
+      color: _pageBackground,
+      padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+      child: Container(
+        height: 46,
+        padding: const EdgeInsets.only(left: 12, right: 5),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFF5252), Color(0xFFFF8A5C)],
+          ),
+          borderRadius: BorderRadius.circular(26),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFFF5252).withValues(alpha: 0.35),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.22),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.card_giftcard_rounded,
+                color: Colors.white,
+                size: 16,
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text(
+                'Sign in for deals & rewards',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            SizedBox(
+              height: 34,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: const Color(0xFFFF5252),
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const LoginPage(),
+                    ),
+                  );
+                },
+                child: const Text('Sign In'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = _user;
@@ -2516,7 +2608,12 @@ class _HomePageState extends State<HomePage>
 
     final topPad = MediaQuery.of(context).padding.top;
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
+    return PopScope(
+      canPop: !_searchFocused && _searchQuery.isEmpty,
+      onPopInvoked: (didPop) {
+        if (!didPop) _handleBack();
+      },
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
       // The header is red now, so the status bar icons are white.
       value: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -2557,48 +2654,12 @@ class _HomePageState extends State<HomePage>
           ],
         ),
 
-        // SIGN-IN BANNER
-        bottomSheet: isLoggedIn
-            ? null
-            : Container(
-                color: Colors.orangeAccent,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Sign in for best experience!',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.orangeAccent,
-                      ),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const LoginPage(),
-                          ),
-                        );
-                      },
-                      child: const Text('Sign In'),
-                    ),
-                  ],
-                ),
-              ),
+        // SIGN-IN BANNER (slim floating card)
+        bottomSheet: isLoggedIn ? null : _buildSignInBanner(),
 
         // BOTTOM NAVIGATION
         bottomNavigationBar: _buildNavigationBar(user),
+      ),
       ),
     );
   }
