@@ -13,6 +13,28 @@ import 'login_page.dart';
 // shows the wheel and animates it to the result the server returns.
 // ===================================================================
 
+/// Readable message for a failed server call (shows the error code so a
+/// problem such as "functions not deployed" is easy to see).
+String _gameErrorText(Object e) {
+  if (e is FirebaseFunctionsException) {
+    switch (e.code) {
+      case 'not-found':
+        return 'The game is not set up on the server yet.\n'
+            '(not-found: deploy functions/games.js)';
+      case 'unauthenticated':
+        return 'Please sign in again.\n(unauthenticated)';
+      case 'unavailable':
+      case 'deadline-exceeded':
+        return 'No connection to the server. Check your internet.\n'
+            '(${e.code})';
+      default:
+        return 'Could not load.\n(${e.code}) ${e.message ?? ''}';
+    }
+  }
+
+  return 'Could not load.\n$e';
+}
+
 class SpinGamePage extends StatefulWidget {
   const SpinGamePage({super.key});
 
@@ -98,7 +120,7 @@ class _SpinGamePageState extends State<SpinGamePage>
 
       setState(() {
         _loading = false;
-        _error = 'Could not load the spin. Please try again.';
+        _error = _gameErrorText(e);
       });
     }
   }
