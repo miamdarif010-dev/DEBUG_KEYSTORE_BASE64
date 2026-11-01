@@ -20,6 +20,29 @@ import 'login_page.dart';
 
 enum _Phase { loading, ready, running, over }
 
+/// Readable message for a failed server call (shows the error code so a
+/// problem such as "functions not deployed" is easy to see).
+String _gameErrorText(Object e) {
+  if (e is FirebaseFunctionsException) {
+    switch (e.code) {
+      case 'not-found':
+        return 'The game is not set up on the server yet.\n'
+            '(not-found: deploy functions/games.js)';
+      case 'unauthenticated':
+        return 'Please sign in again.\n(unauthenticated)';
+      case 'unavailable':
+      case 'deadline-exceeded':
+        return 'No connection to the server. Check your internet.\n'
+            '(${e.code})';
+      default:
+        return 'Could not load.\n(${e.code}) ${e.message ?? ''}';
+    }
+  }
+
+  return 'Could not load.\n$e';
+}
+
+
 class _Car {
   final int lane;
   double y;
@@ -105,8 +128,8 @@ class _BikeGamePageState extends State<BikeGamePage>
 
   double _laneCenter(int lane) => _roadLeft + _laneW * (lane + 0.5);
 
-  double get _bikeW => _laneW * 0.36;
-  double get _bikeH => _laneW * 0.82;
+  double get _bikeW => _laneW * 0.46;
+  double get _bikeH => _laneW * 0.95;
   double get _bikeTop => _size.height - _bikeH - _size.height * 0.10;
 
   double get _carW => _laneW * 0.58;
@@ -170,7 +193,7 @@ class _BikeGamePageState extends State<BikeGamePage>
       if (!mounted) return;
 
       setState(() {
-        _error = 'Could not load the game. Check your internet and try again.';
+        _error = _gameErrorText(e);
         _phase = _Phase.ready;
       });
     }
@@ -455,6 +478,12 @@ class _BikeGamePageState extends State<BikeGamePage>
         builder: (context, constraints) {
           _size = Size(constraints.maxWidth, constraints.maxHeight);
 
+          // Before the run (and while loading) the bike waits in the
+          // middle lane. After a crash it stays where it crashed.
+          if (_phase != _Phase.running && _phase != _Phase.over) {
+            _bikeX = _laneCenter(1);
+          }
+
           return GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTapDown: (details) {
@@ -481,6 +510,11 @@ class _BikeGamePageState extends State<BikeGamePage>
                     carW: _carW,
                     carH: _carH,
                     coinR: _coinR,
+                    lean: _phase == _Phase.running
+                        ? ((_laneCenter(_lane) - _bikeX) / _laneW * 0.45)
+                            .clamp(-0.35, 0.35)
+                            .toDouble()
+                        : 0.0,
                     cars: _cars,
                     coins: _coins,
                     laneCenter: _laneCenter,
@@ -764,6 +798,7 @@ class _GamePainter extends CustomPainter {
   final double carW;
   final double carH;
   final double coinR;
+  final double lean;
   final List<_Car> cars;
   final List<_Coin> coins;
   final double Function(int lane) laneCenter;
@@ -780,6 +815,7 @@ class _GamePainter extends CustomPainter {
     required this.carW,
     required this.carH,
     required this.coinR,
+    required this.lean,
     required this.cars,
     required this.coins,
     required this.laneCenter,
@@ -892,34 +928,48 @@ class _GamePainter extends CustomPainter {
     );
   }
 
+  // A sports bike with a rider sitting on it (seen from above).
+  // The front of the bike points up. While changing lane the bike leans.
   void _drawBike(Canvas canvas) {
+    final w = bikeW;
+    final h = bikeH;
+    final cx = bikeX;
+
+    double y(double f) => bikeTop + h * f;
+
     final paint = Paint();
 
-    final cx = bikeX;
-    final top = bikeTop;
+    final line = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
 
-    // Shadow
+    // Shadow on the road (does not lean)
     paint.color = Colors.black26;
     canvas.drawOval(
       Rect.fromCenter(
-        center: Offset(cx + 3, top + bikeH / 2 + 4),
-        width: bikeW * 0.9,
-        height: bikeH * 1.05,
+        center: Offset(cx + 3, y(0.5) + 4),
+        width: w * 0.95,
+        height: h * 1.05,
       ),
       paint,
     );
 
-    // Wheels (front at the top, rear at the bottom)
+    canvas.save();
+    canvas.translate(cx, y(0.5));
+    canvas.rotate(lean);
+    canvas.translate(-cx, -y(0.5));
+
+    // ---- Wheels (front at the top, rear at the bottom) ----
     paint.color = const Color(0xFF212121);
 
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromCenter(
-          center: Offset(cx, top + bikeH * 0.14),
-          width: bikeW * 0.34,
-          height: bikeH * 0.28,
+          center: Offset(cx, y(0.88)),
+          width: w * 0.34,
+          height: h * 0.26,
         ),
-        Radius.circular(bikeW * 0.12),
+        Radius.circular(w * 0.12),
       ),
       paint,
     );
@@ -927,58 +977,199 @@ class _GamePainter extends CustomPainter {
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromCenter(
-          center: Offset(cx, top + bikeH * 0.86),
-          width: bikeW * 0.4,
-          height: bikeH * 0.28,
+          center: Offset(cx, y(0.12)),
+          width: w * 0.26,
+          height: h * 0.24,
         ),
-        Radius.circular(bikeW * 0.12),
+        Radius.circular(w * 0.1),
       ),
       paint,
     );
 
-    // Body
-    paint.color = const Color(0xFFE53935);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromCenter(
-          center: Offset(cx, top + bikeH * 0.5),
-          width: bikeW * 0.5,
-          height: bikeH * 0.62,
-        ),
-        Radius.circular(bikeW * 0.2),
+    // Rims
+    paint.color = const Color(0xFF616161);
+    canvas.drawRect(
+      Rect.fromCenter(
+        center: Offset(cx, y(0.88)),
+        width: w * 0.1,
+        height: h * 0.2,
+      ),
+      paint,
+    );
+    canvas.drawRect(
+      Rect.fromCenter(
+        center: Offset(cx, y(0.12)),
+        width: w * 0.08,
+        height: h * 0.18,
       ),
       paint,
     );
 
-    // Handlebar
-    paint
+    // ---- Front fork ----
+    line
       ..color = const Color(0xFFB0BEC5)
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round;
+      ..strokeWidth = w * 0.05;
 
     canvas.drawLine(
-      Offset(cx - bikeW * 0.5, top + bikeH * 0.28),
-      Offset(cx + bikeW * 0.5, top + bikeH * 0.28),
+      Offset(cx - w * 0.07, y(0.14)),
+      Offset(cx - w * 0.1, y(0.3)),
+      line,
+    );
+    canvas.drawLine(
+      Offset(cx + w * 0.07, y(0.14)),
+      Offset(cx + w * 0.1, y(0.3)),
+      line,
+    );
+
+    // ---- Bike body (nose, tank, seat, tail) ----
+    final body = Path()
+      ..moveTo(cx, y(0.05))
+      ..quadraticBezierTo(cx + w * 0.26, y(0.12), cx + w * 0.27, y(0.34))
+      ..quadraticBezierTo(cx + w * 0.34, y(0.55), cx + w * 0.2, y(0.78))
+      ..quadraticBezierTo(cx + w * 0.12, y(0.95), cx, y(0.96))
+      ..quadraticBezierTo(cx - w * 0.12, y(0.95), cx - w * 0.2, y(0.78))
+      ..quadraticBezierTo(cx - w * 0.34, y(0.55), cx - w * 0.27, y(0.34))
+      ..quadraticBezierTo(cx - w * 0.26, y(0.12), cx, y(0.05))
+      ..close();
+
+    paint.color = const Color(0xFFE53935);
+    canvas.drawPath(body, paint);
+
+    // White racing stripe
+    paint.color = Colors.white.withValues(alpha: 0.85);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: Offset(cx, y(0.5)),
+          width: w * 0.07,
+          height: h * 0.7,
+        ),
+        Radius.circular(w * 0.03),
+      ),
       paint,
     );
 
-    // Rider: shoulders + helmet
+    // Head light and tail light
+    paint.color = const Color(0xFFFFF59D);
+    canvas.drawCircle(Offset(cx, y(0.07)), w * 0.08, paint);
+
+    paint.color = const Color(0xFFFF1744);
+    canvas.drawRect(
+      Rect.fromCenter(
+        center: Offset(cx, y(0.95)),
+        width: w * 0.16,
+        height: h * 0.03,
+      ),
+      paint,
+    );
+
+    // ---- Rider: legs and shoes ----
+    paint.color = const Color(0xFF283593);
+
+    for (final s in const [-1.0, 1.0]) {
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(cx + s * w * 0.33, y(0.62)),
+          width: w * 0.22,
+          height: h * 0.3,
+        ),
+        paint,
+      );
+    }
+
+    paint.color = const Color(0xFF212121);
+
+    for (final s in const [-1.0, 1.0]) {
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(cx + s * w * 0.36, y(0.78)),
+          width: w * 0.16,
+          height: h * 0.12,
+        ),
+        paint,
+      );
+    }
+
+    // ---- Handlebar and mirrors ----
+    line
+      ..color = const Color(0xFF90A4AE)
+      ..strokeWidth = w * 0.06;
+
+    canvas.drawLine(
+      Offset(cx - w * 0.55, y(0.3)),
+      Offset(cx + w * 0.55, y(0.3)),
+      line,
+    );
+
+    paint.color = const Color(0xFF455A64);
+
+    for (final s in const [-1.0, 1.0]) {
+      canvas.drawCircle(Offset(cx + s * w * 0.5, y(0.24)), w * 0.06, paint);
+    }
+
+    // ---- Rider: arms holding the handlebar ----
+    line
+      ..color = const Color(0xFF1565C0)
+      ..strokeWidth = w * 0.16;
+
+    for (final s in const [-1.0, 1.0]) {
+      canvas.drawLine(
+        Offset(cx + s * w * 0.28, y(0.46)),
+        Offset(cx + s * w * 0.5, y(0.3)),
+        line,
+      );
+    }
+
+    // Gloves
+    paint.color = const Color(0xFF212121);
+
+    for (final s in const [-1.0, 1.0]) {
+      canvas.drawCircle(Offset(cx + s * w * 0.52, y(0.3)), w * 0.08, paint);
+    }
+
+    // ---- Rider: body (leaning forward) ----
     paint.color = const Color(0xFF1E88E5);
     canvas.drawOval(
       Rect.fromCenter(
-        center: Offset(cx, top + bikeH * 0.5),
-        width: bikeW * 0.78,
-        height: bikeH * 0.3,
+        center: Offset(cx, y(0.54)),
+        width: w * 0.7,
+        height: h * 0.34,
       ),
       paint,
     );
 
-    paint.color = const Color(0xFFFFA000);
-    canvas.drawCircle(Offset(cx, top + bikeH * 0.6), bikeW * 0.2, paint);
+    // Jacket stripe
+    paint.color = Colors.white.withValues(alpha: 0.5);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: Offset(cx, y(0.56)),
+          width: w * 0.06,
+          height: h * 0.26,
+        ),
+        Radius.circular(w * 0.03),
+      ),
+      paint,
+    );
 
-    // Head light
-    paint.color = const Color(0xFFFFF59D);
-    canvas.drawCircle(Offset(cx, top + bikeH * 0.02), bikeW * 0.08, paint);
+    // ---- Rider: helmet with visor ----
+    paint.color = const Color(0xFFFFA000);
+    canvas.drawCircle(Offset(cx, y(0.46)), w * 0.21, paint);
+
+    paint.color = const Color(0xFF37474F);
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(cx, y(0.4)),
+        width: w * 0.26,
+        height: h * 0.06,
+      ),
+      paint,
+    );
+
+    paint.color = Colors.white.withValues(alpha: 0.6);
+    canvas.drawCircle(Offset(cx - w * 0.07, y(0.45)), w * 0.04, paint);
+
+    canvas.restore();
   }
 
   @override
