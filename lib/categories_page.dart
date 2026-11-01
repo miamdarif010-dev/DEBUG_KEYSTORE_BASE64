@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'category_service.dart';
+import 'product_details_page.dart';
 
 class CategoriesPage extends StatefulWidget {
   const CategoriesPage({super.key});
@@ -79,14 +80,17 @@ class _CategoriesPageState extends State<CategoriesPage> {
     return o > 0 && o > p;
   }
 
-  /// Tapping a product goes back to Home and shows the products
-  /// of the same category (same kind of product).
+  /// Tapping a product opens its details page. That page also shows
+  /// similar products (same category first) at the bottom.
   void _openProduct(String id, Map<String, dynamic> data) {
-    final category = data['category']?.toString().trim() ?? '';
-
-    Navigator.pop(
+    Navigator.push(
       context,
-      category.isNotEmpty ? category : CategoryService.allName,
+      MaterialPageRoute(
+        builder: (context) => ProductDetailsPage(
+          productId: id,
+          product: data,
+        ),
+      ),
     );
   }
 
@@ -152,13 +156,13 @@ class _CategoriesPageState extends State<CategoriesPage> {
               ],
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
             name,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12.5, height: 1.2),
+            style: const TextStyle(fontSize: 11, height: 1.15),
           ),
         ],
       ),
@@ -231,13 +235,13 @@ class _CategoriesPageState extends State<CategoriesPage> {
                       ),
                     )
                   : GridView.builder(
-                      padding: const EdgeInsets.fromLTRB(10, 8, 10, 20),
+                      padding: const EdgeInsets.fromLTRB(8, 8, 8, 20),
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        mainAxisSpacing: 14,
-                        crossAxisSpacing: 8,
-                        childAspectRatio: 0.74,
+                        crossAxisCount: 4,
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 6,
+                        childAspectRatio: 0.66,
                       ),
                       itemCount: docs.length,
                       itemBuilder: (context, i) {
