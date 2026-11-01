@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
@@ -27,6 +28,8 @@ import 'product_share.dart';
 import 'native_ad_card.dart';
 import 'invite_page.dart';
 import 'app_shimmer.dart';
+import 'earn_page.dart';
+import 'spin_game_page.dart';
 
 part 'home_page_image_search.dart';
 part 'home_page_drawer.dart';
@@ -302,13 +305,17 @@ class _HomePageState extends State<HomePage>
     _loadRecentSearches();
 
     // New email + password accounts must enter the email code first.
+    // After that, the Daily Lucky Spin may open (once a day).
     _checkEmailCode();
   }
 
   Future<void> _checkEmailCode() async {
     final current = FirebaseAuth.instance.currentUser;
 
-    if (current == null || emailCodeOkUid == current.uid) {
+    if (current == null) return;
+
+    if (emailCodeOkUid == current.uid) {
+      _maybeShowDailySpin();
       return;
     }
 
@@ -323,6 +330,44 @@ class _HomePageState extends State<HomePage>
       );
     } else {
       emailCodeOkUid = current.uid;
+      _maybeShowDailySpin();
+    }
+  }
+
+  /// Opens the Daily Lucky Spin once a day, only if a spin is left.
+  Future<void> _maybeShowDailySpin() async {
+    final current = FirebaseAuth.instance.currentUser;
+
+    if (current == null) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      final today = DateTime.now().toIso8601String().substring(0, 10);
+      final key = 'daily_spin_shown_${current.uid}';
+
+      if (prefs.getString(key) == today) return;
+
+      final res = await FirebaseFunctions.instanceFor(
+        region: 'asia-northeast3',
+      ).httpsCallable('getSpinStatus').call();
+
+      final d = Map<String, dynamic>.from(res.data as Map);
+
+      await prefs.setString(key, today);
+
+      final left = (d['playsLeft'] as num?)?.toInt() ?? 0;
+
+      if (d['enabled'] == false || left <= 0) return;
+
+      if (!mounted) return;
+
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const SpinGamePage()),
+      );
+    } catch (_) {
+      // The spin is optional. Never block the Home page.
     }
   }
 
@@ -1188,34 +1233,76 @@ class _HomePageState extends State<HomePage>
     );
   }
 
+  /// White button with red text (the header behind it is red).
   Widget _buildGetCoupon() {
     return FadeTransition(
       opacity: _couponOpacity,
       child: GestureDetector(
         onTap: _openCoupon,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                Colors.yellowAccent.withValues(alpha: 0.16),
-                Colors.white.withValues(alpha: 0.10),
-              ],
-            ),
+            color: Colors.white,
             borderRadius: BorderRadius.circular(9),
-            border: Border.all(
-              color: Colors.yellowAccent.withValues(alpha: 0.75),
-              width: 1,
-            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.18),
+                blurRadius: 4,
+                offset: const Offset(0, 1),
+              ),
+            ],
           ),
           child: const Text(
             'Get Coupon',
             style: TextStyle(
-              color: Colors.yellowAccent,
+              color: Colors.red,
               fontSize: 11,
               fontWeight: FontWeight.bold,
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  /// "Play & Earn" opens the games page (see earn_page.dart).
+  Widget _buildEarningButton() {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const EarnPage()),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFFB300), Color(0xFFFF8F00)],
+          ),
+          borderRadius: BorderRadius.circular(9),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.18),
+              blurRadius: 4,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.monetization_on, color: Colors.white, size: 14),
+            SizedBox(width: 3),
+            Text(
+              'Play & Earn',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -2348,27 +2435,59 @@ class _HomePageState extends State<HomePage>
             maxHeight: _logoRowMax,
             child: SizedBox(
               height: _logoRowMax,
-              child: Row(
-                children: [
-                  IconButton(
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 44,
-                      minHeight: _logoRowMax,
-                    ),
-                    icon: const Icon(Icons.menu_rounded, color: Colors.white),
-                    onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-                  ),
-                  _buildBuyNovaLogo(),
-                  const SizedBox(width: 10),
-                  _buildGetCoupon(),
-                  const Spacer(),
-                  _NotificationBell(
-                    key: ValueKey('bell_${_user?.uid}'),
-                    user: _user,
-                    onPressed: _openGlobalNotifications,
-                  ),
-                ],
+              child: LayoutBuilder(
+                builder: (context, box) {
+                  // The small ad needs room. On narrow phones it is hidden
+                  // and the two buttons shrink a little instead of
+                  // overflowing.
+                  final showAd = box.maxWidth >= 430;
+
+                  return Row(
+                    children: [
+                      IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 44,
+                          minHeight: _logoRowMax,
+                        ),
+                        icon: const Icon(
+                          Icons.menu_rounded,
+                          color: Colors.white,
+                        ),
+                        onPressed: () =>
+                            _scaffoldKey.currentState?.openDrawer(),
+                      ),
+                      _buildBuyNovaLogo(),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _buildGetCoupon(),
+                                const SizedBox(width: 6),
+                                _buildEarningButton(),
+                                if (showAd) ...[
+                                  const SizedBox(width: 8),
+                                  const _HeaderAd(),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      _NotificationBell(
+                        key: ValueKey('bell_${_user?.uid}'),
+                        user: _user,
+                        onPressed: _openGlobalNotifications,
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
           ),
@@ -2517,88 +2636,84 @@ class _HomePageState extends State<HomePage>
   }
 
   // =========================================================
-  // BUILD
+  // SIGN-IN BANNER (dark bar, unique logo-color border on top)
   // =========================================================
 
   Widget _buildSignInBanner() {
-    return Container(
-      color: _pageBackground,
-      padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
-      child: Container(
-        height: 46,
-        padding: const EdgeInsets.only(left: 12, right: 5),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFFF5252), Color(0xFFFF8A5C)],
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Unique top border in the BuyNova logo colors
+        Container(
+          height: 3,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Color(0xFFFFEB3B),
+                Color(0xFFFF9800),
+                Color(0xFF69F0AE),
+                Color(0xFF40C4FF),
+                Color(0xFF18FFFF),
+              ],
+            ),
           ),
-          borderRadius: BorderRadius.circular(26),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFFF5252).withValues(alpha: 0.35),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
-            ),
-          ],
         ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(5),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.22),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.card_giftcard_rounded,
-                color: Colors.white,
-                size: 16,
-              ),
-            ),
-            const SizedBox(width: 10),
-            const Expanded(
-              child: Text(
-                'Sign in for deals & rewards',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            SizedBox(
-              height: 34,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: const Color(0xFFFF5252),
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 18),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  textStyle: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
+        Container(
+          width: double.infinity,
+          color: Colors.black.withValues(alpha: 0.82),
+          padding: const EdgeInsets.fromLTRB(14, 8, 12, 8),
+          child: Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Sign in for deals & rewards',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const LoginPage(),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                height: 36,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF5A1F),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                  );
-                },
-                child: const Text('Sign In'),
+                    textStyle: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const LoginPage(),
+                      ),
+                    );
+                  },
+                  child: const Text('SIGN IN NOW'),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
+      ],
     );
   }
+
+  // =========================================================
+  // BUILD
+  // =========================================================
 
   @override
   Widget build(BuildContext context) {
@@ -2654,7 +2769,7 @@ class _HomePageState extends State<HomePage>
           ],
         ),
 
-        // SIGN-IN BANNER (slim floating card)
+        // SIGN-IN BANNER
         bottomSheet: isLoggedIn ? null : _buildSignInBanner(),
 
         // BOTTOM NAVIGATION
@@ -2706,6 +2821,97 @@ class _HomeHeaderDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(covariant _HomeHeaderDelegate oldDelegate) => true;
+}
+
+// ===================================================================
+// SMALL AD IN THE HEADER (right of "Get Coupon" / "Play & Earn")
+// Admin can control it from Firestore: settings/headerAd
+//   enabled: true/false, text: "Free Delivery", imageUrl: "https://..."
+// Without that document a default promo is shown.
+// ===================================================================
+
+class _HeaderAd extends StatefulWidget {
+  const _HeaderAd();
+
+  @override
+  State<_HeaderAd> createState() => _HeaderAdState();
+}
+
+class _HeaderAdState extends State<_HeaderAd> {
+  final Stream<DocumentSnapshot<Map<String, dynamic>>> _stream =
+      FirebaseFirestore.instance
+          .collection('settings')
+          .doc('headerAd')
+          .snapshots();
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: _stream,
+      builder: (context, snapshot) {
+        final d = snapshot.data?.data();
+
+        if (d != null && d['enabled'] == false) {
+          return const SizedBox.shrink();
+        }
+
+        final text = d?['text']?.toString().trim() ?? '';
+        final imageUrl = d?['imageUrl']?.toString().trim() ?? '';
+
+        return Container(
+          height: 30,
+          constraints: const BoxConstraints(maxWidth: 110),
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.95),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.yellowAccent, width: 1),
+          ),
+          child: imageUrl.isNotEmpty
+              ? Image.network(
+                  imageUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const SizedBox.shrink(),
+                )
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      alignment: Alignment.center,
+                      padding: const EdgeInsets.symmetric(horizontal: 5),
+                      color: Colors.orange,
+                      child: const Text(
+                        'AD',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Flexible(
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: Text(
+                          text.isNotEmpty ? text : 'Free Delivery',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.red,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+        );
+      },
+    );
+  }
 }
 
 // ===================================================================
