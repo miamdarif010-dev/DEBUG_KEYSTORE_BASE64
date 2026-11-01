@@ -3,7 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'category_service.dart';
-import 'product_details_page.dart';
 
 class CategoriesPage extends StatefulWidget {
   const CategoriesPage({super.key});
@@ -80,20 +79,19 @@ class _CategoriesPageState extends State<CategoriesPage> {
     return o > 0 && o > p;
   }
 
+  /// Tapping a product goes back to Home and shows the products
+  /// of the same category (same kind of product).
   void _openProduct(String id, Map<String, dynamic> data) {
-    Navigator.push(
+    final category = data['category']?.toString().trim() ?? '';
+
+    Navigator.pop(
       context,
-      MaterialPageRoute(
-        builder: (context) => ProductDetailsPage(
-          productId: id,
-          product: data,
-        ),
-      ),
+      category.isNotEmpty ? category : CategoryService.allName,
     );
   }
 
   // ---------------------------------------------------------
-  // ROUND ITEM (picture + name), like the screenshot
+  // ROUND ITEM (picture + name)
   // ---------------------------------------------------------
 
   Widget _roundItem(String id, Map<String, dynamic> data) {
