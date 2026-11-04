@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -19,6 +21,8 @@ class AddSellerVideoPage extends StatefulWidget {
 
 class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
   static const int _maxVideoBytes = 60 * 1024 * 1024;
+  static const int _maxAudioBytes = 10 * 1024 * 1024;
+  static const int _maxPhotos = 5;
   static const Duration _maxDuration = Duration(seconds: 90);
   static const Duration _uploadTimeout = Duration(minutes: 3);
   static const String _region = 'asia-northeast3';
@@ -26,13 +30,26 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
   final ImagePicker _picker = ImagePicker();
   final TextEditingController _captionController = TextEditingController();
 
+  // VIDEO (or photos, never both)
   XFile? _selectedVideo;
   VideoPlayerController? _videoController;
 
+  // PHOTOS
+  List<XFile> _photos = [];
+  final PageController _photoPageController = PageController();
+  int _currentPhotoIndex = 0;
+
+  // MUSIC (optional, works with video and photos)
+  File? _audioFile;
+  String? _audioName;
+  final AudioPlayer _previewPlayer = AudioPlayer();
+  bool _previewPlaying = false;
+
   bool _isUploading = false;
   double _uploadProgress = 0.0;
+  bool _isMuted = false;
 
-  List<Map<String, dynamic>> _myProducts = [];
+  List> _myProducts = [];
   bool _loadingProducts = false;
 
   String? _selectedProductId;
@@ -40,16 +57,24 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
   double? _selectedProductPrice;
   String? _selectedProductImageUrl;
 
+  bool get _hasMedia => _selectedVideo != null || _photos.isNotEmpty;
+
   @override
   void initState() {
     super.initState();
     _loadMyProducts();
+
+    _previewPlayer.onPlayerComplete.listen((_) {
+      if (mounted) setState(() => _previewPlaying = false);
+    });
   }
 
   @override
   void dispose() {
     _captionController.dispose();
     _videoController?.dispose();
+    _photoPageController.dispose();
+    _previewPlayer.dispose();
     super.dispose();
   }
 
@@ -113,8 +138,7 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
   }
 
   // ============================================================
-  // PICK VIDEO  (fixed: old controller is only disposed after the
-  // new one is ready, and a failed initialize() no longer leaks)
+  // PICK VIDEO
   // ============================================================
 
   Future<void> _pickVideo() async {
@@ -151,6 +175,7 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
       }
 
       controller.setLooping(true);
+      await controller.setVolume(_audioFile != null || _isMuted ? 0 : 1);
       await controller.play();
 
       if (!mounted) {
@@ -163,9 +188,9 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
       setState(() {
         _selectedVideo = video;
         _videoController = controller;
+        _photos = []; // video and photos never together
       });
 
-      // Dispose the old one AFTER the UI no longer uses it.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         old?.dispose();
       });
@@ -190,10 +215,129 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
   }
 
   // ============================================================
-  // CLOUDINARY
+  // PICK PHOTOS
   // ============================================================
 
-  Future<String> _uploadVideoToCloudinary(File file) async {
+  Future<void> _pickPhotos() async {
+    if (_isUploading) return;
+
+    try {
+      final imgs = await _picker.pickMultiImage(limit: _maxPhotos);
+
+      if (imgs.isEmpty) return;
+
+      for (final img in imgs) {
+        if (await File(img.path).length() > 10 * 1024 * 1024) {
+          _snack('Each photo must be 10 MB or less.');
+          return;
+        }
+      }
+
+      if (!mounted) return;
+
+      final old = _videoController;
+
+      setState(() {
+        _photos = imgs.take(_maxPhotos).toList();
+        _selectedVideo = null; // photos and video never together
+        _videoController = null;
+        _currentPhotoIndex = 0;
+      });
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        old?.dispose();
+      });
+    } catch (e) {
+      _snack('Could not select photos: $e');
+    }
+  }
+
+  void _removePhotos() {
+    if (_isUploading) return;
+    setState(() => _photos = []);
+  }
+
+  // ============================================================
+  // MUSIC
+  // ============================================================
+
+  Future<void> _pickMusic() async {
+    if (_isUploading) return;
+
+    try {
+      final res = await FilePicker.platform.pickFiles(type: FileType.audio);
+      final picked = res?.files.single;
+      final path = picked?.path;
+
+      if (picked == null || path == null) return;
+
+      final f = File(path);
+
+      if (await f.length() > _maxAudioBytes) {
+        _snack('Music must be 10 MB or less.');
+        return;
+      }
+
+      await _previewPlayer.stop();
+
+      if (!mounted) return;
+
+      setState(() {
+        _audioFile = f;
+        _audioName = picked.name;
+        _previewPlaying = false;
+      });
+
+      // Video's own sound off while background music is selected.
+      _videoController?.setVolume(0);
+    } catch (e) {
+      _snack('Could not select music: $e');
+    }
+  }
+
+  Future<void> _removeMusic() async {
+    if (_isUploading) return;
+
+    await _previewPlayer.stop();
+
+    if (!mounted) return;
+
+    setState(() {
+      _audioFile = null;
+      _audioName = null;
+      _previewPlaying = false;
+    });
+
+    if (!_isMuted) {
+      _videoController?.setVolume(1);
+    }
+  }
+
+  Future<void> _togglePreviewMusic() async {
+    final f = _audioFile;
+    if (f == null) return;
+
+    try {
+      if (_previewPlaying) {
+        await _previewPlayer.pause();
+        if (mounted) setState(() => _previewPlaying = false);
+      } else {
+        await _previewPlayer.play(DeviceFileSource(f.path));
+        if (mounted) setState(() => _previewPlaying = true);
+      }
+    } catch (e) {
+      _snack('Could not play music: $e');
+    }
+  }
+
+  // ============================================================
+  // CLOUDINARY UPLOAD
+  // ============================================================
+
+  Future<String> _uploadToCloudinary(
+    File file, {
+    String resource = 'video',
+  }) async {
     try {
       final sigResult = await FirebaseFunctions.instanceFor(region: _region)
           .httpsCallable('getVideoUploadSignature')
@@ -201,10 +345,8 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
 
       final s = Map<String, dynamic>.from(sigResult.data as Map);
 
-      if (mounted) setState(() => _uploadProgress = 0.2);
-
       final uri = Uri.parse(
-        'https://api.cloudinary.com/v1_1/${s['cloudName']}/video/upload',
+        'https://api.cloudinary.com/v1_1/${s['cloudName']}/$resource/upload',
       );
 
       final request = http.MultipartRequest('POST', uri)
@@ -227,46 +369,31 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
           }
         } catch (_) {}
 
-        throw Exception(
-          'Cloudinary upload failed (HTTP ${streamed.statusCode}): $message',
-        );
+        throw Exception('Cloudinary upload failed: $message');
       }
 
       final secureUrl = (jsonDecode(body) as Map)['secure_url']?.toString();
 
       if (secureUrl == null || secureUrl.isEmpty) {
-        throw Exception('Cloudinary did not return a video URL.');
+        throw Exception('Cloudinary did not return a URL.');
       }
-
-      if (mounted) setState(() => _uploadProgress = 0.82);
 
       return secureUrl;
     } on TimeoutException {
-      throw Exception(
-        'Video upload timed out. Please check your internet connection '
-        'and try again.',
-      );
-    } on SocketException catch (e) {
-      throw Exception('Network error while uploading video: $e');
-    } on FirebaseFunctionsException catch (e) {
-      throw Exception('Server error (${e.code}): ${e.message}');
+      throw Exception('Upload timed out. Please check your connection.');
     } catch (e) {
       throw Exception(e.toString().replaceFirst('Exception: ', ''));
     }
   }
 
-  /// Best effort cleanup when the upload worked but saving the record failed.
-  /// Note: your `deleteCloudinaryVideo` function reads the Firestore doc to
-  /// check the owner, so it must also accept a video whose doc doesn't exist
-  /// yet (compare the public_id prefix with the caller's uid instead).
-  Future<void> _cleanupOrphan(String videoId, String videoUrl) async {
+  Future<void> _cleanupOrphan(String videoId, String url) async {
     try {
       await FirebaseFunctions.instanceFor(region: _region)
           .httpsCallable('deleteCloudinaryVideo')
           .call(<String, dynamic>{
         'videoId': videoId,
-        'videoUrl': videoUrl,
-        'thumbnailUrl': _createThumbnailUrl(videoUrl),
+        'videoUrl': url,
+        'thumbnailUrl': _createThumbnailUrl(url),
       });
     } catch (e) {
       debugPrint('Orphan cleanup failed: $e');
@@ -280,9 +407,7 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
 
       if (!path.contains('/video/upload/')) return videoUrl;
 
-      final thumbPath =
-          path.replaceFirst('/video/upload/', '/video/upload/so_0/');
-
+      final thumbPath = path.replaceFirst('/video/upload/', '/video/upload/so_0/');
       final lastDot = thumbPath.lastIndexOf('.');
       final finalPath = lastDot != -1
           ? '${thumbPath.substring(0, lastDot)}.jpg'
@@ -294,11 +419,7 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
     }
   }
 
-  // ============================================================
-  // PROFILE
-  // ============================================================
-
-  Future<Map<String, String>> _getUserProfileData(User user) async {
+  Future> _getUserProfileData(User user) async {
     String userName = '';
     String profileImageUrl = '';
 
@@ -309,82 +430,103 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
           .get();
 
       final data = doc.data();
-      final n = data?['name']?.toString().trim();
-      final img = data?['profileImageUrl']?.toString().trim();
-
-      if (n != null && n.isNotEmpty) userName = n;
-      if (img != null && img.isNotEmpty) profileImageUrl = img;
+      userName = data?['name']?.toString().trim() ?? '';
+      profileImageUrl = data?['profileImageUrl']?.toString().trim() ?? '';
     } catch (_) {}
 
-    if (userName.isEmpty) {
-      final d = user.displayName?.trim();
-      if (d != null && d.isNotEmpty) userName = d;
-    }
-
-    // NOTE: the email is NOT used as a public name any more.
-    if (userName.isEmpty) userName = 'BuyNova User';
+    if (userName.isEmpty) userName = user.displayName?.trim() ?? 'BuyNova User';
 
     return {'name': userName, 'profileImageUrl': profileImageUrl};
   }
 
   // ============================================================
-  // POST
+  // POST METHOD
   // ============================================================
 
   Future<void> _postVideo() async {
     if (_isUploading) return;
 
     final user = FirebaseAuth.instance.currentUser;
-
     if (user == null) {
       _snack('Please login first.');
       return;
     }
 
-    if (_selectedVideo == null) {
-      _snack('Please select a video first.');
+    if (!_hasMedia) {
+      _snack('Please select a video or photos first.');
       return;
     }
 
     final caption = _captionController.text.trim();
+    final isPhoto = _photos.isNotEmpty;
+
+    await _previewPlayer.stop();
 
     setState(() {
       _isUploading = true;
       _uploadProgress = 0.05;
+      _previewPlaying = false;
     });
 
-    String? uploadedUrl;
-    DocumentReference<Map<String, dynamic>>? videoRef;
+    final cleanupUrls = <String>[];
+    DocumentReference>? videoRef;
 
     try {
-      final uid = user.uid;
       final profile = await _getUserProfileData(user);
       final userName = profile['name'] ?? 'BuyNova User';
       final profileImageUrl = profile['profileImageUrl'] ?? '';
 
-      if (mounted) setState(() => _uploadProgress = 0.10);
+      final totalFiles = (isPhoto ? _photos.length : 1) + (_audioFile != null ? 1 : 0);
+      var doneFiles = 0;
 
-      uploadedUrl = await _uploadVideoToCloudinary(File(_selectedVideo!.path));
+      void step() {
+        doneFiles++;
+        if (mounted) {
+          setState(() {
+            _uploadProgress = 0.10 + 0.78 * (doneFiles / totalFiles);
+          });
+        }
+      }
 
-      if (mounted) setState(() => _uploadProgress = 0.88);
+      String videoUrl = '';
+      final imageUrls = <String>[];
+      String audioUrl = '';
 
-      final thumbnailUrl = _createThumbnailUrl(uploadedUrl);
+      if (isPhoto) {
+        for (final p in _photos) {
+          imageUrls.add(await _uploadToCloudinary(File(p.path), resource: 'image'));
+          step();
+        }
+      } else {
+        videoUrl = await _uploadToCloudinary(File(_selectedVideo!.path));
+        cleanupUrls.add(videoUrl);
+        step();
+      }
+
+      if (_audioFile != null) {
+        audioUrl = await _uploadToCloudinary(_audioFile!);
+        cleanupUrls.add(audioUrl);
+        step();
+      }
+
+      if (mounted) setState(() => _uploadProgress = 0.9);
 
       videoRef = FirebaseFirestore.instance.collection('sellerVideos').doc();
 
-      // No userEmail here: this collection is readable by everyone.
-      // Counters / moderation fields should be forced by Firestore rules
-      // or set by a Cloud Function.
       final videoData = <String, dynamic>{
         'videoId': videoRef.id,
-        'userId': uid,
-        'sellerId': uid,
+        'userId': user.uid,
+        'sellerId': user.uid,
         'userName': userName,
         'sellerName': userName,
         'profileImageUrl': profileImageUrl,
         'sellerProfileImageUrl': profileImageUrl,
-        'videoUrl': uploadedUrl,
-        'thumbnailUrl': thumbnailUrl,
+        'mediaType': isPhoto ? 'photo' : 'video',
+        'videoUrl': videoUrl,
+        'imageUrls': imageUrls,
+        'thumbnailUrl': isPhoto ? imageUrls.first : _createThumbnailUrl(videoUrl),
+        'audioUrl': audioUrl,
+        'audioName': _audioName ?? '',
         'caption': caption,
         'status': 'published',
         'moderationStatus': 'approved',
@@ -407,28 +549,26 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
       await videoRef.set(videoData);
 
       if (mounted) setState(() => _uploadProgress = 1.0);
-
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Video posted successfully!'),
-          backgroundColor: Colors.green,
+          content: Text('Post published successfully!'),
+          backgroundColor: Colors.black87,
+          behavior: SnackBarBehavior.floating,
         ),
       );
 
       await Future.delayed(const Duration(milliseconds: 500));
-
       if (!mounted) return;
-
       Navigator.of(context).pop(true);
     } catch (e) {
-      // Upload worked but saving failed -> don't leave a stray file behind.
-      if (uploadedUrl != null && videoRef != null) {
-        await _cleanupOrphan(videoRef.id, uploadedUrl);
+      if (videoRef != null) {
+        for (final url in cleanupUrls) {
+          await _cleanupOrphan(videoRef.id, url);
+        }
       }
-
-      _snack('Could not post video:\n$e', seconds: 8);
+      _snack('Could not post:\n$e', seconds: 6);
     } finally {
       if (mounted) {
         setState(() {
@@ -439,13 +579,8 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
     }
   }
 
-  // ============================================================
-  // HELPERS
-  // ============================================================
-
   void _snack(String message, {int seconds = 3}) {
     if (!mounted) return;
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), duration: Duration(seconds: seconds)),
     );
@@ -458,42 +593,151 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
   }
 
   // ============================================================
-  // UI
+  // UI COMPONENTS
   // ============================================================
 
-  Widget _buildPreview() {
-    if (_selectedVideo == null) {
-      return GestureDetector(
-        onTap: _pickVideo,
-        child: AspectRatio(
-          aspectRatio: 9 / 16,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: Colors.grey.shade300),
-            ),
-            child: const Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.video_library_outlined, size: 60),
-                SizedBox(height: 12),
-                Text(
-                  'Select Video',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+  Widget _buildEmptyPreview() {
+    return GestureDetector(
+      onTap: _pickVideo,
+      child: AspectRatio(
+        aspectRatio: 9 / 16,
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E1E2C),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white10),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.15),
+                blurRadius: 15,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: const Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.movie_creation_outlined, size: 56, color: Colors.white54),
+              SizedBox(height: 12),
+              Text(
+                'Select Video or Photos',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
                 ),
-                SizedBox(height: 6),
-                Text(
-                  'Vertical video works best • 60 MB • 90 seconds',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ],
-            ),
+              ),
+              SizedBox(height: 6),
+              Text(
+                '9:16 Vertical works best\nMax 60MB • Up to 5 Photos',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white38, fontSize: 12),
+              ),
+            ],
           ),
         ),
-      );
-    }
+      ),
+    );
+  }
+
+  Widget _buildPhotoPreview() {
+    return AspectRatio(
+      aspectRatio: 9 / 16,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.black,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 15,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            PageView.builder(
+              controller: _photoPageController,
+              itemCount: _photos.length,
+              onPageChanged: (i) => setState(() => _currentPhotoIndex = i),
+              itemBuilder: (context, i) {
+                return Image.file(File(_photos[i].path), fit: BoxFit.cover);
+              },
+            ),
+
+            // Top Badges
+            Positioned(
+              left: 12,
+              top: 12,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.photo_library, size: 14, color: Colors.white),
+                    const SizedBox(width: 5),
+                    Text(
+                      '${_currentPhotoIndex + 1}/${_photos.length}',
+                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Dots Indicator at Bottom
+            if (_photos.length > 1)
+              Positioned(
+                bottom: 15,
+                left: 0,
+                right: 0,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(
+                    _photos.length,
+                    (index) => AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      width: _currentPhotoIndex == index ? 16 : 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: _currentPhotoIndex == index ? Colors.white : Colors.white38,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+            // Remove Button
+            Positioned(
+              top: 10,
+              right: 10,
+              child: CircleAvatar(
+                backgroundColor: Colors.black54,
+                radius: 18,
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  onPressed: _removePhotos,
+                  icon: const Icon(Icons.close, color: Colors.white, size: 20),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPreview() {
+    if (_photos.isNotEmpty) return _buildPhotoPreview();
+    if (_selectedVideo == null) return _buildEmptyPreview();
 
     final c = _videoController;
     final ready = c != null && c.value.isInitialized;
@@ -503,7 +747,14 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
       child: Container(
         decoration: BoxDecoration(
           color: Colors.black,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 15,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
         clipBehavior: Clip.antiAlias,
         child: Stack(
@@ -531,26 +782,150 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
               const IgnorePointer(
                 child: Center(
                   child: Icon(
-                    Icons.play_circle_fill,
-                    size: 70,
-                    color: Colors.white,
+                    Icons.play_circle_fill_rounded,
+                    size: 64,
+                    color: Colors.white70,
                   ),
                 ),
               ),
+
+            // Mute / Unmute Button
+            Positioned(
+              left: 10,
+              top: 10,
+              child: CircleAvatar(
+                backgroundColor: Colors.black54,
+                radius: 18,
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  onPressed: () {
+                    setState(() {
+                      _isMuted = !_isMuted;
+                      c?.setVolume(_isMuted || _audioFile != null ? 0 : 1);
+                    });
+                  },
+                  icon: Icon(
+                    _isMuted ? Icons.volume_off : Icons.volume_up,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                ),
+              ),
+            ),
+
+            // Close Button
             Positioned(
               top: 10,
               right: 10,
-              child: Material(
-                color: Colors.black54,
-                shape: const CircleBorder(),
+              child: CircleAvatar(
+                backgroundColor: Colors.black54,
+                radius: 18,
                 child: IconButton(
+                  padding: EdgeInsets.zero,
                   onPressed: _removeSelectedVideo,
-                  icon: const Icon(Icons.close, color: Colors.white),
+                  icon: const Icon(Icons.close, color: Colors.white, size: 20),
                 ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildMediaButtons() {
+    return Container(
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextButton.icon(
+              onPressed: _isUploading ? null : _pickVideo,
+              icon: const Icon(Icons.videocam_rounded, size: 20),
+              label: const Text('Video', style: TextStyle(fontWeight: FontWeight.bold)),
+              style: TextButton.styleFrom(
+                foregroundColor: _selectedVideo != null ? Colors.deepPurple : Colors.black87,
+              ),
+            ),
+          ),
+          Container(height: 20, width: 1, color: Colors.grey.shade300),
+          Expanded(
+            child: TextButton.icon(
+              onPressed: _isUploading ? null : _pickPhotos,
+              icon: const Icon(Icons.photo_library_rounded, size: 20),
+              label: const Text('Photos', style: TextStyle(fontWeight: FontWeight.bold)),
+              style: TextButton.styleFrom(
+                foregroundColor: _photos.isNotEmpty ? Colors.deepPurple : Colors.black87,
+              ),
+            ),
+          ),
+          Container(height: 20, width: 1, color: Colors.grey.shade300),
+          Expanded(
+            child: TextButton.icon(
+              onPressed: _isUploading ? null : _pickMusic,
+              icon: const Icon(Icons.music_note_rounded, size: 20),
+              label: const Text('Music', style: TextStyle(fontWeight: FontWeight.bold)),
+              style: TextButton.styleFrom(
+                foregroundColor: _audioFile != null ? Colors.deepPurple : Colors.black87,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMusicTile() {
+    if (_audioName == null) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.deepPurple.shade50,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.deepPurple.shade100),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: _isUploading ? null : _togglePreviewMusic,
+            icon: Icon(
+              _previewPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill,
+              size: 32,
+              color: Colors.deepPurple,
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'BACKGROUND MUSIC',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.deepPurple,
+                  ),
+                ),
+                Text(
+                  _audioName!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: _isUploading ? null : _removeMusic,
+            icon: const Icon(Icons.close_rounded, color: Colors.redAccent, size: 20),
+          ),
+        ],
       ),
     );
   }
@@ -563,42 +938,55 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
       canPop: !_isUploading,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop && _isUploading) {
-          _snack('Please wait until the video upload finishes.');
+          _snack('Please wait until the upload finishes.');
         }
       },
       child: Scaffold(
-        appBar: AppBar(title: const Text('Post Video'), centerTitle: true),
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          title: const Text(
+            'Create Post',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+          centerTitle: true,
+          elevation: 0,
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+        ),
         body: SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Reels-shaped preview, not taller than the screen allows.
                 Center(
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: width * 0.62),
+                    constraints: BoxConstraints(maxWidth: width * 0.58),
                     child: _buildPreview(),
                   ),
                 ),
-                const SizedBox(height: 14),
-                if (_selectedVideo != null)
-                  OutlinedButton.icon(
-                    onPressed: _isUploading ? null : _pickVideo,
-                    icon: const Icon(Icons.video_file),
-                    label: const Text('Change Video'),
-                  ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
+                _buildMediaButtons(),
+                _buildMusicTile(),
+                const SizedBox(height: 16),
                 TextField(
                   controller: _captionController,
-                  maxLines: 4,
+                  maxLines: 3,
                   maxLength: 500,
                   enabled: !_isUploading,
                   decoration: InputDecoration(
                     labelText: 'Caption',
-                    hintText: 'Write something about your video...',
+                    hintText: 'Share something interesting about your post...',
+                    alignLabelWithHint: true,
+                    filled: true,
+                    fillColor: Colors.grey.shade50,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide(color: Colors.grey.shade200),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
                     ),
                   ),
                 ),
@@ -610,18 +998,25 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
                   )
                 else
                   DropdownButtonFormField<String>(
-                    initialValue: _selectedProductId,
+                    value: _selectedProductId,
                     isExpanded: true,
                     decoration: InputDecoration(
-                      labelText: 'Tag a Product',
+                      labelText: 'Tag a Product (Optional)',
+                      prefixIcon: const Icon(Icons.shopping_bag_outlined),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
                       ),
                     ),
                     items: [
                       const DropdownMenuItem<String>(
                         value: null,
-                        child: Text('No product'),
+                        child: Text('No product tagged'),
                       ),
                       ..._myProducts.map((p) {
                         return DropdownMenuItem<String>(
@@ -640,19 +1035,20 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(14),
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.grey.shade200),
                     ),
                     child: Row(
                       children: [
                         ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(12),
                           child: (_selectedProductImageUrl != null &&
                                   _selectedProductImageUrl!.isNotEmpty)
                               ? Image.network(
                                   _selectedProductImageUrl!,
-                                  width: 60,
-                                  height: 60,
+                                  width: 54,
+                                  height: 54,
                                   fit: BoxFit.cover,
                                   errorBuilder: (_, __, ___) => _imgFallback(),
                                 )
@@ -665,19 +1061,18 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
                             children: [
                               Text(
                                 _selectedProductName ?? 'Product',
-                                maxLines: 2,
+                                maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                style: const TextStyle(fontWeight: FontWeight.bold),
                               ),
                               if (_selectedProductPrice != null)
                                 Padding(
-                                  padding: const EdgeInsets.only(top: 5),
+                                  padding: const EdgeInsets.only(top: 4),
                                   child: Text(
                                     '৳${_selectedProductPrice!.toStringAsFixed(2)}',
                                     style: const TextStyle(
                                       fontWeight: FontWeight.bold,
+                                      color: Colors.deepPurple,
                                     ),
                                   ),
                                 ),
@@ -690,37 +1085,67 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
                 ],
                 if (_isUploading) ...[
                   const SizedBox(height: 20),
-                  Text(
-                    'Uploading video... '
-                    '${(_uploadProgress * 100).toStringAsFixed(0)}%',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Uploading post...',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      Text(
+                        '${(_uploadProgress * 100).toStringAsFixed(0)}%',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.deepPurple,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   LinearProgressIndicator(
                     value: _uploadProgress,
                     minHeight: 8,
+                    backgroundColor: Colors.grey.shade200,
+                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ],
                 const SizedBox(height: 24),
                 SizedBox(
                   height: 54,
-                  child: ElevatedButton.icon(
+                  child: ElevatedButton(
                     onPressed: _isUploading ? null : _postVideo,
-                    icon: _isUploading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.publish_outlined),
-                    label: Text(_isUploading ? 'Uploading...' : 'Post Video'),
                     style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(16),
                       ),
                     ),
+                    child: _isUploading
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.send_rounded, size: 20),
+                              SizedBox(width: 8),
+                              Text(
+                                'Post Now',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -734,10 +1159,10 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
 
   Widget _imgFallback() {
     return Container(
-      width: 60,
-      height: 60,
-      color: Colors.grey.shade300,
-      child: const Icon(Icons.inventory_2_outlined),
+      width: 54,
+      height: 54,
+      color: Colors.grey.shade200,
+      child: const Icon(Icons.inventory_2_outlined, color: Colors.grey),
     );
   }
 }
