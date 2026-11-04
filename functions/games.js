@@ -42,9 +42,9 @@ const DAY_OFFSET_MS = 6 * 60 * 60 * 1000; // Bangladesh time (UTC+6)
 
 const MIN_RUN_SECONDS = 5;
 const MAX_RUN_SECONDS = 60 * 60;
-// The game gives about 10-30 score per second. Anything far above this
+// The games give about 10-45 score per second. Anything far above this
 // cannot be a real run.
-const MAX_SCORE_PER_SECOND = 45;
+const MAX_SCORE_PER_SECOND = 60;
 
 function dayKey() {
   return new Date(Date.now() + DAY_OFFSET_MS).toISOString().slice(0, 10);
