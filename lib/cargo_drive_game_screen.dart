@@ -531,7 +531,7 @@ class _CargoDriveGameScreenState
                                   'BUY NOVA • DELIVERY EXPRESS',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
-                                    color: Colors.white.withOpacity(0.25),
+                                    color: Colors.white.withValues(alpha: 0.25),
                                     fontWeight: FontWeight.bold,
                                     letterSpacing: 3,
                                   ),
