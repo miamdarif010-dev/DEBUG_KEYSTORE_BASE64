@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'bike_game_page.dart';
+import 'cargo_drive_game_screen.dart';
 import 'login_page.dart';
 import 'spin_game_page.dart';
 
@@ -61,6 +62,15 @@ final List<EarnGame> kEarnGames = [
     icon: Icons.two_wheeler,
     colors: const [Color(0xFF26A69A), Color(0xFF00897B)],
     pageBuilder: (context) => const BikeGamePage(),
+  ),
+  EarnGame(
+    id: 'cargo',
+    title: 'Cargo Drive',
+    subtitle: 'Deliver the cargo, dodge the roadblocks',
+    badge: 'NEW',
+    icon: Icons.local_shipping,
+    colors: const [Color(0xFF5C6BC0), Color(0xFF3949AB)],
+    pageBuilder: (context) => const CargoDriveGameScreen(),
   ),
 ];
 
