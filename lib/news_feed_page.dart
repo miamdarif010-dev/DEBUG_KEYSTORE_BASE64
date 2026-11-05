@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
@@ -216,9 +218,24 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
               );
             }
 
-            final docs = _sortVideos(
-              (snapshot.data?.docs ?? []).where(_isPublished).toList(),
-            );
+            final all = snapshot.data?.docs ?? [];
+
+            // DEBUG (remove later): shows how many posts the feed gets.
+            if (kDebugMode) {
+              debugPrint(
+                'FEED TOTAL=${all.length} '
+                'PUBLISHED=${all.where(_isPublished).length}',
+              );
+              for (final d in all) {
+                debugPrint(
+                  'FEED ${d.id} status=${d.data()['status']} '
+                  'type=${d.data()['mediaType']} '
+                  'user=${d.data()['userId']}',
+                );
+              }
+            }
+
+            final docs = _sortVideos(all.where(_isPublished).toList());
 
             if (docs.isEmpty) {
               _currentVideoId = null;
@@ -606,6 +623,12 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
   VideoPlayerController? _controller;
   Timer? _watchTimer;
 
+  // PHOTO POSTS + MUSIC
+  final AudioPlayer _audio = AudioPlayer();
+  bool _audioStarted = false;
+  Timer? _photoTimer;
+  int _photoIndex = 0;
+
   bool _isInitialized = false;
   bool _isPlaying = false;
   bool _isLoadingVideo = true;
@@ -659,6 +682,26 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
   String get _videoUrl {
     return (widget.data['videoUrl'] ?? '').toString();
   }
+
+  // ---- photo post + music fields ----
+  bool get _isPhoto => (widget.data['mediaType'] ?? 'video') == 'photo';
+
+  List<String> get _imageUrls {
+    final raw = widget.data['imageUrls'];
+
+    if (raw is List) {
+      return raw
+          .map((e) => e.toString())
+          .where((e) => e.isNotEmpty)
+          .toList();
+    }
+
+    return <String>[];
+  }
+
+  String get _audioUrl => (widget.data['audioUrl'] ?? '').toString();
+
+  String get _audioName => (widget.data['audioName'] ?? '').toString();
 
   String get _productId {
     return (widget.data['productId'] ?? '').toString();
@@ -717,7 +760,22 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
       _rewardEligible = rewardValue;
     }
 
-    _loadVideo();
+    _audio.setReleaseMode(ReleaseMode.loop);
+
+    if (_isPhoto) {
+      // Photo posts have no video to load: show the pictures right away.
+      _isLoadingVideo = false;
+      _isInitialized = true;
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.isActive) {
+          _playVideo();
+        }
+      });
+    } else {
+      _loadVideo();
+    }
+
     _checkLike();
     _checkReward();
     _loadRewardPoints();
@@ -838,7 +896,64 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
     }
   }
 
+  // ============================================================
+  // MUSIC + PHOTO SLIDESHOW
+  // ============================================================
+
+  Future<void> _startAudio() async {
+    if (_audioUrl.isEmpty) return;
+
+    try {
+      if (_audioStarted) {
+        await _audio.resume();
+      } else {
+        _audioStarted = true;
+        await _audio.play(UrlSource(_audioUrl));
+      }
+    } catch (_) {
+      _audioStarted = false;
+    }
+  }
+
+  Future<void> _stopAudio() async {
+    if (!_audioStarted) return;
+
+    try {
+      await _audio.pause();
+    } catch (_) {}
+  }
+
+  void _startPhotoTimer() {
+    _photoTimer?.cancel();
+
+    if (_imageUrls.length < 2) return;
+
+    _photoTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _photoIndex = (_photoIndex + 1) % _imageUrls.length;
+      });
+    });
+  }
+
   Future<void> _playVideo() async {
+    // ---------- PHOTO POST ----------
+    if (_isPhoto) {
+      if (mounted) {
+        setState(() {
+          _isPlaying = true;
+        });
+      }
+
+      _startPhotoTimer();
+      _startAudio();
+      _recordView();
+      _updateWatchTimer();
+      return;
+    }
+
+    // ---------- VIDEO POST ----------
     final controller = _controller;
 
     if (controller == null || !_isInitialized) {
@@ -847,6 +962,12 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
 
     try {
       await controller.play();
+
+      // When the poster added music, the video's own sound is muted.
+      if (_audioUrl.isNotEmpty) {
+        await controller.setVolume(0);
+        _startAudio();
+      }
 
       if (mounted) {
         setState(() {
@@ -860,6 +981,23 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
   }
 
   Future<void> _pauseVideo() async {
+    _stopAudio();
+
+    // ---------- PHOTO POST ----------
+    if (_isPhoto) {
+      _photoTimer?.cancel();
+
+      if (mounted) {
+        setState(() {
+          _isPlaying = false;
+        });
+      }
+
+      _updateWatchTimer();
+      return;
+    }
+
+    // ---------- VIDEO POST ----------
     final controller = _controller;
 
     if (controller == null) {
@@ -880,6 +1018,15 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
   }
 
   void _togglePlayPause() {
+    if (_isPhoto) {
+      if (_isPlaying) {
+        _pauseVideo();
+      } else {
+        _playVideo();
+      }
+      return;
+    }
+
     if (_controller == null || !_isInitialized) {
       return;
     }
@@ -1159,12 +1306,17 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
   }
 
   Future<void> _shareVideo() async {
-    if (_videoUrl.isEmpty) {
+    // Video posts share the video link, photo posts share the first photo.
+    final link = _videoUrl.isNotEmpty
+        ? _videoUrl
+        : (_imageUrls.isNotEmpty ? _imageUrls.first : '');
+
+    if (link.isEmpty) {
       return;
     }
 
     try {
-      await Share.share('Check out this video on BuyNova:\n$_videoUrl');
+      await Share.share('Check out this video on BuyNova:\n$link');
     } catch (_) {
       return;
     }
@@ -1308,6 +1460,8 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
   @override
   void dispose() {
     _watchTimer?.cancel();
+    _photoTimer?.cancel();
+    _audio.dispose();
     _controller?.removeListener(_videoListener);
     _controller?.dispose();
     super.dispose();
@@ -1392,6 +1546,78 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
   }
 
   Widget _buildVideo() {
+    // ---------- PHOTO POST: slideshow ----------
+    if (_isPhoto) {
+      final images = _imageUrls;
+
+      if (images.isEmpty) {
+        return const Center(
+          child: Icon(
+            Icons.image_not_supported_outlined,
+            color: Colors.white54,
+            size: 70,
+          ),
+        );
+      }
+
+      final url = images[_photoIndex % images.length];
+
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          SizedBox.expand(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 500),
+              child: Image.network(
+                url,
+                key: ValueKey(url),
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+
+                  return const Center(
+                    child: CircularProgressIndicator(color: Colors.white),
+                  );
+                },
+                errorBuilder: (_, __, ___) => const Center(
+                  child: Icon(
+                    Icons.image_not_supported_outlined,
+                    color: Colors.white54,
+                    size: 70,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (images.length > 1)
+            Positioned(
+              top: 14,
+              left: 0,
+              right: 0,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(images.length, (i) {
+                  final active = i == _photoIndex % images.length;
+
+                  return Container(
+                    width: active ? 18 : 6,
+                    height: 6,
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    decoration: BoxDecoration(
+                      color: active ? Colors.white : Colors.white38,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  );
+                }),
+              ),
+            ),
+        ],
+      );
+    }
+
+    // ---------- VIDEO POST ----------
     if (_isLoadingVideo) {
       return const Center(
         child: CircularProgressIndicator(color: Colors.white),
@@ -1458,6 +1684,24 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(color: Colors.white, fontSize: 14),
+          ),
+        ],
+        if (_audioName.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.music_note, color: Colors.white, size: 16),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  _audioName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ),
+            ],
           ),
         ],
         if (_productId.isNotEmpty || _productName.isNotEmpty) ...[
