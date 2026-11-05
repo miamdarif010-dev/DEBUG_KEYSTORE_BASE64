@@ -101,7 +101,7 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
     }
   }
 
-  bool _isPublished(QueryDocumentSnapshot> doc) {
+  bool _isPublished(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
     final status =
         (doc.data()['status'] ?? 'published').toString().toLowerCase();
 
@@ -110,11 +110,11 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
         status == 'approved';
   }
 
-  List<QueryDocumentSnapshot>> _sortVideos(
-    List<QueryDocumentSnapshot>> docs,
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _sortVideos(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
   ) {
     final sorted =
-        List<QueryDocumentSnapshot>>.from(docs);
+        List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(docs);
 
     sorted.sort((a, b) {
       final aTimestamp = a.data()['createdAt'];
@@ -138,7 +138,7 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
   }
 
   void _syncPageWithCurrentVideo(
-    List<QueryDocumentSnapshot>> docs,
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
   ) {
     if (docs.isEmpty) {
       _currentVideoId = null;
@@ -196,7 +196,7 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
       backgroundColor: Colors.black,
       body: SafeArea(
         bottom: false,
-        child: StreamBuilder<QuerySnapshot>>(
+        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream:
               FirebaseFirestore.instance.collection('sellerVideos').snapshots(),
           builder: (context, snapshot) {
@@ -2034,7 +2034,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
             ),
             const SizedBox(height: 10),
             Expanded(
-              child: StreamBuilder<QuerySnapshot>>(
+              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: FirebaseFirestore.instance
                     .collection('sellerVideos')
                     .doc(widget.videoId)
