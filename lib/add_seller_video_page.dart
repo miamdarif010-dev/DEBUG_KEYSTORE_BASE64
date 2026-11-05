@@ -49,7 +49,7 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
   double _uploadProgress = 0.0;
   bool _isMuted = false;
 
-  List> _myProducts = [];
+  List<Map<String, dynamic>> _myProducts = [];
   bool _loadingProducts = false;
 
   String? _selectedProductId;
@@ -407,7 +407,8 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
 
       if (!path.contains('/video/upload/')) return videoUrl;
 
-      final thumbPath = path.replaceFirst('/video/upload/', '/video/upload/so_0/');
+      final thumbPath =
+          path.replaceFirst('/video/upload/', '/video/upload/so_0/');
       final lastDot = thumbPath.lastIndexOf('.');
       final finalPath = lastDot != -1
           ? '${thumbPath.substring(0, lastDot)}.jpg'
@@ -419,7 +420,7 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
     }
   }
 
-  Future> _getUserProfileData(User user) async {
+  Future<Map<String, String>> _getUserProfileData(User user) async {
     String userName = '';
     String profileImageUrl = '';
 
@@ -434,7 +435,10 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
       profileImageUrl = data?['profileImageUrl']?.toString().trim() ?? '';
     } catch (_) {}
 
-    if (userName.isEmpty) userName = user.displayName?.trim() ?? 'BuyNova User';
+    if (userName.isEmpty) {
+      final d = user.displayName?.trim() ?? '';
+      userName = d.isEmpty ? 'BuyNova User' : d;
+    }
 
     return {'name': userName, 'profileImageUrl': profileImageUrl};
   }
@@ -469,14 +473,15 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
     });
 
     final cleanupUrls = <String>[];
-    DocumentReference>? videoRef;
+    DocumentReference<Map<String, dynamic>>? videoRef;
 
     try {
       final profile = await _getUserProfileData(user);
       final userName = profile['name'] ?? 'BuyNova User';
       final profileImageUrl = profile['profileImageUrl'] ?? '';
 
-      final totalFiles = (isPhoto ? _photos.length : 1) + (_audioFile != null ? 1 : 0);
+      final totalFiles =
+          (isPhoto ? _photos.length : 1) + (_audioFile != null ? 1 : 0);
       var doneFiles = 0;
 
       void step() {
@@ -494,7 +499,8 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
 
       if (isPhoto) {
         for (final p in _photos) {
-          imageUrls.add(await _uploadToCloudinary(File(p.path), resource: 'image'));
+          imageUrls
+              .add(await _uploadToCloudinary(File(p.path), resource: 'image'));
           step();
         }
       } else {
@@ -511,10 +517,11 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
 
       if (mounted) setState(() => _uploadProgress = 0.9);
 
-      videoRef = FirebaseFirestore.instance.collection('sellerVideos').doc();
+      final ref = FirebaseFirestore.instance.collection('sellerVideos').doc();
+      videoRef = ref;
 
       final videoData = <String, dynamic>{
-        'videoId': videoRef.id,
+        'videoId': ref.id,
         'userId': user.uid,
         'sellerId': user.uid,
         'userName': userName,
@@ -524,7 +531,8 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
         'mediaType': isPhoto ? 'photo' : 'video',
         'videoUrl': videoUrl,
         'imageUrls': imageUrls,
-        'thumbnailUrl': isPhoto ? imageUrls.first : _createThumbnailUrl(videoUrl),
+        'thumbnailUrl':
+            isPhoto ? imageUrls.first : _createThumbnailUrl(videoUrl),
         'audioUrl': audioUrl,
         'audioName': _audioName ?? '',
         'caption': caption,
@@ -546,7 +554,7 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
         videoData['productImageUrl'] = _selectedProductImageUrl;
       }
 
-      await videoRef.set(videoData);
+      await ref.set(videoData);
 
       if (mounted) setState(() => _uploadProgress = 1.0);
       if (!mounted) return;
@@ -563,9 +571,11 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (e) {
-      if (videoRef != null) {
+      final failedRef = videoRef;
+
+      if (failedRef != null) {
         for (final url in cleanupUrls) {
-          await _cleanupOrphan(videoRef.id, url);
+          await _cleanupOrphan(failedRef.id, url);
         }
       }
       _snack('Could not post:\n$e', seconds: 6);
@@ -608,7 +618,7 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
             border: Border.all(color: Colors.white10),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.15),
+                color: Colors.black.withValues(alpha: 0.15),
                 blurRadius: 15,
                 offset: const Offset(0, 8),
               ),
@@ -617,7 +627,8 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
           child: const Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.movie_creation_outlined, size: 56, color: Colors.white54),
+              Icon(Icons.movie_creation_outlined,
+                  size: 56, color: Colors.white54),
               SizedBox(height: 12),
               Text(
                 'Select Video or Photos',
@@ -649,7 +660,7 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.2),
+              color: Colors.black.withValues(alpha: 0.2),
               blurRadius: 15,
               offset: const Offset(0, 8),
             ),
@@ -673,18 +684,24 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
               left: 12,
               top: 12,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.6),
+                  color: Colors.black.withValues(alpha: 0.6),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.photo_library, size: 14, color: Colors.white),
+                    const Icon(Icons.photo_library,
+                        size: 14, color: Colors.white),
                     const SizedBox(width: 5),
                     Text(
                       '${_currentPhotoIndex + 1}/${_photos.length}',
-                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 ),
@@ -707,7 +724,9 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
                       width: _currentPhotoIndex == index ? 16 : 6,
                       height: 6,
                       decoration: BoxDecoration(
-                        color: _currentPhotoIndex == index ? Colors.white : Colors.white38,
+                        color: _currentPhotoIndex == index
+                            ? Colors.white
+                            : Colors.white38,
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
@@ -750,7 +769,7 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.2),
+              color: Colors.black.withValues(alpha: 0.2),
               blurRadius: 15,
               offset: const Offset(0, 8),
             ),
@@ -846,9 +865,11 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
             child: TextButton.icon(
               onPressed: _isUploading ? null : _pickVideo,
               icon: const Icon(Icons.videocam_rounded, size: 20),
-              label: const Text('Video', style: TextStyle(fontWeight: FontWeight.bold)),
+              label: const Text('Video',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
               style: TextButton.styleFrom(
-                foregroundColor: _selectedVideo != null ? Colors.deepPurple : Colors.black87,
+                foregroundColor:
+                    _selectedVideo != null ? Colors.deepPurple : Colors.black87,
               ),
             ),
           ),
@@ -857,9 +878,11 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
             child: TextButton.icon(
               onPressed: _isUploading ? null : _pickPhotos,
               icon: const Icon(Icons.photo_library_rounded, size: 20),
-              label: const Text('Photos', style: TextStyle(fontWeight: FontWeight.bold)),
+              label: const Text('Photos',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
               style: TextButton.styleFrom(
-                foregroundColor: _photos.isNotEmpty ? Colors.deepPurple : Colors.black87,
+                foregroundColor:
+                    _photos.isNotEmpty ? Colors.deepPurple : Colors.black87,
               ),
             ),
           ),
@@ -868,9 +891,11 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
             child: TextButton.icon(
               onPressed: _isUploading ? null : _pickMusic,
               icon: const Icon(Icons.music_note_rounded, size: 20),
-              label: const Text('Music', style: TextStyle(fontWeight: FontWeight.bold)),
+              label: const Text('Music',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
               style: TextButton.styleFrom(
-                foregroundColor: _audioFile != null ? Colors.deepPurple : Colors.black87,
+                foregroundColor:
+                    _audioFile != null ? Colors.deepPurple : Colors.black87,
               ),
             ),
           ),
@@ -895,7 +920,9 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
           IconButton(
             onPressed: _isUploading ? null : _togglePreviewMusic,
             icon: Icon(
-              _previewPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill,
+              _previewPlaying
+                  ? Icons.pause_circle_filled
+                  : Icons.play_circle_fill,
               size: 32,
               color: Colors.deepPurple,
             ),
@@ -916,14 +943,16 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
                   _audioName!,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600, fontSize: 13),
                 ),
               ],
             ),
           ),
           IconButton(
             onPressed: _isUploading ? null : _removeMusic,
-            icon: const Icon(Icons.close_rounded, color: Colors.redAccent, size: 20),
+            icon: const Icon(Icons.close_rounded,
+                color: Colors.redAccent, size: 20),
           ),
         ],
       ),
@@ -998,7 +1027,7 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
                   )
                 else
                   DropdownButtonFormField<String>(
-                    value: _selectedProductId,
+                    initialValue: _selectedProductId,
                     isExpanded: true,
                     decoration: InputDecoration(
                       labelText: 'Tag a Product (Optional)',
@@ -1063,7 +1092,8 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
                                 _selectedProductName ?? 'Product',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontWeight: FontWeight.bold),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold),
                               ),
                               if (_selectedProductPrice != null)
                                 Padding(
@@ -1090,7 +1120,8 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
                     children: [
                       const Text(
                         'Uploading post...',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 13),
                       ),
                       Text(
                         '${(_uploadProgress * 100).toStringAsFixed(0)}%',
@@ -1106,7 +1137,8 @@ class _AddSellerVideoPageState extends State<AddSellerVideoPage> {
                     value: _uploadProgress,
                     minHeight: 8,
                     backgroundColor: Colors.grey.shade200,
-                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+                    valueColor:
+                        const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ],
