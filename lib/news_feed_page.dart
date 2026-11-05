@@ -27,10 +27,6 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
   final PageController _pageController = PageController();
 
   int _currentPage = 0;
-
-  // Tracks which video the user is actually watching, by document id,
-  // so we can keep them on the same video even if a new video gets
-  // inserted above it in the sorted list.
   String? _currentVideoId;
   bool _isManualScrolling = false;
 
@@ -105,7 +101,6 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
     }
   }
 
-  // Videos without a status field (old uploads) count as published.
   bool _isPublished(QueryDocumentSnapshot> doc) {
     final status =
         (doc.data()['status'] ?? 'published').toString().toLowerCase();
@@ -142,9 +137,6 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
     return sorted;
   }
 
-  // Keeps the PageView pointed at the same video the user was watching,
-  // even when the underlying (sorted) list changes order because a new
-  // video was inserted above it.
   void _syncPageWithCurrentVideo(
     List<QueryDocumentSnapshot>> docs,
   ) {
@@ -155,7 +147,6 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
 
     if (_isManualScrolling) return;
 
-    // First time we get data: just remember what's on screen.
     if (_currentVideoId == null) {
       final initialIndex = _currentPage.clamp(0, docs.length - 1);
       _currentVideoId = docs[initialIndex].id;
@@ -168,7 +159,6 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
     final newIndex = docs.indexWhere((doc) => doc.id == _currentVideoId);
 
     if (newIndex == -1) {
-      // The video the user was watching is gone (deleted/unpublished).
       final fallbackIndex = _currentPage.clamp(0, docs.length - 1);
       _currentVideoId = docs[fallbackIndex].id;
       if (fallbackIndex != _currentPage) {
@@ -207,8 +197,6 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
       body: SafeArea(
         bottom: false,
         child: StreamBuilder<QuerySnapshot>>(
-          // No status filter in the query: old videos may not have a
-          // status field. Filtering happens in _isPublished instead.
           stream:
               FirebaseFirestore.instance.collection('sellerVideos').snapshots(),
           builder: (context, snapshot) {
@@ -223,22 +211,6 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
             }
 
             final all = snapshot.data?.docs ?? [];
-
-            // DEBUG (remove later): shows how many posts the feed gets.
-            if (kDebugMode) {
-              debugPrint(
-                'FEED TOTAL=${all.length} '
-                'PUBLISHED=${all.where(_isPublished).length}',
-              );
-              for (final d in all) {
-                debugPrint(
-                  'FEED ${d.id} status=${d.data()['status']} '
-                  'type=${d.data()['mediaType']} '
-                  'user=${d.data()['userId']}',
-                );
-              }
-            }
-
             final docs = _sortVideos(all.where(_isPublished).toList());
 
             if (docs.isEmpty) {
@@ -624,20 +596,13 @@ class _ReelsVideoItem extends StatefulWidget {
 }
 
 class _ReelsVideoItemState extends State<_ReelsVideoItem> {
-  // Points per video are set by the Admin (platformSettings/monetization ->
-  // pointsPerVideo). Read once and kept for 5 minutes for ALL videos, so
-  // scrolling does not cost a Firestore read per video.
   static int? _cachedRewardPoints;
   static DateTime? _cachedRewardAt;
-
-  // The claim document must keep saying 5: firestore.rules requires it.
-  // The Cloud Function ignores this number and pays the Admin's value.
   static const int _claimRewardPoints = 5;
 
   VideoPlayerController? _controller;
   Timer? _watchTimer;
 
-  // PHOTO POSTS + MUSIC
   final AudioPlayer _audio = AudioPlayer();
   bool _audioStarted = false;
   Timer? _photoTimer;
@@ -658,8 +623,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
 
   int _watchSeconds = 0;
   final int _requiredWatchSeconds = 10;
-
-  // Shown on the button. 0 = the Admin paused video rewards.
   int _rewardPoints = 5;
 
   int _likeCount = 0;
@@ -697,7 +660,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
     return (widget.data['videoUrl'] ?? '').toString();
   }
 
-  // ---- photo post + music fields ----
   bool get _isPhoto => (widget.data['mediaType'] ?? 'video') == 'photo';
 
   List<String> get _imageUrls {
@@ -714,20 +676,10 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
   }
 
   String get _audioUrl => (widget.data['audioUrl'] ?? '').toString();
-
   String get _audioName => (widget.data['audioName'] ?? '').toString();
-
-  String get _productId {
-    return (widget.data['productId'] ?? '').toString();
-  }
-
-  String get _productName {
-    return (widget.data['productName'] ?? '').toString();
-  }
-
-  String get _productImageUrl {
-    return (widget.data['productImageUrl'] ?? '').toString();
-  }
+  String get _productId => (widget.data['productId'] ?? '').toString();
+  String get _productName => (widget.data['productName'] ?? '').toString();
+  String get _productImageUrl => (widget.data['productImageUrl'] ?? '').toString();
 
   double? get _productPrice {
     final value = widget.data['productPrice'];
@@ -777,7 +729,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
     _audio.setReleaseMode(ReleaseMode.loop);
 
     if (_isPhoto) {
-      // Photo posts have no video to load: show the pictures right away.
       _isLoadingVideo = false;
       _isInitialized = true;
 
@@ -795,10 +746,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
     _loadRewardPoints();
   }
 
-  // ============================================================
-  // REWARD POINTS SET BY THE ADMIN
-  // ============================================================
-
   Future<void> _loadRewardPoints() async {
     final cached = _cachedRewardPoints;
     final cachedAt = _cachedRewardAt;
@@ -806,7 +753,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
     if (cached != null &&
         cachedAt != null &&
         DateTime.now().difference(cachedAt) < const Duration(minutes: 5)) {
-      // Runs synchronously inside initState, so no setState is needed.
       _rewardPoints = cached;
       return;
     }
@@ -829,9 +775,7 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
           _rewardPoints = points;
         });
       }
-    } catch (_) {
-      // Keep the default label if the setting cannot be read.
-    }
+    } catch (_) {}
   }
 
   @override
@@ -910,10 +854,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
     }
   }
 
-  // ============================================================
-  // MUSIC + PHOTO SLIDESHOW
-  // ============================================================
-
   Future<void> _startAudio() async {
     if (_audioUrl.isEmpty) return;
 
@@ -952,7 +892,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
   }
 
   Future<void> _playVideo() async {
-    // ---------- PHOTO POST ----------
     if (_isPhoto) {
       if (mounted) {
         setState(() {
@@ -967,7 +906,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
       return;
     }
 
-    // ---------- VIDEO POST ----------
     final controller = _controller;
 
     if (controller == null || !_isInitialized) {
@@ -977,7 +915,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
     try {
       await controller.play();
 
-      // When the poster added music, the video's own sound is muted.
       if (_audioUrl.isNotEmpty) {
         await controller.setVolume(0);
         _startAudio();
@@ -997,7 +934,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
   Future<void> _pauseVideo() async {
     _stopAudio();
 
-    // ---------- PHOTO POST ----------
     if (_isPhoto) {
       _photoTimer?.cancel();
 
@@ -1011,7 +947,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
       return;
     }
 
-    // ---------- VIDEO POST ----------
     final controller = _controller;
 
     if (controller == null) {
@@ -1160,7 +1095,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
         return;
       }
 
-      // No email here: the server does not need it.
       await claimRef.set({
         'userId': user.uid,
         'videoId': widget.videoId,
@@ -1235,8 +1169,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
     });
 
     try {
-      // Only the like document is written here. The counters
-      // (likeCount / totalLikes) are updated by Cloud Functions.
       final likeRef = FirebaseFirestore.instance
           .collection('sellerVideos')
           .doc(widget.videoId)
@@ -1285,7 +1217,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
 
     final user = currentUser;
 
-    // Guests are not counted (one view per signed-in user).
     if (user == null) {
       return;
     }
@@ -1305,7 +1236,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
         return;
       }
 
-      // The Cloud Function increases viewCount / totalViews.
       await viewRef.set({
         'userId': user.uid,
         'createdAt': FieldValue.serverTimestamp(),
@@ -1320,7 +1250,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
   }
 
   Future<void> _shareVideo() async {
-    // Video posts share the video link, photo posts share the first photo.
     final link = _videoUrl.isNotEmpty
         ? _videoUrl
         : (_imageUrls.isNotEmpty ? _imageUrls.first : '');
@@ -1342,8 +1271,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
     }
 
     try {
-      // One share record per user. A second share by the same
-      // user is rejected by the rules, so it is not counted twice.
       await FirebaseFirestore.instance
           .collection('sellerVideos')
           .doc(widget.videoId)
@@ -1430,7 +1357,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
     }
 
     try {
-      // Open the real product page (add to cart / buy is there).
       final productDoc = await FirebaseFirestore.instance
           .collection('products')
           .doc(_productId)
@@ -1560,7 +1486,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
   }
 
   Widget _buildVideo() {
-    // ---------- PHOTO POST: slideshow ----------
     if (_isPhoto) {
       final images = _imageUrls;
 
@@ -1631,7 +1556,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
       );
     }
 
-    // ---------- VIDEO POST ----------
     if (_isLoadingVideo) {
       return const Center(
         child: CircularProgressIndicator(color: Colors.white),
@@ -1764,9 +1688,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
                     ),
                   ),
                   const SizedBox(width: 5),
-
-                  // "Add to Cart" button: everyone except the owner of
-                  // the video/product (nobody buys their own product).
                   if (currentUser?.uid != _sellerId)
                     Container(
                       padding: const EdgeInsets.all(7),
@@ -1851,7 +1772,6 @@ class _ReelsVideoItemState extends State<_ReelsVideoItem> {
   }
 
   Widget _buildRewardButton() {
-    // Not eligible, or the Admin paused video rewards (0 points).
     if (!_rewardEligible || _rewardPoints <= 0) {
       return const SizedBox.shrink();
     }
@@ -2035,7 +1955,6 @@ class _CommentsSheetState extends State<_CommentsSheet> {
       final userData = userDoc.data() ?? {};
 
       final name = (userData['name'] ?? user.displayName ?? 'User').toString();
-
       final profileImageUrl = (userData['profileImageUrl'] ?? '').toString();
 
       final commentRef = FirebaseFirestore.instance
@@ -2044,9 +1963,6 @@ class _CommentsSheetState extends State<_CommentsSheet> {
           .collection('comments')
           .doc();
 
-      // Only the comment is written here. commentCount /
-      // totalComments are updated by Cloud Functions.
-      // No email: comments are public.
       await commentRef.set({
         'commentId': commentRef.id,
         'userId': user.uid,
@@ -2158,11 +2074,8 @@ class _CommentsSheetState extends State<_CommentsSheet> {
                       final data = docs[index].data();
 
                       final name = (data['userName'] ?? 'User').toString();
-
                       final text = (data['text'] ?? '').toString();
-
-                      final imageUrl =
-                          (data['profileImageUrl'] ?? '').toString();
+                      final imageUrl = (data['profileImageUrl'] ?? '').toString();
 
                       return Padding(
                         padding: const EdgeInsets.symmetric(
