@@ -2616,8 +2616,8 @@ class _HomePageState extends State<HomePage>
             label: 'Categories',
           ),
           const NavigationDestination(
-            icon: Icon(Icons.eco_outlined),
-            selectedIcon: Icon(Icons.eco),
+            icon: _FreshNavIcon(size: 26),
+            selectedIcon: _FreshNavIcon(size: 32),
             label: 'Fresh',
           ),
           NavigationDestination(
@@ -3176,6 +3176,24 @@ class _SkeletonGrid extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Fresh Bazar logo shown in the bottom navigation bar.
+class _FreshNavIcon extends StatelessWidget {
+  final double size;
+
+  const _FreshNavIcon({required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    return Image.asset(
+      'assets/fresh_logo.png',
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
+      errorBuilder: (context, error, stackTrace) => Icon(Icons.eco, size: size),
     );
   }
 }
