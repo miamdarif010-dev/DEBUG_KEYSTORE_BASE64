@@ -64,6 +64,9 @@ class _AddProductPageState extends State<AddProductPage> {
 
   String _selectedCategory = 'Phones';
 
+  // Fresh Bazar Express: seller marks raw goods / fast delivery products.
+  bool _isFastDelivery = false;
+
   // Variants: sizes and colors (each color has its own images)
   static const int _maxColorImages = 6;
 
@@ -589,6 +592,7 @@ class _AddProductPageState extends State<AddProductPage> {
         'currencySymbol': '৳',
 
         'category': _selectedCategory,
+        'isFastDelivery': _isFastDelivery,
         'description': description,
 
         'imageUrl': _uploadedImageUrls.first,
@@ -673,6 +677,7 @@ class _AddProductPageState extends State<AddProductPage> {
         _pickedVideo = null;
         _uploadedVideoUrl = null;
         _selectedCategory = _categories.first;
+        _isFastDelivery = false;
         _priceResult = null;
         _priceFormVersion++;
       });
@@ -1551,7 +1556,28 @@ class _AddProductPageState extends State<AddProductPage> {
                       ),
                       const SizedBox(height: 14),
                       _buildCategoryDropdown(),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 10),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                          'Fresh Bazar Express',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: const Text(
+                          'Raw goods / fast delivery product '
+                          '(vegetables, fish, meat, eggs...)',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        value: _isFastDelivery,
+                        onChanged: busy
+                            ? null
+                            : (bool value) {
+                                setState(() {
+                                  _isFastDelivery = value;
+                                });
+                              },
+                      ),
+                      const SizedBox(height: 4),
                       _buildTextField(
                         controller: _descriptionController,
                         label: 'Description',
