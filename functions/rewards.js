@@ -14,6 +14,9 @@
 //   referralBonusPoints      default 200   points for the INVITER
 //   referralWelcomePoints    default 50    points for the NEW user
 //   referralMaxPerUser       default 50    max rewarded invites per user (0 = no limit)
+//   pointsPerAd              default 3     points for one rewarded video AD (0 = paused)
+//   dailyAdLimit             default 10    rewarded ads per user per day
+//   adCooldownSeconds        default 30    minimum seconds between two ad rewards
 //   pointsPerTaka            default 100   (100 points = 1 Taka)
 //   minPointsToConvert       default 500
 //   pointsConversionEnabled  default true
@@ -822,6 +825,213 @@ exports.adminAdjustPoints = onCall({ region: REGION }, async (request) => {
     });
 
     return { newBalance };
+  });
+
+  return { success: true, ...result };
+});
+// ============================================================
+// REWARDED VIDEO AD -> POINTS
+// ============================================================
+//
+// The app shows an AdMob rewarded video ad. When the user has watched it to
+// the end, the app calls claimAdReward. The server checks the daily limit and
+// a short cooldown, then adds the points. The first reward of an invited
+// user also pays the invite bonus (same rules as the old video reward).
+//
+// users/{uid}/rewardDaily/{day}.adCount    ads rewarded today
+// users/{uid}/rewardDaily/{day}.lastAdAt   time of the last ad reward
+
+exports.claimAdReward = onCall({ region: REGION }, async (request) => {
+  const uid = requireUid(request);
+  const today = dayKey(0);
+
+  const userRef = db.collection("users").doc(uid);
+  const configRef = db.collection("platformSettings").doc("monetization");
+  const dailyRef = userRef.collection("rewardDaily").doc(today);
+
+  const result = await db.runTransaction(async (tx) => {
+    const [userSnap, configSnap, dailySnap] = await Promise.all([
+      tx.get(userRef),
+      tx.get(configRef),
+      tx.get(dailyRef),
+    ]);
+
+    if (!userSnap.exists) {
+      throw new HttpsError("not-found", "User account not found.");
+    }
+
+    const config = configSnap.exists ? configSnap.data() || {} : {};
+
+    const pointsPerAd = intOr(config.pointsPerAd, 0, 1000, 3);
+    const dailyAdLimit = intOr(config.dailyAdLimit, 1, 1000, 10);
+    const cooldownSeconds = intOr(config.adCooldownSeconds, 0, 3600, 30);
+
+    if (pointsPerAd <= 0) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Ad rewards are currently paused."
+      );
+    }
+
+    const daily = dailySnap.exists ? dailySnap.data() || {} : {};
+    const adsToday = Number(daily.adCount) || 0;
+
+    if (adsToday >= dailyAdLimit) {
+      throw new HttpsError(
+        "resource-exhausted",
+        "You reached today's ad limit. Come back tomorrow!"
+      );
+    }
+
+    const lastMs =
+      daily.lastAdAt && typeof daily.lastAdAt.toMillis === "function"
+        ? daily.lastAdAt.toMillis()
+        : 0;
+
+    if (cooldownSeconds > 0 && Date.now() - lastMs < cooldownSeconds * 1000) {
+      throw new HttpsError(
+        "resource-exhausted",
+        "Please wait a moment before the next ad."
+      );
+    }
+
+    // ---------- referral (first reward of an invited user) ----------
+    const user = userSnap.data() || {};
+    const referredBy =
+      typeof user.referredBy === "string" ? user.referredBy : "";
+    const referralEnabled = config.referralEnabled !== false;
+    const referralPending =
+      referralEnabled && referredBy && user.referralStatus === "pending";
+
+    const inviterRef = referredBy ? db.collection("users").doc(referredBy) : null;
+    const referralDocRef = db.collection("referrals").doc(uid);
+    const inviterTxRef = inviterRef
+      ? inviterRef.collection("pointsTransactions").doc(`referral_${uid}`)
+      : null;
+
+    let inviterBonus = 0;
+    let welcomeBonus = 0;
+    let referralResult = "";
+
+    if (referralPending && inviterRef) {
+      const [inviterSnap, referralSnap, inviterTxSnap] = await Promise.all([
+        tx.get(inviterRef),
+        tx.get(referralDocRef),
+        tx.get(inviterTxRef),
+      ]);
+
+      const valid =
+        inviterSnap.exists && referralSnap.exists && !inviterTxSnap.exists;
+
+      if (!valid) {
+        referralResult = "invalid";
+      } else {
+        const maxReferrals = intOr(config.referralMaxPerUser, 0, 100000, 50);
+        const inviterCount =
+          Number((inviterSnap.data() || {}).referralCount) || 0;
+
+        if (maxReferrals > 0 && inviterCount >= maxReferrals) {
+          referralResult = "capped";
+        } else {
+          referralResult = "rewarded";
+          inviterBonus = intOr(config.referralBonusPoints, 0, 1000000, 200);
+          welcomeBonus = intOr(config.referralWelcomePoints, 0, 1000000, 50);
+        }
+      }
+    }
+
+    const totalPoints = pointsPerAd + welcomeBonus;
+
+    // ---------- writes ----------
+    const userUpdate = {
+      pointsBalance: FieldValue.increment(totalPoints),
+      lifetimePoints: FieldValue.increment(totalPoints),
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
+    if (referralResult) {
+      userUpdate.referralStatus = referralResult;
+    }
+
+    tx.set(userRef, userUpdate, { merge: true });
+
+    tx.set(
+      dailyRef,
+      {
+        adCount: adsToday + 1,
+        lastAdAt: FieldValue.serverTimestamp(),
+        day: today,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    tx.set(userRef.collection("pointsTransactions").doc(), {
+      userId: uid,
+      type: "Watched ad",
+      source: "ad_reward",
+      points: pointsPerAd,
+      day: today,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    if (referralResult) {
+      tx.set(
+        referralDocRef,
+        {
+          status: referralResult,
+          inviterPoints: inviterBonus,
+          welcomePoints: welcomeBonus,
+          rewardedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+
+    if (welcomeBonus > 0) {
+      tx.set(userRef.collection("pointsTransactions").doc("referral_welcome"), {
+        userId: uid,
+        type: "Invite welcome bonus",
+        source: "referral_welcome",
+        points: welcomeBonus,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    }
+
+    if (inviterBonus > 0 && inviterRef) {
+      tx.set(
+        inviterRef,
+        {
+          pointsBalance: FieldValue.increment(inviterBonus),
+          lifetimePoints: FieldValue.increment(inviterBonus),
+          referralCount: FieldValue.increment(1),
+          referralEarnings: FieldValue.increment(inviterBonus),
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      tx.set(inviterTxRef, {
+        userId: referredBy,
+        type: "Invite bonus",
+        source: "referral",
+        points: inviterBonus,
+        invitedUserId: uid,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+
+      tx.set(inviterRef.collection("notifications").doc(), {
+        title: "Invite Bonus!",
+        message: `Your friend joined and earned their first reward. You got ${inviterBonus} points.`,
+        type: "referral",
+        amount: inviterBonus,
+        read: false,
+        isRead: false,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    }
+
+    return { points: pointsPerAd, adsLeft: dailyAdLimit - adsToday - 1 };
   });
 
   return { success: true, ...result };
