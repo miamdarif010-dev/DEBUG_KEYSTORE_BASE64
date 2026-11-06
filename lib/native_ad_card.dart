@@ -32,6 +32,17 @@ class AdConfig {
 
     return 'ca-app-pub-XXXXXXXXXXXXXXXX/ZZZZZZZZZZ'; // কার্ড ID
   }
+
+  // Watch & Earn: Rewarded video ad unit ID
+  static String get rewardedAdUnitId {
+    if (useTestAds) {
+      return Platform.isAndroid
+          ? 'ca-app-pub-3940256099942544/5224354917'
+          : 'ca-app-pub-3940256099942544/1712485313';
+    }
+
+    return 'ca-app-pub-XXXXXXXXXXXXXXXX/RRRRRRRRRR'; // Rewarded ID
+  }
 }
 
 // =========================================================
