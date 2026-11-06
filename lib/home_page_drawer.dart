@@ -98,9 +98,9 @@ class _HomeDrawer extends StatelessWidget {
                 },
               ),
             ListTile(
-              leading: const Icon(Icons.video_library_outlined),
-              title: const Text('Videos'),
-              subtitle: const Text('Watch Reels & Videos'),
+              leading: const Icon(Icons.local_grocery_store_outlined),
+              title: const Text('Fresh Bazar'),
+              subtitle: const Text('Fresh products, fast delivery'),
               onTap: () {
                 nav.pop();
                 onVideos();
