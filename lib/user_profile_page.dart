@@ -13,7 +13,7 @@ import 'admin_commission_page.dart';
 import 'entrepreneur_page.dart';
 import 'login_page.dart';
 import 'public_store_products.dart';
-import 'watch_earn_page.dart';
+import 'earn_page.dart';
 import 'seller_page.dart';
 
 class UserProfilePage extends StatefulWidget {
@@ -325,7 +325,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   void _openEarn() {
-    _push(const WatchEarnPage());
+    _push(const EarnPage());
   }
 
   void _openSettings() {
@@ -930,8 +930,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       children: [
                         _menuItem(
                           icon: Icons.play_circle_fill,
-                          title: 'Watch & Earn',
-                          subtitle: 'Watch videos and earn',
+                          title: 'Play & Earn',
+                          subtitle: 'Play games, earn points, convert to wallet',
                           onTap: _openEarn,
                         ),
                       ],
