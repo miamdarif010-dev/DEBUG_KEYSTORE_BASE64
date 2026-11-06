@@ -3,11 +3,13 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'login_page.dart';
+import 'native_ad_card.dart';
 
-/// Points & Wallet (convert points, invite friends, earning history)
+/// Points & Wallet (watch an ad, convert points, invite friends, history)
 ///
 /// Uses only the backend you already have:
 ///  - users/{uid}                          pointsBalance, lifetimePoints
@@ -34,6 +36,10 @@ class _WatchEarnPageState extends State<WatchEarnPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   bool _converting = false;
+  bool _adBusy = false;
+
+  // Rewarded video ad (loaded in advance so the button is instant).
+  RewardedAd? _rewardedAd;
   bool _referralBusy = false;
 
   final TextEditingController _codeController = TextEditingController();
@@ -49,6 +55,8 @@ class _WatchEarnPageState extends State<WatchEarnPage> {
   @override
   void initState() {
     super.initState();
+
+    _loadRewardedAd();
 
     _configStream = _firestore
         .collection('platformSettings')
@@ -79,6 +87,7 @@ class _WatchEarnPageState extends State<WatchEarnPage> {
 
   @override
   void dispose() {
+    _rewardedAd?.dispose();
     _codeController.dispose();
     super.dispose();
   }
@@ -254,15 +263,26 @@ class _WatchEarnPageState extends State<WatchEarnPage> {
     final dailyConvertLimit =
         (config['maxConvertTakaPerDay'] as num?)?.toInt() ?? 0;
 
-    // ---- ৳ already converted today ----
+    // ---- ad reward numbers (same defaults as the server) ----
+    var pointsPerAd = (config['pointsPerAd'] as num?)?.toInt() ?? 3;
+    if (pointsPerAd < 0) pointsPerAd = 0;
+
+    var dailyAdLimit = (config['dailyAdLimit'] as num?)?.toInt() ?? 10;
+    if (dailyAdLimit < 1) dailyAdLimit = 1;
+
+    // ---- today: ৳ already converted, ads already watched ----
     final todayKey = _keyOf(_todayBd);
     var convertedToday = 0;
+    var adsToday = 0;
 
     for (final doc in dayDocs) {
       if (doc.id == todayKey) {
         convertedToday = (doc.data()['convertedTaka'] as num?)?.toInt() ?? 0;
+        adsToday = (doc.data()['adCount'] as num?)?.toInt() ?? 0;
       }
     }
+
+    final adsLeft = (dailyAdLimit - adsToday).clamp(0, dailyAdLimit);
 
     int? convertLeft;
 
@@ -280,6 +300,12 @@ class _WatchEarnPageState extends State<WatchEarnPage> {
           _loginBanner(),
           const SizedBox(height: 14),
         ],
+        _adCard(
+          loggedIn: loggedIn,
+          pointsPerAd: pointsPerAd,
+          adsLeft: adsLeft,
+        ),
+        const SizedBox(height: 16),
         _convertCard(
           loggedIn: loggedIn,
           enabled: enabled,
@@ -444,6 +470,172 @@ class _WatchEarnPageState extends State<WatchEarnPage> {
             ),
           ),
           TextButton(onPressed: _openLogin, child: const Text('Login')),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // REWARDED VIDEO AD
+  // ============================================================
+
+  void _loadRewardedAd() {
+    RewardedAd.load(
+      adUnitId: AdConfig.rewardedAdUnitId,
+      request: const AdRequest(),
+      rewardedAdLoadCallback: RewardedAdLoadCallback(
+        onAdLoaded: (ad) {
+          if (!mounted) {
+            ad.dispose();
+            return;
+          }
+
+          setState(() => _rewardedAd = ad);
+        },
+        onAdFailedToLoad: (error) {
+          if (!mounted) return;
+
+          setState(() => _rewardedAd = null);
+        },
+      ),
+    );
+  }
+
+  Future<void> _watchAd() async {
+    if (_user == null) {
+      _toast('Please login to earn points.');
+      return;
+    }
+
+    if (_adBusy) return;
+
+    final ad = _rewardedAd;
+
+    if (ad == null) {
+      _toast('Ad is not ready yet. Please try again in a moment.');
+      _loadRewardedAd();
+      return;
+    }
+
+    setState(() {
+      _adBusy = true;
+      _rewardedAd = null;
+    });
+
+    var earned = false;
+
+    ad.fullScreenContentCallback = FullScreenContentCallback(
+      onAdDismissedFullScreenContent: (ad) async {
+        ad.dispose();
+
+        // Points are given only if the ad was watched to the end.
+        if (earned) await _claimAdReward();
+
+        if (mounted) setState(() => _adBusy = false);
+
+        _loadRewardedAd();
+      },
+      onAdFailedToShowFullScreenContent: (ad, error) {
+        ad.dispose();
+
+        if (mounted) setState(() => _adBusy = false);
+
+        _toast('Could not show the ad. Please try again.');
+
+        _loadRewardedAd();
+      },
+    );
+
+    await ad.show(
+      onUserEarnedReward: (view, reward) {
+        earned = true;
+      },
+    );
+  }
+
+  Future<void> _claimAdReward() async {
+    try {
+      final response = await FirebaseFunctions.instanceFor(
+        region: 'asia-northeast3',
+      ).httpsCallable('claimAdReward').call();
+
+      final data = Map<String, dynamic>.from(response.data as Map);
+
+      _toast('+${data['points']} points added.');
+    } on FirebaseFunctionsException catch (e) {
+      _toast(e.message ?? 'Could not add points. Please try again.');
+    } catch (_) {
+      _toast('Could not add points. Please try again.');
+    }
+  }
+
+  Widget _adCard({
+    required bool loggedIn,
+    required int pointsPerAd,
+    required int adsLeft,
+  }) {
+    final String label;
+    VoidCallback? onTap;
+
+    if (!loggedIn) {
+      label = 'Login to Earn';
+      onTap = _openLogin;
+    } else if (pointsPerAd <= 0) {
+      label = 'Paused';
+    } else if (adsLeft <= 0) {
+      label = 'Come back tomorrow';
+    } else if (_adBusy) {
+      label = 'Please wait...';
+    } else if (_rewardedAd == null) {
+      label = 'Loading ad...';
+    } else {
+      label = 'Watch Ad  +$pointsPerAd';
+      onTap = _watchAd;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: _cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.ondemand_video_rounded, color: Colors.redAccent),
+              SizedBox(width: 8),
+              Text(
+                'Watch Ad & Earn',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            pointsPerAd > 0
+                ? 'Watch a short video ad to the end and get +$pointsPerAd '
+                    'points.  $adsLeft ads left today.'
+                : 'Ad rewards are paused right now.',
+            style: const TextStyle(color: Colors.black87, height: 1.35),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: FilledButton.icon(
+              onPressed: onTap,
+              icon: _adBusy
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.play_circle_fill_rounded),
+              label: Text(label),
+            ),
+          ),
         ],
       ),
     );
