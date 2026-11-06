@@ -18,7 +18,7 @@ import 'settings_page.dart';
 import 'cart_page.dart';
 import 'categories_page.dart';
 import 'category_service.dart';
-import 'news_feed_page.dart';
+import 'fresh_bazar_page.dart';
 import 'product_details_page.dart';
 import 'global_notifications_page.dart';
 import 'coupon_page.dart';
@@ -1126,7 +1126,7 @@ class _HomePageState extends State<HomePage>
     if (index == 2) {
       await Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => const NewsFeedPage()),
+        MaterialPageRoute(builder: (context) => const FreshBazarPage()),
       );
 
       if (mounted) {
@@ -1177,13 +1177,14 @@ class _HomePageState extends State<HomePage>
   }
 
   // =========================================================
-  // VIDEOS
+  // FRESH BAZAR (opened by the "Fresh" button and the drawer item
+  // that still uses the old name `onVideos`)
   // =========================================================
 
   void _openVideos() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const NewsFeedPage()),
+      MaterialPageRoute(builder: (context) => const FreshBazarPage()),
     );
   }
 
@@ -2615,9 +2616,9 @@ class _HomePageState extends State<HomePage>
             label: 'Categories',
           ),
           const NavigationDestination(
-            icon: Icon(Icons.video_library_outlined),
-            selectedIcon: Icon(Icons.video_library),
-            label: 'Videos',
+            icon: Icon(Icons.local_grocery_store_outlined),
+            selectedIcon: Icon(Icons.local_grocery_store),
+            label: 'Fresh',
           ),
           NavigationDestination(
             icon: _CartNavIcon(key: ValueKey('cart_${user?.uid}'), user: user),
