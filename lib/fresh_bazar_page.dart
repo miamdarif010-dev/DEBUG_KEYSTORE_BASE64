@@ -223,7 +223,7 @@ class _FreshBazarPageState extends State<FreshBazarPage> {
               Expanded(
                 child: visible.isEmpty
                     ? _message(
-                        icon: Icons.local_grocery_store_outlined,
+                        icon: Icons.eco_outlined,
                         text: 'এখনো কোনো পণ্য নেই',
                       )
                     : shown.isEmpty
