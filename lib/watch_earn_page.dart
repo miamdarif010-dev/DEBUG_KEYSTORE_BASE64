@@ -6,13 +6,12 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'login_page.dart';
-import 'news_feed_page.dart';
 
-/// Watch & Earn
+/// Points & Wallet (convert points, invite friends, earning history)
 ///
 /// Uses only the backend you already have:
 ///  - users/{uid}                          pointsBalance, lifetimePoints
-///  - users/{uid}/rewardDaily/{YYYY-MM-DD} count   (today, streak, week chart)
+///  - users/{uid}/rewardDaily/{YYYY-MM-DD} convertedTaka (today's conversion limit)
 ///  - users/{uid}/pointsTransactions       history
 ///  - platformSettings/monetization        conversion rate
 ///  - callable convertPointsToWallet       points -> wallet
@@ -24,11 +23,6 @@ class WatchEarnPage extends StatefulWidget {
 }
 
 class _WatchEarnPageState extends State<WatchEarnPage> {
-  // Set by the Admin (platformSettings/monetization). These are only the
-  // defaults used until the settings arrive; _buildContent updates them.
-  int _dailyLimit = 20; // dailyVideoLimit
-  int _pointsPerVideo = 5; // pointsPerVideo
-
   static const Color _bg = Color(0xFFF6F6F8);
 
   static const LinearGradient _gradient = LinearGradient(
@@ -98,24 +92,6 @@ class _WatchEarnPageState extends State<WatchEarnPage> {
 
   String _keyOf(DateTime d) => d.toIso8601String().substring(0, 10);
 
-  int _streak(Map<String, int> counts) {
-    var cursor = _todayBd;
-
-    // Today not watched yet: the streak is still alive until midnight.
-    if ((counts[_keyOf(cursor)] ?? 0) == 0) {
-      cursor = cursor.subtract(const Duration(days: 1));
-    }
-
-    var streak = 0;
-
-    while ((counts[_keyOf(cursor)] ?? 0) > 0) {
-      streak++;
-      cursor = cursor.subtract(const Duration(days: 1));
-    }
-
-    return streak;
-  }
-
   String _formatPoints(int points) {
     return points.toString().replaceAllMapped(
           RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
@@ -155,18 +131,6 @@ class _WatchEarnPageState extends State<WatchEarnPage> {
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const LoginPage()),
-    );
-  }
-
-  Future<void> _openVideos() async {
-    if (_user == null) {
-      _toast('Please login to earn points.');
-      return;
-    }
-
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const NewsFeedPage()),
     );
   }
 
@@ -231,7 +195,7 @@ class _WatchEarnPageState extends State<WatchEarnPage> {
       backgroundColor: _bg,
       appBar: AppBar(
         title: const Text(
-          'Watch & Earn',
+          'Points & Wallet',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
@@ -273,17 +237,6 @@ class _WatchEarnPageState extends State<WatchEarnPage> {
   }) {
     final loggedIn = _user != null;
 
-    // ---- reward numbers set by the Admin ----
-    var perVideo = (config['pointsPerVideo'] as num?)?.toInt() ?? 5;
-    if (perVideo < 0) perVideo = 0;
-    if (perVideo > 1000) perVideo = 1000;
-    _pointsPerVideo = perVideo;
-
-    var dayLimit = (config['dailyVideoLimit'] as num?)?.toInt() ?? 20;
-    if (dayLimit < 1) dayLimit = 1;
-    if (dayLimit > 1000) dayLimit = 1000;
-    _dailyLimit = dayLimit;
-
     // ---- user ----
     final points = (userData['pointsBalance'] as num?)?.toInt() ?? 0;
     final lifetime = (userData['lifetimePoints'] as num?)?.toInt() ?? 0;
@@ -297,31 +250,19 @@ class _WatchEarnPageState extends State<WatchEarnPage> {
     var minPoints = (config['minPointsToConvert'] as num?)?.toInt() ?? 500;
     if (minPoints < pointsPerTaka) minPoints = pointsPerTaka;
 
-    // streak bonus (same limits as functions/rewards.js)
-    final streakEnabled = config['streakBonusEnabled'] != false;
-
-    var streakDays = (config['streakBonusDays'] as num?)?.toInt() ?? 7;
-    if (streakDays < 2) streakDays = 2;
-    if (streakDays > 60) streakDays = 60;
-
-    final streakPoints = (config['streakBonusPoints'] as num?)?.toInt() ?? 50;
-
     // max ৳ a user can convert per day (0 = no limit)
     final dailyConvertLimit =
         (config['maxConvertTakaPerDay'] as num?)?.toInt() ?? 0;
 
-    // ---- daily data ----
-    final counts = <String, int>{};
-    final converted = <String, int>{};
+    // ---- ৳ already converted today ----
+    final todayKey = _keyOf(_todayBd);
+    var convertedToday = 0;
 
     for (final doc in dayDocs) {
-      counts[doc.id] = (doc.data()['count'] as num?)?.toInt() ?? 0;
-      converted[doc.id] = (doc.data()['convertedTaka'] as num?)?.toInt() ?? 0;
+      if (doc.id == todayKey) {
+        convertedToday = (doc.data()['convertedTaka'] as num?)?.toInt() ?? 0;
+      }
     }
-
-    final today = _todayBd;
-    final todayCount = counts[_keyOf(today)] ?? 0;
-    final convertedToday = converted[_keyOf(today)] ?? 0;
 
     int? convertLeft;
 
@@ -329,34 +270,16 @@ class _WatchEarnPageState extends State<WatchEarnPage> {
       convertLeft = dailyConvertLimit - convertedToday;
       if (convertLeft < 0) convertLeft = 0;
     }
-    final remaining = (_dailyLimit - todayCount).clamp(0, _dailyLimit);
-    final streak = _streak(counts);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 30),
       children: [
         _hero(points, lifetime, pointsPerTaka),
         const SizedBox(height: 14),
-        _statTiles(todayCount, streak, remaining),
-        const SizedBox(height: 14),
         if (!loggedIn) ...[
           _loginBanner(),
           const SizedBox(height: 14),
         ],
-        _watchButton(loggedIn, remaining),
-        const SizedBox(height: 16),
-        _dailyGoalCard(todayCount, remaining),
-        const SizedBox(height: 16),
-        if (streakEnabled && streakPoints > 0) ...[
-          _streakCard(streak, streakDays, streakPoints, todayCount),
-          const SizedBox(height: 16),
-        ],
-        if (config['referralEnabled'] != false) ...[
-          _inviteCard(userData, config, loggedIn),
-          const SizedBox(height: 16),
-        ],
-        _weekCard(counts, today),
-        const SizedBox(height: 16),
         _convertCard(
           loggedIn: loggedIn,
           enabled: enabled,
@@ -367,8 +290,10 @@ class _WatchEarnPageState extends State<WatchEarnPage> {
           dailyConvertLimit: dailyConvertLimit,
         ),
         const SizedBox(height: 16),
-        _howItWorksCard(),
-        const SizedBox(height: 16),
+        if (config['referralEnabled'] != false) ...[
+          _inviteCard(userData, config, loggedIn),
+          const SizedBox(height: 16),
+        ],
         _historyCard(),
       ],
     );
@@ -482,72 +407,6 @@ class _WatchEarnPageState extends State<WatchEarnPage> {
     );
   }
 
-  // ============================================================
-  // STAT TILES
-  // ============================================================
-
-  Widget _statTiles(int todayCount, int streak, int remaining) {
-    return Row(
-      children: [
-        Expanded(
-          child: _statTile(
-            icon: Icons.bolt_rounded,
-            color: Colors.orange,
-            value: '+${todayCount * _pointsPerVideo}',
-            label: 'Earned today',
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _statTile(
-            icon: Icons.local_fire_department_rounded,
-            color: Colors.deepOrange,
-            value: streak >= 30 ? '30+' : '$streak',
-            label: streak == 1 ? 'Day streak' : 'Days streak',
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _statTile(
-            icon: Icons.play_circle_fill_rounded,
-            color: Colors.green,
-            value: '$remaining',
-            label: 'Videos left',
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _statTile({
-    required IconData icon,
-    required Color color,
-    required String value,
-    required String label,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-      decoration: _cardDecoration(),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 26),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 11, color: Colors.grey),
-          ),
-        ],
-      ),
-    );
-  }
-
   BoxDecoration _cardDecoration() {
     return BoxDecoration(
       color: Colors.white,
@@ -563,7 +422,7 @@ class _WatchEarnPageState extends State<WatchEarnPage> {
   }
 
   // ============================================================
-  // LOGIN BANNER + WATCH BUTTON
+  // LOGIN BANNER
   // ============================================================
 
   Widget _loginBanner() {
@@ -585,230 +444,6 @@ class _WatchEarnPageState extends State<WatchEarnPage> {
             ),
           ),
           TextButton(onPressed: _openLogin, child: const Text('Login')),
-        ],
-      ),
-    );
-  }
-
-  Widget _watchButton(bool loggedIn, int remaining) {
-    final limitReached = loggedIn && remaining == 0;
-
-    final label = !loggedIn
-        ? 'Login to Earn'
-        : limitReached
-            ? 'Daily limit reached'
-            : 'Watch & Earn +$_pointsPerVideo';
-
-    return Opacity(
-      opacity: limitReached ? 0.55 : 1,
-      child: Container(
-        height: 58,
-        decoration: BoxDecoration(
-          gradient: _gradient,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.redAccent.withValues(alpha: 0.28),
-              blurRadius: 12,
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(18),
-            onTap: limitReached
-                ? () => _toast('You reached today\'s limit. Come back tomorrow!')
-                : (loggedIn ? _openVideos : _openLogin),
-            child: Center(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    limitReached ? Icons.check_circle : Icons.play_arrow_rounded,
-                    color: Colors.white,
-                    size: 28,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ============================================================
-  // DAILY GOAL
-  // ============================================================
-
-  Widget _dailyGoalCard(int todayCount, int remaining) {
-    final shown = todayCount > _dailyLimit ? _dailyLimit : todayCount;
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: _cardDecoration(),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 92,
-            height: 92,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                SizedBox(
-                  width: 92,
-                  height: 92,
-                  child: CircularProgressIndicator(
-                    value: shown / _dailyLimit,
-                    strokeWidth: 9,
-                    backgroundColor: Colors.grey.shade200,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      shown >= _dailyLimit ? Colors.green : Colors.redAccent,
-                    ),
-                  ),
-                ),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '$shown',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    Text(
-                      'of $_dailyLimit',
-                      style: const TextStyle(fontSize: 11, color: Colors.grey),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 18),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Daily goal',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  remaining > 0
-                      ? 'You can still earn ${remaining * _pointsPerVideo} points today.'
-                      : 'Goal complete! 🎉 See you tomorrow.',
-                  style: const TextStyle(color: Colors.black87, height: 1.3),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Resets at 12:00 AM (Bangladesh time)',
-                  style: TextStyle(fontSize: 11, color: Colors.grey),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ============================================================
-  // LAST 7 DAYS
-  // ============================================================
-
-  Widget _weekCard(Map<String, int> counts, DateTime today) {
-    const names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const barArea = 84.0;
-
-    final bars = <Widget>[];
-    var weekTotal = 0;
-
-    for (var i = 6; i >= 0; i--) {
-      final day = today.subtract(Duration(days: i));
-      final count = counts[_keyOf(day)] ?? 0;
-      weekTotal += count;
-
-      final ratio = (count / _dailyLimit).clamp(0.0, 1.0);
-      final isToday = i == 0;
-
-      bars.add(
-        Expanded(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Text(
-                count > 0 ? '$count' : '',
-                style: const TextStyle(fontSize: 10, color: Colors.grey),
-              ),
-              const SizedBox(height: 3),
-              Container(
-                height: count > 0 ? (barArea * ratio).clamp(6.0, barArea) : 4,
-                width: 20,
-                decoration: BoxDecoration(
-                  gradient: count > 0 ? _gradient : null,
-                  color: count > 0 ? null : Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                names[day.weekday - 1],
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
-                  color: isToday ? Colors.redAccent : Colors.grey,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: _cardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.bar_chart_rounded, color: Colors.redAccent),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'Last 7 days',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-                ),
-              ),
-              Text(
-                '$weekTotal videos • ${weekTotal * _pointsPerVideo} pts',
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            height: barArea + 44,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: bars,
-            ),
-          ),
         ],
       ),
     );
@@ -981,7 +616,7 @@ class _WatchEarnPageState extends State<WatchEarnPage> {
   Future<void> _shareCode(String code) async {
     try {
       await Share.share(
-        'Join BuyNova and earn rewards by watching videos! '
+        'Join BuyNova and earn rewards by playing games! '
         'Use my invite code $code after you sign up.',
       );
     } catch (_) {}
@@ -1021,7 +656,7 @@ class _WatchEarnPageState extends State<WatchEarnPage> {
           ),
           const SizedBox(height: 10),
           Text(
-            'Invite a friend. When they join and earn their first video '
+            'Invite a friend. When they join and earn their first '
             'reward, you get +$bonus points and they get +$welcome points.',
             style: const TextStyle(color: Colors.black87, height: 1.35),
           ),
@@ -1163,221 +798,6 @@ class _WatchEarnPageState extends State<WatchEarnPage> {
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
           ),
           Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-        ],
-      ),
-    );
-  }
-
-  // ============================================================
-  // STREAK BONUS
-  // ============================================================
-
-  Widget _streakCard(int streak, int days, int bonus, int todayCount) {
-    var inCycle = streak == 0 ? 0 : ((streak - 1) % days) + 1;
-
-    final bonusEarnedToday = inCycle == days && todayCount > 0;
-
-    // Bonus was paid on an earlier day: a new cycle starts.
-    if (inCycle == days && todayCount == 0) inCycle = 0;
-
-    final left = days - inCycle;
-
-    final String message;
-
-    if (bonusEarnedToday) {
-      message = 'Streak bonus earned! +$bonus points 🎉';
-    } else if (streak > 0 && todayCount == 0) {
-      message = 'Watch a video today to keep your $streak-day streak. '
-          '$left more ${left == 1 ? 'day' : 'days'} for +$bonus bonus points.';
-    } else {
-      message = 'Watch $left more ${left == 1 ? 'day' : 'days'} in a row '
-          'to earn +$bonus bonus points.';
-    }
-
-    final Widget progress;
-
-    if (days <= 14) {
-      progress = Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: List.generate(days, (i) {
-          final filled = bonusEarnedToday || i < inCycle;
-          final isLast = i == days - 1;
-
-          return Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: filled ? _gradient : null,
-              color: filled ? null : Colors.grey.shade200,
-            ),
-            child: Icon(
-              isLast ? Icons.card_giftcard : Icons.check,
-              size: 16,
-              color: filled ? Colors.white : Colors.grey.shade400,
-            ),
-          );
-        }),
-      );
-    } else {
-      progress = ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: LinearProgressIndicator(
-          value: bonusEarnedToday ? 1 : inCycle / days,
-          minHeight: 10,
-          backgroundColor: Colors.grey.shade200,
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: _cardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.local_fire_department_rounded,
-                color: Colors.deepOrange,
-              ),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'Streak bonus',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.deepOrange.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  '+$bonus pts',
-                  style: const TextStyle(
-                    color: Colors.deepOrange,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          progress,
-          const SizedBox(height: 12),
-          Text(
-            message,
-            style: const TextStyle(color: Colors.black87, height: 1.35),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ============================================================
-  // HOW IT WORKS
-  // ============================================================
-
-  Widget _howItWorksCard() {
-    Widget step(int number, String title, String text) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 28,
-              height: 28,
-              alignment: Alignment.center,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: _gradient,
-              ),
-              child: Text(
-                '$number',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    text,
-                    style: const TextStyle(
-                      color: Colors.grey,
-                      fontSize: 12.5,
-                      height: 1.3,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 6),
-      decoration: _cardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.lightbulb_outline_rounded, color: Colors.amber),
-              SizedBox(width: 8),
-              Text(
-                'How it works',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          step(
-            1,
-            'Watch a video',
-            'Open Videos and keep a video playing for 10 seconds.',
-          ),
-          step(
-            2,
-            'Tap Claim',
-            'Tap the claim button on the video. Each video gives '
-                '$_pointsPerVideo points, up to $_dailyLimit videos a day.',
-          ),
-          step(
-            3,
-            'Convert to money',
-            'Points are added after verification. Convert them to your '
-                'BuyNova Wallet any time.',
-          ),
-          const Padding(
-            padding: EdgeInsets.only(bottom: 12),
-            child: Text(
-              'Your own videos do not earn points, and each video can be '
-              'rewarded only once.',
-              style: TextStyle(fontSize: 11.5, color: Colors.grey),
-            ),
-          ),
         ],
       ),
     );
