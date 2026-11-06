@@ -98,7 +98,7 @@ class _HomeDrawer extends StatelessWidget {
                 },
               ),
             ListTile(
-              leading: const Icon(Icons.local_grocery_store_outlined),
+              leading: const Icon(Icons.eco_outlined),
               title: const Text('Fresh Bazar'),
               subtitle: const Text('Fresh products, fast delivery'),
               onTap: () {
