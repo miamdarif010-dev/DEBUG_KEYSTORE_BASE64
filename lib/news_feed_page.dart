@@ -101,12 +101,29 @@ class _NewsFeedPageState extends State<NewsFeedPage> {
   }
 
   bool _isPublished(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data();
     final status =
-        (doc.data()['status'] ?? 'published').toString().toLowerCase();
+        (data['status'] ?? 'published').toString().trim().toLowerCase();
 
-    return status == 'published' ||
-        status == 'active' ||
-        status == 'approved';
+    if (data['isDeleted'] == true || data['isHidden'] == true) {
+      return false;
+    }
+
+    // Hide only videos that are clearly not public. Any other status
+    // (published, active, approved, public, live, ...) is shown.
+    const hiddenStatuses = {
+      'pending',
+      'rejected',
+      'deleted',
+      'hidden',
+      'draft',
+      'blocked',
+      'removed',
+      'disabled',
+      'inactive',
+    };
+
+    return !hiddenStatuses.contains(status);
   }
 
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _sortVideos(
