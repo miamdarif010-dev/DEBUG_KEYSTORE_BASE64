@@ -6,6 +6,7 @@ import 'bike_game_page.dart';
 import 'cargo_drive_game_screen.dart';
 import 'login_page.dart';
 import 'spin_game_page.dart';
+import 'watch_earn_page.dart';
 
 // ===================================================================
 // EARNING HUB
@@ -124,6 +125,10 @@ class EarnPage extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
         children: [
           _PointsCard(stream: _userStream(), loggedIn: loggedIn),
+
+          const SizedBox(height: 14),
+
+          const _WalletCard(),
 
           const SizedBox(height: 20),
 
@@ -259,6 +264,76 @@ class _PointsCard extends StatelessWidget {
               child: const Text('Sign In'),
             ),
         ],
+      ),
+    );
+  }
+}
+
+// ===================================================================
+// POINTS & WALLET CARD (convert points, invite friends, history)
+// ===================================================================
+
+class _WalletCard extends StatelessWidget {
+  const _WalletCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const WatchEarnPage()),
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.account_balance_wallet_rounded,
+                  color: Colors.green,
+                  size: 26,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Points & Wallet',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Convert points to money, invite friends, see history',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
+        ),
       ),
     );
   }
