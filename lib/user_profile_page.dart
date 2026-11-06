@@ -15,9 +15,6 @@ import 'login_page.dart';
 import 'public_store_products.dart';
 import 'watch_earn_page.dart';
 import 'seller_page.dart';
-import 'add_seller_video_page.dart';
-import 'my_videos_page.dart';
-import 'user_videos_page.dart';
 
 class UserProfilePage extends StatefulWidget {
   final String? userId;
@@ -333,14 +330,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   void _openSettings() {
     _push(const SettingsPage());
-  }
-
-  void _openAddVideo() {
-    _push(const AddSellerVideoPage());
-  }
-
-  void _openMyVideos() {
-    _push(const MyVideosPage());
   }
 
   // =========================================================
@@ -720,24 +709,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   if (_targetUserId != null)
                     PublicStoreProducts(userId: _targetUserId!),
 
-                  if (_targetUserId != null)
-                    _sectionCard(
-                      title: 'Videos',
-                      icon: Icons.video_library_outlined,
-                      children: [
-                        _menuItem(
-                          icon: Icons.play_circle_outline,
-                          title: 'Videos',
-                          subtitle: 'See all videos',
-                          onTap: () => _push(
-                            UserVideosPage(
-                              userId: _targetUserId!,
-                              isOwner: false,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
@@ -895,26 +866,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     const SizedBox(height: 14),
                     _statsRow(),
                     const SizedBox(height: 14),
-                    if (_targetUserId != null)
-                      _sectionCard(
-                        title: 'Videos',
-                        icon: Icons.video_library_outlined,
-                        children: [
-                          _menuItem(
-                            icon: Icons.play_circle_outline,
-                            title: 'My Videos',
-                            subtitle: 'See, add and manage your videos',
-                            onTap: () => _push(
-                              UserVideosPage(
-                                userId: _targetUserId!,
-                                isOwner: true,
-                                onUpload: _openAddVideo,
-                                onManage: _openMyVideos,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
                     if (_isAdmin)
                       _sectionCard(
                         title: 'Admin',
