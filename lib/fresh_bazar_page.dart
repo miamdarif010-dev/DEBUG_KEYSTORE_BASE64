@@ -225,6 +225,7 @@ class _FreshBazarPageState extends State<FreshBazarPage> {
                     ? _message(
                         icon: Icons.eco_outlined,
                         text: 'এখনো কোনো পণ্য নেই',
+                        logo: true,
                       )
                     : shown.isEmpty
                         ? _message(
@@ -240,14 +241,28 @@ class _FreshBazarPageState extends State<FreshBazarPage> {
     );
   }
 
-  Widget _message({required IconData icon, required String text}) {
+  Widget _message({
+    required IconData icon,
+    required String text,
+    bool logo = false,
+  }) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 56, color: Colors.grey.shade400),
+            if (logo)
+              Image.asset(
+                'assets/fresh_logo.png',
+                width: 150,
+                height: 150,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) =>
+                    Icon(icon, size: 56, color: Colors.grey.shade400),
+              )
+            else
+              Icon(icon, size: 56, color: Colors.grey.shade400),
             const SizedBox(height: 10),
             Text(
               text,
