@@ -2616,8 +2616,8 @@ class _HomePageState extends State<HomePage>
             label: 'Categories',
           ),
           const NavigationDestination(
-            icon: Icon(Icons.local_grocery_store_outlined),
-            selectedIcon: Icon(Icons.local_grocery_store),
+            icon: Icon(Icons.eco_outlined),
+            selectedIcon: Icon(Icons.eco),
             label: 'Fresh',
           ),
           NavigationDestination(
