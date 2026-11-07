@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'app_shimmer.dart';
+import 'fresh_info.dart';
 import 'price_discount.dart';
 import 'product_details_page.dart';
 
@@ -68,6 +69,11 @@ class _FreshBazarPageState extends State<FreshBazarPage> {
       return false;
     }
 
+    // Fresh products need an expiry date, and expired ones are hidden.
+    if (!FreshInfo.hasExpiry(data) || FreshInfo.isExpired(data)) {
+      return false;
+    }
+
     final status = (data['status'] ?? 'active').toString().trim().toLowerCase();
 
     const hidden = {
@@ -121,7 +127,7 @@ class _FreshBazarPageState extends State<FreshBazarPage> {
   }
 
   String _categoryOf(Map<String, dynamic> data) {
-    return data['category']?.toString().trim() ?? '';
+    return data['freshCategory']?.toString().trim() ?? '';
   }
 
   void _openProduct(String id, Map<String, dynamic> data) {
@@ -190,12 +196,10 @@ class _FreshBazarPageState extends State<FreshBazarPage> {
                   _createdMillis(b.data()).compareTo(_createdMillis(a.data())),
             );
 
+          // Fixed Fresh categories (not managed by the admin).
           final categories = <String>[
             _all,
-            ...{
-              for (final d in visible)
-                if (_categoryOf(d.data()).isNotEmpty) _categoryOf(d.data()),
-            },
+            for (final c in FreshInfo.categories) c.key,
           ];
 
           final selected = categories.contains(_category) ? _category : _all;
@@ -331,7 +335,7 @@ class _FreshBazarPageState extends State<FreshBazarPage> {
           final isSelected = name == selected;
 
           return ChoiceChip(
-            label: Text(name),
+            label: Text(name == _all ? 'সব' : FreshInfo.categoryLabel(name)),
             selected: isSelected,
             showCheckmark: false,
             selectedColor: _green,
@@ -371,6 +375,9 @@ class _FreshBazarPageState extends State<FreshBazarPage> {
     final imageUrl = data['imageUrl']?.toString().trim() ?? '';
     final discount = _discountPercent(data);
     final original = _originalPrice(data);
+    final freshBadge = FreshInfo.badge(data);
+    final unit = FreshInfo.unitShort(data['unit']);
+    final packed = FreshInfo.packedOf(data);
 
     final placeholder = Container(
       color: Colors.grey.shade200,
@@ -436,6 +443,29 @@ class _FreshBazarPageState extends State<FreshBazarPage> {
                           ),
                         ),
                       ),
+                    if (freshBadge != null)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: freshBadge.color,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            freshBadge.text,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
                     Positioned(
                       left: 8,
                       bottom: 8,
@@ -483,6 +513,22 @@ class _FreshBazarPageState extends State<FreshBazarPage> {
                         height: 1.2,
                       ),
                     ),
+                    if (unit.isNotEmpty || packed != null) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        [
+                          if (unit.isNotEmpty) 'প্রতি $unit',
+                          if (packed != null)
+                            'প্যাক: ${FreshInfo.formatDate(packed).substring(0, 5)}',
+                        ].join('  •  '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 5),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
