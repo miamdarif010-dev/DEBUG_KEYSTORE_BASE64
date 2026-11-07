@@ -10,11 +10,15 @@ import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 
 import 'category_service.dart';
+import 'fresh_info.dart';
 import 'price_discount.dart';
 import 'product_variants.dart';
 
 class AddProductPage extends StatefulWidget {
-  const AddProductPage({super.key});
+  /// true = opens with the Fresh product type already selected.
+  final bool startAsFresh;
+
+  const AddProductPage({super.key, this.startAsFresh = false});
 
   @override
   State<AddProductPage> createState() => _AddProductPageState();
@@ -67,6 +71,12 @@ class _AddProductPageState extends State<AddProductPage> {
   // Fresh Bazar Express: seller marks raw goods / fast delivery products.
   bool _isFastDelivery = false;
 
+  // Fresh products only: unit, packing date and expiry date are required.
+  String? _freshCategory;
+  String _freshUnit = FreshInfo.defaultUnit;
+  DateTime? _packedDate;
+  DateTime? _expiryDate;
+
   // Variants: sizes and colors (each color has its own images)
   static const int _maxColorImages = 6;
 
@@ -117,6 +127,7 @@ class _AddProductPageState extends State<AddProductPage> {
   @override
   void initState() {
     super.initState();
+    _isFastDelivery = widget.startAsFresh;
     _loadSellerInformation();
 
     _categorySub = CategoryService.stream().listen(
@@ -535,6 +546,43 @@ class _AddProductPageState extends State<AddProductPage> {
       return;
     }
 
+    // ----- Fresh products: unit + dates are required -----
+    if (_isFastDelivery) {
+      if (FreshInfo.categoryOf(_freshCategory) == null) {
+        _showSnackBar('Please select a Fresh category.', isError: true);
+        return;
+      }
+
+      final DateTime? packed = _packedDate;
+      final DateTime? expiry = _expiryDate;
+
+      if (packed == null) {
+        _showSnackBar(
+          'Please select the packing / harvest date.',
+          isError: true,
+        );
+        return;
+      }
+
+      if (expiry == null) {
+        _showSnackBar('Please select the expiry date.', isError: true);
+        return;
+      }
+
+      if (FreshInfo.dayOnly(expiry).isBefore(FreshInfo.today())) {
+        _showSnackBar('Expiry date cannot be in the past.', isError: true);
+        return;
+      }
+
+      if (FreshInfo.dayOnly(expiry).isBefore(FreshInfo.dayOnly(packed))) {
+        _showSnackBar(
+          'Expiry date must be after the packing date.',
+          isError: true,
+        );
+        return;
+      }
+    }
+
     setState(() {
       _isSaving = true;
     });
@@ -591,8 +639,22 @@ class _AddProductPageState extends State<AddProductPage> {
         'currency': 'BDT',
         'currencySymbol': '৳',
 
-        'category': _selectedCategory,
+        'category': _isFastDelivery
+            ? FreshInfo.categoryOf(_freshCategory)!.english
+            : _selectedCategory,
         'isFastDelivery': _isFastDelivery,
+        if (_isFastDelivery) ...<String, dynamic>{
+          'freshCategory': _freshCategory,
+          'unit': _freshUnit,
+          'packedDate': Timestamp.fromDate(
+            FreshInfo.dayOnly(_packedDate!),
+          ),
+          // Valid until the end of the expiry day.
+          'expiryDate': Timestamp.fromDate(
+            FreshInfo.dayOnly(_expiryDate!)
+                .add(const Duration(hours: 23, minutes: 59)),
+          ),
+        },
         'description': description,
 
         'imageUrl': _uploadedImageUrls.first,
@@ -677,7 +739,11 @@ class _AddProductPageState extends State<AddProductPage> {
         _pickedVideo = null;
         _uploadedVideoUrl = null;
         _selectedCategory = _categories.first;
-        _isFastDelivery = false;
+        _isFastDelivery = widget.startAsFresh;
+        _freshCategory = null;
+        _freshUnit = FreshInfo.defaultUnit;
+        _packedDate = null;
+        _expiryDate = null;
         _priceResult = null;
         _priceFormVersion++;
       });
@@ -1361,6 +1427,286 @@ class _AddProductPageState extends State<AddProductPage> {
   // CATEGORY DROPDOWN
   // ============================================================
 
+  // Regular product or Fresh (Fresh Bazar Express) product.
+  Widget _buildProductTypeSelector(bool busy) {
+    Widget option({
+      required bool fresh,
+      required IconData icon,
+      required String title,
+      required String subtitle,
+    }) {
+      final selected = _isFastDelivery == fresh;
+      final color = fresh ? Colors.green : Colors.redAccent;
+
+      return Expanded(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: busy
+              ? null
+              : () {
+                  setState(() {
+                    _isFastDelivery = fresh;
+                  });
+                },
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              color: selected ? color.withValues(alpha: 0.10) : Colors.white,
+              border: Border.all(
+                color: selected ? color : Colors.grey.shade300,
+                width: selected ? 2 : 1,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, color: selected ? color : Colors.grey),
+                const SizedBox(height: 6),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: selected ? color : Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Product Type',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            option(
+              fresh: false,
+              icon: Icons.inventory_2_outlined,
+              title: 'Regular',
+              subtitle: 'Normal product',
+            ),
+            const SizedBox(width: 10),
+            option(
+              fresh: true,
+              icon: Icons.eco_outlined,
+              title: 'Fresh',
+              subtitle: 'Vegetables, fish, meat, eggs...',
+            ),
+          ],
+        ),
+        if (_isFastDelivery)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              'This product will appear in Fresh Bazar Express and in '
+              'your "My Fresh Products".',
+              style: TextStyle(fontSize: 12, color: Colors.green.shade700),
+            ),
+          ),
+      ],
+    );
+  }
+
+  // ----- Fresh category (fixed list) -----
+
+  Widget _buildFreshCategoryPicker(bool busy) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Fresh Category *',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            for (final c in FreshInfo.categories)
+              ChoiceChip(
+                avatar: Icon(
+                  c.icon,
+                  size: 18,
+                  color: _freshCategory == c.key ? Colors.white : Colors.green,
+                ),
+                label: Text(c.label),
+                selected: _freshCategory == c.key,
+                showCheckmark: false,
+                selectedColor: Colors.green,
+                labelStyle: TextStyle(
+                  color: _freshCategory == c.key ? Colors.white : Colors.black87,
+                  fontWeight: FontWeight.w600,
+                ),
+                onSelected: busy
+                    ? null
+                    : (bool _) {
+                        setState(() {
+                          _freshCategory = c.key;
+                        });
+                      },
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // ----- Fresh details: unit + packing date + expiry date -----
+
+  Future<void> _pickFreshDate({required bool expiry}) async {
+    final DateTime now = FreshInfo.today();
+
+    final DateTime initial = expiry
+        ? (_expiryDate ?? now.add(const Duration(days: 3)))
+        : (_packedDate ?? now);
+
+    final DateTime first = expiry ? now : now.subtract(const Duration(days: 30));
+    final DateTime last = now.add(const Duration(days: 365));
+
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initial.isBefore(first)
+          ? first
+          : (initial.isAfter(last) ? last : initial),
+      firstDate: first,
+      lastDate: last,
+      helpText: expiry ? 'Select expiry date' : 'Select packing / harvest date',
+    );
+
+    if (picked == null || !mounted) return;
+
+    setState(() {
+      if (expiry) {
+        _expiryDate = picked;
+      } else {
+        _packedDate = picked;
+      }
+    });
+  }
+
+  Widget _freshDateField({
+    required String label,
+    required DateTime? value,
+    required bool expiry,
+    required bool busy,
+  }) {
+    return Expanded(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: busy ? null : () => _pickFreshDate(expiry: expiry),
+        child: InputDecorator(
+          decoration: InputDecoration(
+            labelText: label,
+            prefixIcon: Icon(
+              expiry ? Icons.event_busy_outlined : Icons.inventory_outlined,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          child: Text(
+            value == null ? 'Select date' : FreshInfo.formatDate(value),
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: value == null ? Colors.grey : Colors.black87,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFreshDetails(bool busy) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.green.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.green.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.eco, color: Colors.green.shade700, size: 18),
+              const SizedBox(width: 6),
+              Text(
+                'Fresh product details',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green.shade800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Price is per unit',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              for (final u in FreshInfo.units)
+                ChoiceChip(
+                  label: Text(u.label),
+                  selected: _freshUnit == u.key,
+                  selectedColor: Colors.green.withValues(alpha: 0.2),
+                  onSelected: busy
+                      ? null
+                      : (bool _) {
+                          setState(() {
+                            _freshUnit = u.key;
+                          });
+                        },
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _freshDateField(
+                label: 'Packing date *',
+                value: _packedDate,
+                expiry: false,
+                busy: busy,
+              ),
+              const SizedBox(width: 10),
+              _freshDateField(
+                label: 'Expiry date *',
+                value: _expiryDate,
+                expiry: true,
+                busy: busy,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Both dates are required. Buyers see how many days are left, and '
+            'the product is hidden automatically after the expiry date.',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCategoryDropdown() {
     return DropdownButtonFormField<String>(
       // The key makes the dropdown rebuild when the admin's list changes.
@@ -1555,28 +1901,15 @@ class _AddProductPageState extends State<AddProductPage> {
                         },
                       ),
                       const SizedBox(height: 14),
-                      _buildCategoryDropdown(),
+                      _buildProductTypeSelector(busy),
+                      const SizedBox(height: 12),
+                      if (_isFastDelivery) ...[
+                        _buildFreshCategoryPicker(busy),
+                        const SizedBox(height: 12),
+                        _buildFreshDetails(busy),
+                      ] else
+                        _buildCategoryDropdown(),
                       const SizedBox(height: 10),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text(
-                          'Fresh Bazar Express',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        subtitle: const Text(
-                          'Raw goods / fast delivery product '
-                          '(vegetables, fish, meat, eggs...)',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                        value: _isFastDelivery,
-                        onChanged: busy
-                            ? null
-                            : (bool value) {
-                                setState(() {
-                                  _isFastDelivery = value;
-                                });
-                              },
-                      ),
                       const SizedBox(height: 4),
                       _buildTextField(
                         controller: _descriptionController,
