@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'add_product_page.dart';
+import 'my_fresh_products_page.dart';
 import 'my_products_page.dart';
 import 'seller_orders_page.dart';
 import 'seller_return_refund_page.dart';
@@ -332,6 +333,19 @@ class SellerPage extends StatelessWidget {
       context,
       MaterialPageRoute(
         builder: (context) => const MyProductsPage(),
+      ),
+    );
+  }
+
+  // =========================================================
+  // OPEN MY FRESH PRODUCTS
+  // =========================================================
+
+  void _openMyFreshProducts(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const MyFreshProductsPage(),
       ),
     );
   }
@@ -882,6 +896,18 @@ class SellerPage extends StatelessWidget {
                       enabled: true,
                       onTap: () {
                         _openMyProducts(context);
+                      },
+                    ),
+
+                    _menuCard(
+                      context: context,
+                      icon: Icons.eco_outlined,
+                      title: 'My Fresh Products',
+                      subtitle:
+                          'Your Fresh Bazar Express products.',
+                      enabled: true,
+                      onTap: () {
+                        _openMyFreshProducts(context);
                       },
                     ),
 
