@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:video_player/video_player.dart';
 
 import 'cart_page.dart';
+import 'fresh_info.dart';
 import 'login_page.dart';
 import 'checkout_page.dart';
 import 'buyer_chat_page.dart';
@@ -260,6 +261,13 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
   }
 
   String get category => widget.product['category']?.toString() ?? '';
+
+  // Fresh Bazar product (raw goods with unit + packing / expiry dates).
+  bool get isFresh => widget.product['isFastDelivery'] == true;
+
+  String get freshUnit => FreshInfo.unitShort(widget.product['unit']);
+
+  bool get _freshExpired => isFresh && FreshInfo.isExpired(widget.product);
 
   String get description {
     return widget.product['description']?.toString() ??
@@ -572,6 +580,11 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
       return;
     }
 
+    if (_freshExpired) {
+      _showSelectSnack('This product has expired');
+      return;
+    }
+
     if (!_requireSize()) return;
 
     try {
@@ -625,6 +638,11 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
 
     if (_isOwnProduct) {
       _showSelectSnack('You cannot buy your own product');
+      return;
+    }
+
+    if (_freshExpired) {
+      _showSelectSnack('This product has expired');
       return;
     }
 
@@ -2149,11 +2167,130 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
               fontSize: 26,
               color: Colors.black87,
             ),
+            if (isFresh && freshUnit.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                'প্রতি $freshUnit',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+            ],
+            _buildFreshInfoCard(),
             const SizedBox(height: 12),
             Divider(color: Colors.grey.shade200, height: 1),
           ],
         );
       },
+    );
+  }
+
+  // Packing date, expiry date and freshness badge (Fresh products only).
+  Widget _buildFreshInfoCard() {
+    if (!isFresh) return const SizedBox.shrink();
+
+    final DateTime? packed = FreshInfo.packedOf(widget.product);
+    final DateTime? expiry = FreshInfo.expiryOf(widget.product);
+    final FreshBadge? badge = FreshInfo.badge(widget.product);
+
+    if (packed == null && expiry == null) return const SizedBox.shrink();
+
+    Widget line(IconData icon, String label, String value) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Row(
+          children: [
+            Icon(icon, size: 17, color: Colors.green.shade700),
+            const SizedBox(width: 8),
+            Text(
+              '$label: ',
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+            ),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+      decoration: BoxDecoration(
+        color: Colors.green.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.eco, size: 18, color: Colors.green.shade700),
+              const SizedBox(width: 6),
+              Text(
+                'Fresh Bazar Express',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: Colors.green.shade800,
+                ),
+              ),
+              const Spacer(),
+              if (badge != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: badge.color,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    badge.text,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (packed != null)
+            line(
+              Icons.inventory_outlined,
+              'প্যাকিং/তোলার তারিখ',
+              FreshInfo.formatDate(packed),
+            ),
+          if (expiry != null)
+            line(
+              Icons.event_busy_outlined,
+              'মেয়াদ শেষ',
+              FreshInfo.formatDate(expiry),
+            ),
+          if (_freshExpired)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text(
+                'এই পণ্যের মেয়াদ শেষ হয়ে গেছে। কেনা যাবে না।',
+                style: TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -2503,9 +2640,14 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
             ),
             if (widget.onAddToStore == null) ...[
               const SizedBox(height: 22),
-              const Text(
-                'Quantity',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              Text(
+                isFresh && freshUnit.isNotEmpty
+                    ? 'Quantity ($freshUnit)'
+                    : 'Quantity',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 10),
               _buildQuantityRow(),
@@ -2555,7 +2697,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                 child: SizedBox(
                   height: 54,
                   child: ElevatedButton(
-                    onPressed: own ? null : _addToCart,
+                    onPressed: (own || _freshExpired) ? null : _addToCart,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: kAccent,
                       foregroundColor: Colors.white,
@@ -2598,7 +2740,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                 child: SizedBox(
                   height: 54,
                   child: OutlinedButton(
-                    onPressed: own ? null : _buyNow,
+                    onPressed: (own || _freshExpired) ? null : _buyNow,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: kAccent,
                       side: BorderSide(
