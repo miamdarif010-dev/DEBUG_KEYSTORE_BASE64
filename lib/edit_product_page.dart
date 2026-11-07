@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
+import 'fresh_form_fields.dart';
+import 'fresh_info.dart';
 import 'price_discount.dart';
 
 class EditProductPage extends StatefulWidget {
@@ -44,6 +46,13 @@ class _EditProductPageState extends State<EditProductPage> {
   double _initialDiscount = 0;
   DiscountResult? _priceResult;
 
+  // Fresh Bazar (type, category, unit, packing date, expiry date).
+  bool _isFresh = false;
+  String? _freshCategory;
+  String _freshUnit = FreshInfo.defaultUnit;
+  DateTime? _packedDate;
+  DateTime? _expiryDate;
+
   // =========================================================
   // CLOUDINARY
   // =========================================================
@@ -76,6 +85,7 @@ class _EditProductPageState extends State<EditProductPage> {
     _currentImageUrl = data['imageUrl']?.toString() ?? '';
 
     _readPrice(data);
+    _readFresh(data);
 
     _loadLatestProduct();
   }
@@ -99,6 +109,20 @@ class _EditProductPageState extends State<EditProductPage> {
     }
 
     _priceResult = DiscountResult(original: _initialTotal, finalPrice: price);
+  }
+
+  void _readFresh(Map<String, dynamic> data) {
+    _isFresh = data['isFastDelivery'] == true;
+    _freshCategory = FreshInfo.categoryOf(data['freshCategory'])?.key;
+
+    final String savedUnit = data['unit']?.toString().trim() ?? '';
+
+    _freshUnit = FreshInfo.unitShort(savedUnit).isEmpty
+        ? FreshInfo.defaultUnit
+        : savedUnit;
+
+    _packedDate = FreshInfo.packedOf(data);
+    _expiryDate = FreshInfo.expiryOf(data);
   }
 
   // =========================================================
@@ -134,6 +158,7 @@ class _EditProductPageState extends State<EditProductPage> {
         _categoryController.text = data['category']?.toString() ?? '';
 
         _readPrice(data);
+        _readFresh(data);
 
         setState(() {
           _currentImageUrl = data['imageUrl']?.toString() ?? '';
@@ -285,6 +310,37 @@ class _EditProductPageState extends State<EditProductPage> {
       return;
     }
 
+    // Fresh products: category, unit and both dates are required.
+    if (_isFresh) {
+      final DateTime? packed = _packedDate;
+      final DateTime? expiry = _expiryDate;
+
+      if (FreshInfo.categoryOf(_freshCategory) == null) {
+        _showMessage('Please select a Fresh category.');
+        return;
+      }
+
+      if (packed == null) {
+        _showMessage('Please select the packing / harvest date.');
+        return;
+      }
+
+      if (expiry == null) {
+        _showMessage('Please select the expiry date.');
+        return;
+      }
+
+      if (FreshInfo.dayOnly(expiry).isBefore(FreshInfo.today())) {
+        _showMessage('Expiry date cannot be in the past.');
+        return;
+      }
+
+      if (FreshInfo.dayOnly(expiry).isBefore(FreshInfo.dayOnly(packed))) {
+        _showMessage('Expiry date must be after the packing date.');
+        return;
+      }
+    }
+
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
@@ -340,7 +396,21 @@ class _EditProductPageState extends State<EditProductPage> {
         'discountPercent': hasDiscount ? priceResult.percent : 0,
         'hasDiscount': hasDiscount,
         'description': description,
-        'category': category.isNotEmpty ? category : 'General',
+        'category': _isFresh
+            ? FreshInfo.categoryOf(_freshCategory)!.english
+            : (category.isNotEmpty ? category : 'General'),
+        'isFastDelivery': _isFresh,
+        'freshCategory': _isFresh ? _freshCategory : FieldValue.delete(),
+        'unit': _isFresh ? _freshUnit : FieldValue.delete(),
+        'packedDate': _isFresh
+            ? Timestamp.fromDate(FreshInfo.dayOnly(_packedDate!))
+            : FieldValue.delete(),
+        'expiryDate': _isFresh
+            ? Timestamp.fromDate(
+                FreshInfo.dayOnly(_expiryDate!)
+                    .add(const Duration(hours: 23, minutes: 59)),
+              )
+            : FieldValue.delete(),
         'imageUrl': _currentImageUrl,
         'sellerId': sellerId,
         'sellerCode': sellerCode,
@@ -553,18 +623,56 @@ class _EditProductPageState extends State<EditProductPage> {
                     ),
                     const SizedBox(height: 14),
 
-                    // CATEGORY
-                    TextField(
-                      controller: _categoryController,
-                      textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(
-                        labelText: 'Category',
-                        hintText: 'Example: Men, Women, Electronics',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.category_outlined),
-                      ),
+                    // PRODUCT TYPE (Regular / Fresh) + FRESH DETAILS
+                    FreshFormFields(
+                      isFresh: _isFresh,
+                      category: _freshCategory,
+                      unit: _freshUnit,
+                      packedDate: _packedDate,
+                      expiryDate: _expiryDate,
+                      enabled: !_isSaving,
+                      onFreshChanged: (bool value) {
+                        setState(() {
+                          _isFresh = value;
+                        });
+                      },
+                      onCategoryChanged: (String value) {
+                        setState(() {
+                          _freshCategory = value;
+                        });
+                      },
+                      onUnitChanged: (String value) {
+                        setState(() {
+                          _freshUnit = value;
+                        });
+                      },
+                      onPackedChanged: (DateTime value) {
+                        setState(() {
+                          _packedDate = value;
+                        });
+                      },
+                      onExpiryChanged: (DateTime value) {
+                        setState(() {
+                          _expiryDate = value;
+                        });
+                      },
                     ),
                     const SizedBox(height: 14),
+
+                    // CATEGORY (regular products only)
+                    if (!_isFresh) ...[
+                      TextField(
+                        controller: _categoryController,
+                        textInputAction: TextInputAction.next,
+                        decoration: const InputDecoration(
+                          labelText: 'Category',
+                          hintText: 'Example: Men, Women, Electronics',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.category_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
 
                     // DESCRIPTION
                     TextField(
