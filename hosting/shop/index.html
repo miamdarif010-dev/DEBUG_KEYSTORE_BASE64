@@ -88,12 +88,15 @@ footer h4{color:#fff;margin:0 0 10px;font-size:14px}footer p{margin:6px 0}
 .cp{text-align:center;border-top:1px solid #2c3148;margin-top:18px;padding-top:14px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;background:#17151f;color:#fff;padding:10px 18px;border-radius:20px;font-size:13px;z-index:20}
 @media(max-width:699px){.hero h1{font-size:32px}.em{font-size:60px}.ic.h{display:none}.strip .w div:last-child{display:none}.logo{font-size:22px}}
+.abar{display:none}
+@media(max-width:699px){.abar{display:flex;align-items:center;gap:10px;background:#fff;border:2px solid var(--brand);border-radius:16px;padding:10px 12px;margin:10px 0;font-size:13px;font-weight:600}
+.abar div{flex:1}.abar a{background:var(--brand);color:#fff;border-radius:20px;padding:9px 16px;font-weight:700;white-space:nowrap}}
 </style>
  <link rel="stylesheet" href="polish.css">
  <script src="chrome-fix.js"></script>
 </head>
 <body>
-<div class="strip"><div class="w"><div>🚚 সারা বাংলাদেশে ডেলিভারি</div><div><a href="buynova://r">📱 অ্যাপে খুলুন</a></div></div></div>
+<div class="strip"><div class="w"><div>🚚 সারা বাংলাদেশে ডেলিভারি</div><div><a data-app href="#">📱 অ্যাপে খুলুন</a></div></div></div>
 <header>
  <div class="w hb"><a href="#/" class="logo"><div class="lg">🛍️</div>Buy<b>Nova</b></a>
   <div class="sr"><input id="hq" placeholder="পণ্য খুঁজুন... (যেমন: ফোন, ঘড়ি)"><button id="hs">🔍</button></div>
@@ -106,7 +109,7 @@ footer h4{color:#fff;margin:0 0 10px;font-size:14px}footer p{margin:6px 0}
  <div><div class="logo" style="color:#fff;font-size:22px"><div class="lg">🛍️</div>Buy<b>Nova</b></div><p>আপনার অনলাইন শপিং পার্টনার</p></div>
  <div><h4>দ্রুত লিংক</h4><p><a href="#/">হোম</a></p><p><a href="#/cart">কার্ট</a></p><p><a href="#/orders">আমার অর্ডার</a></p></div>
  <div><h4>সাহায্য</h4><p>যোগাযোগ</p><p>রিটার্ন নীতি</p><p>শর্তাবলী</p></div>
- <div><h4>অ্যাপ ডাউনলোড</h4><a class="sb" id="dl" href="#">⬇ অ্যাপ ডাউনলোড (APK)</a><a class="sb" href="buynova://r">📱 অ্যাপে খুলুন</a></div>
+ <div><h4>অ্যাপ ডাউনলোড</h4><a class="sb" id="dl" href="#">⬇ অ্যাপ ডাউনলোড (APK)</a><a class="sb" data-app href="#">📱 অ্যাপে খুলুন</a></div>
 </div><div class="cp">© 2026 BuyNova. সর্বস্বত্ব সংরক্ষিত।</div></div></footer>
 
 <script type="module">
@@ -178,6 +181,30 @@ $("dl").addEventListener("click", (e) => {
   toast("ডাউনলোড শুরু হচ্ছে...");
   window.location.href = DOWNLOAD_URL;
 });
+
+// ---------- open in app ----------
+// App installed -> opens this product in the app. Not installed -> APK download starts.
+const PKG = "com.buynova.app";
+const IS_ANDROID = /Android/i.test(navigator.userAgent);
+function appLink() {
+  const m = location.hash.match(/^#\/([pr])\/([^/?]+)/);
+  const path = m ? m[1] + "/" + m[2] : "r";
+  if (IS_ANDROID) {
+    return "intent://" + path + "#Intent;scheme=buynova;package=" + PKG +
+      ";S.browser_fallback_url=" + encodeURIComponent(DOWNLOAD_URL) + ";end";
+  }
+  return "buynova://" + path;
+}
+function refreshAppLinks() {
+  document.querySelectorAll("[data-app]").forEach((a) => { a.href = appLink(); });
+}
+window.addEventListener("hashchange", refreshAppLinks);
+
+// Messenger "ওয়েবসাইট" button sends ?go=/p/ID -> open that product page.
+(function () {
+  const g = new URLSearchParams(location.search).get("go");
+  if (g && g.charAt(0) === "/") history.replaceState(null, "", location.pathname + "#" + g);
+})();
 
 // ---------- cart ----------
 // Logged out: the cart stays in this browser.
@@ -422,7 +449,8 @@ async function viewProduct(kind, id) {
     return "";
   };
   const off = l.originalPrice && l.originalPrice > l.price ? Math.round((1 - l.price / l.originalPrice) * 100) : 0;
-  page(`<div style="padding-top:10px"><a href="#/" class="muted">← সব পণ্য</a></div>
+  page(`<div class="abar"><div>📱 অ্যাপে আরও সহজে কেনাকাটা করুন</div><a data-app href="#">অ্যাপে খুলুন</a></div>
+  <div style="padding-top:10px"><a href="#/" class="muted">← সব পণ্য</a></div>
   <div class="box" style="margin-top:8px"><div class="pgrid">
     <div id="gal"></div>
     <div><span class="st">✨ আপনার পছন্দের পণ্য</span><h1 class="pname" style="margin-top:10px">${esc(l.name)}</h1>
@@ -433,7 +461,7 @@ async function viewProduct(kind, id) {
       <div class="sum t" style="margin-top:0"><span>মোট (<i id="qn" style="font-style:normal">1</i>টি)</span><span id="tot">${money(l.price)}</span></div>
       <div id="pmsg"></div>
       <div class="row"><button class="btn out" id="addC">🛒 কার্টে রাখুন</button><button class="btn" id="buyN">এখনই কিনুন</button></div>
-      <div class="row"><a class="btn out" href="buynova://${kind}/${encodeURIComponent(id)}">📱 অ্যাপে খুলুন</a><button class="btn out" id="cpy">🔗 লিংক কপি</button></div></div></div>
+      <div class="row"><a class="btn out" data-app href="#">📱 অ্যাপে খুলুন</a><button class="btn out" id="cpy">🔗 লিংক কপি</button></div></div></div>
     ${l.description ? `<h3 style="margin-top:16px">পণ্যের বিবরণ</h3><div class="pdesc">${esc(l.description)}</div>` : ""}</div>`);
 
   const drawGal = () => {
@@ -458,6 +486,7 @@ async function viewProduct(kind, id) {
     $("opts").querySelectorAll("[data-sz]").forEach(b => b.onclick = () => { selSize = b.dataset.sz; $("pmsg").innerHTML = ""; drawOpts(); });
   };
   drawGal(); drawOpts();
+  refreshAppLinks();
 
   const upd = () => { $("qv").textContent = qty; $("qn").textContent = qty; $("tot").textContent = money(l.price * qty); };
   const blocked = () => {
@@ -682,6 +711,7 @@ function route() {
   const parts = (location.hash.replace(/^#\/?/, "") || "").split("/").filter(Boolean);
   window.scrollTo(0, 0);
   const [a, b] = parts;
+  refreshAppLinks();
   if (user && needCode) return viewVerify();
   if (!a) { loadItems().catch(() => {}); return viewHome(); }
   if ((a === "p" || a === "r") && b) return viewProduct(a, decodeURIComponent(b));
@@ -693,6 +723,7 @@ function route() {
 }
 window.addEventListener("hashchange", route);
 updateCartCount();
+refreshAppLinks();
 loadItems().catch(() => {});
 </script>
 </body>
