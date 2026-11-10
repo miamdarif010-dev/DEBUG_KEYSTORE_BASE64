@@ -27,6 +27,37 @@ function shareImage(u) {
   return { url: u, sized: false };
 }
 
+// Candidate preview images, best first: resized Cloudinary JPG, then the raw URL.
+function imageCandidates(u) {
+  if (typeof u !== "string" || u.indexOf("https://") !== 0) return [];
+  const list = [];
+  const sized = shareImage(u);
+  if (sized.sized) list.push(sized);
+  list.push({ url: u, sized: false });
+  return list;
+}
+
+// True only if the URL really answers with an image.
+async function imageWorks(url) {
+  try {
+    let r = await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(3500) });
+    if (r.status === 405 || r.status === 403) {
+      r = await fetch(url, { method: "GET", headers: { Range: "bytes=0-0" }, signal: AbortSignal.timeout(3500) });
+    }
+    const ct = r.headers.get("content-type") || "";
+    return r.ok && ct.indexOf("image/") === 0;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function pickImage(rawImg) {
+  for (const c of imageCandidates(rawImg)) {
+    if (await imageWorks(c.url)) return c;
+  }
+  return { url: DEFAULT_IMG, sized: true, fallback: true };
+}
+
 async function getListing(kind, id) {
   try {
     const fn = kind === "p" ? "getProductListing" : "getResellerListing";
@@ -68,6 +99,19 @@ exports.sharePage = onRequest(
       return res.status(500).send("Page load error");
     }
 
+    if (req.query && req.query.debug === "1") {
+      const raw = l && ((Array.isArray(l.images) && l.images[0]) || l.imageUrl || l.image || "");
+      const picked = wants ? await pickImage(raw) : null;
+      return res.status(200).json({
+        kind, id,
+        listingFound: !!l,
+        name: l && l.name,
+        rawImage: raw,
+        chosenImage: picked && picked.url,
+        usedDefaultImage: !!(picked && picked.fallback),
+      });
+    }
+
     if (wants) {
       try {
         const name = (l && (l.name || l.title || l.productName)) || "BuyNova";
@@ -75,7 +119,7 @@ exports.sharePage = onRequest(
         const orig = l ? Number(l.originalPrice) : NaN;
         const rawImg =
           l && ((Array.isArray(l.images) && l.images[0]) || l.imageUrl || l.image || "");
-        const img = shareImage(rawImg);
+        const img = await pickImage(rawImg);
 
         let desc = "";
         if (!isNaN(price) && price > 0) {
