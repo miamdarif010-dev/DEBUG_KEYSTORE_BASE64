@@ -120,6 +120,10 @@ exports.getShopProducts = onCall({ region: REGION }, async () => {
         originalPrice: original > price ? original : null,
         category: String(p.category ?? '').trim(),
         hasOptions: hasOptions(p),
+        // Fresh Bazar fields (the website's Fresh page needs these)
+        isFastDelivery: p.isFastDelivery === true,
+        unit: String(p.unit ?? '').trim(),
+        expiryMs: millis(p.expiryDate),
         t: millis(p.createdAt),
       });
     }
