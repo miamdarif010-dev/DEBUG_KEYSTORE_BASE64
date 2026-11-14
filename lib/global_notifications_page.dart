@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'product_details_page.dart';
 
@@ -29,45 +30,160 @@ class _GlobalNotificationsPageState
   }
 
   // =========================================================
-  // OPEN PRODUCT
+  // HIDE PROFIT TEXT
+  // Users must never see how much profit a reseller makes.
+  // (Old notifications that already contain such words are replaced
+  // by a plain sentence.)
   // =========================================================
 
-  Future<void> _openProduct(
+  static final RegExp _profitWords = RegExp(
+    r'profit|earning|commission|লাভ|প্রফিট',
+    caseSensitive: false,
+  );
+
+  String _safeMessage(Map<String, dynamic> data) {
+    final raw = data['message']?.toString() ?? '';
+    final productName = data['productName']?.toString() ?? '';
+
+    if (raw.isNotEmpty && !_profitWords.hasMatch(raw)) {
+      return raw;
+    }
+
+    if (productName.isNotEmpty) {
+      return '$productName is now available on BuyNova.';
+    }
+
+    return raw.isEmpty
+        ? 'A new product has been added to BuyNova.'
+        : 'Tap to see the details.';
+  }
+
+  bool _isProductNotification(Map<String, dynamic> data) {
+    final productId = data['productId']?.toString() ?? '';
+    return productId.isNotEmpty;
+  }
+
+  // =========================================================
+  // MARK ONE NOTIFICATION AS READ (THIS user only)
+  // Read notifications disappear from the list.
+  // =========================================================
+
+  Future<void> _markRead(String notificationId) async {
+    final user = _currentUser;
+
+    if (user == null) return;
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('globalNotificationReads')
+          .doc(notificationId)
+          .set({
+        'notificationId': notificationId,
+        'readAt': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {
+      // Do not block opening if read status fails.
+    }
+  }
+
+  // =========================================================
+  // OPEN NOTIFICATION
+  // product notification -> product page
+  // admin notice         -> details dialog (+ link button)
+  // =========================================================
+
+  Future<void> _openNotification(
     String notificationId,
     Map<String, dynamic> notification,
   ) async {
-    final productId = notification['productId']?.toString();
+    await _markRead(notificationId);
 
-    if (productId == null || productId.isEmpty) {
+    if (!mounted) return;
+
+    if (_isProductNotification(notification)) {
+      await _openProduct(notification['productId'].toString());
       return;
     }
 
-    // ---------------------------------------------------------
-    // Mark notification as read for THIS user only.
-    // ---------------------------------------------------------
+    await _showNoticeDialog(notification);
+  }
 
-    final user = _currentUser;
+  Future<void> _showNoticeDialog(Map<String, dynamic> data) async {
+    final title = data['title']?.toString() ?? 'BuyNova';
+    final message = _safeMessage(data);
+    final link = data['link']?.toString() ?? '';
+    final imageUrl = (data['productImageUrl'] ?? data['imageUrl'] ?? '')
+        .toString();
+    final isUpdate = data['type']?.toString() == 'app_update';
+    final hasLink = link.startsWith('https://');
 
-    if (user != null) {
-      try {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .collection('globalNotificationReads')
-            .doc(notificationId)
-            .set({
-          'notificationId': notificationId,
-          'readAt': FieldValue.serverTimestamp(),
-        });
-      } catch (_) {
-        // Do not block product opening if read status fails.
-      }
-    }
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(title),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (imageUrl.startsWith('https://'))
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const SizedBox.shrink(),
+                      ),
+                    ),
+                  ),
+                Text(message),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Close'),
+            ),
+            if (hasLink)
+              FilledButton(
+                onPressed: () async {
+                  Navigator.of(dialogContext).pop();
 
-    // ---------------------------------------------------------
-    // Open product
-    // ---------------------------------------------------------
+                  try {
+                    await launchUrl(
+                      Uri.parse(link),
+                      mode: LaunchMode.externalApplication,
+                    );
+                  } catch (_) {
+                    if (!mounted) return;
 
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Could not open the link.'),
+                      ),
+                    );
+                  }
+                },
+                child: Text(isUpdate ? 'Update now' : 'Open'),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  // =========================================================
+  // OPEN PRODUCT
+  // =========================================================
+
+  Future<void> _openProduct(String productId) async {
     try {
       final productSnapshot = await FirebaseFirestore.instance
           .collection('products')
@@ -293,34 +409,7 @@ class _GlobalNotificationsPageState
               notificationSnapshot.data?.docs ?? [];
 
           if (notifications.isEmpty) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.notifications_none_rounded,
-                    size: 70,
-                    color: Colors.grey,
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    'No new notifications',
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey,
-                    ),
-                  ),
-                  SizedBox(height: 6),
-                  Text(
-                    'New products will appear here.',
-                    style: TextStyle(
-                      color: Colors.grey,
-                    ),
-                  ),
-                ],
-              ),
-            );
+            return _emptyState();
           }
 
           // -----------------------------------------------------
@@ -397,9 +486,18 @@ class _GlobalNotificationsPageState
                 readIds.add(readDoc.id);
               }
 
+              // Seen notifications disappear: only unread ones are shown.
+              final unread = notifications
+                  .where((doc) => !readIds.contains(doc.id))
+                  .toList();
+
+              if (unread.isEmpty) {
+                return _emptyState();
+              }
+
               return ListView.separated(
                 padding: const EdgeInsets.all(12),
-                itemCount: notifications.length,
+                itemCount: unread.length,
                 separatorBuilder: (
                   context,
                   index,
@@ -409,23 +507,56 @@ class _GlobalNotificationsPageState
                   context,
                   index,
                 ) {
-                  final doc = notifications[index];
+                  final doc = unread[index];
 
                   final data = doc.data() as Map<String, dynamic>;
-
-                  final isRead = readIds.contains(doc.id);
 
                   return _notificationCard(
                     context: context,
                     notificationId: doc.id,
                     data: data,
-                    isRead: isRead,
+                    isRead: false,
                   );
                 },
               );
             },
           );
         },
+      ),
+    );
+  }
+
+  // =========================================================
+  // EMPTY STATE
+  // =========================================================
+
+  Widget _emptyState() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.notifications_none_rounded,
+            size: 70,
+            color: Colors.grey,
+          ),
+          SizedBox(height: 16),
+          Text(
+            'No new notifications',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey,
+            ),
+          ),
+          SizedBox(height: 6),
+          Text(
+            'New products and updates will appear here.',
+            style: TextStyle(
+              color: Colors.grey,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -443,15 +574,14 @@ class _GlobalNotificationsPageState
     final title =
         data['title']?.toString() ?? 'New Product Added';
 
-    final message =
-        data['message']?.toString() ??
-        'A new product has been added to BuyNova.';
+    final message = _safeMessage(data);
 
-    final productName =
-        data['productName']?.toString() ?? 'New Product';
+    final isProduct = _isProductNotification(data);
+
+    final productName = data['productName']?.toString() ?? '';
 
     final imageUrl =
-        data['productImageUrl']?.toString() ?? '';
+        (data['productImageUrl'] ?? data['imageUrl'] ?? '').toString();
 
     final price = data['productPrice'];
 
@@ -465,7 +595,7 @@ class _GlobalNotificationsPageState
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: () {
-          _openProduct(
+          _openNotification(
             notificationId,
             data,
           );
@@ -554,17 +684,18 @@ class _GlobalNotificationsPageState
 
                     const SizedBox(height: 4),
 
-                    Text(
-                      productName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
+                    if (productName.isNotEmpty) ...[
+                      Text(
+                        productName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-
-                    const SizedBox(height: 3),
+                      const SizedBox(height: 3),
+                    ],
 
                     Text(
                       message,
@@ -581,14 +712,16 @@ class _GlobalNotificationsPageState
 
                     Row(
                       children: [
-                        Text(
-                          _formatBdt(price),
-                          style: const TextStyle(
-                            color: Colors.redAccent,
-                            fontWeight: FontWeight.bold,
+                        if (isProduct && price != null) ...[
+                          Text(
+                            _formatBdt(price),
+                            style: const TextStyle(
+                              color: Colors.redAccent,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
+                          const SizedBox(width: 10),
+                        ],
                         Text(
                           _timeAgo(createdAt),
                           style: TextStyle(
