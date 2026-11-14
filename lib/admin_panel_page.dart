@@ -10,6 +10,7 @@ import 'admin_categories_page.dart';
 import 'admin_points_page.dart';
 import 'admin_reward_settings_page.dart';
 import 'admin_ads_settings_page.dart';
+import 'admin_broadcast_page.dart';
 
 // The big admin panel is split into part files.
 // They share this file's private members (_db, _toDouble, ...).
@@ -513,6 +514,30 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                             MaterialPageRoute(
                               builder: (_) =>
                                   const AdminAdsSettingsPage(),
+                            ),
+                          );
+                        },
+                      ),
+
+                      // ==================================================
+                      // SEND NOTICE / APP UPDATE TO ALL USERS
+                      // ==================================================
+
+                      _adminMenuBox(
+                        icon: Icons.campaign_outlined,
+                        title: 'Send Notice',
+                        subtitle: 'Notice or app update to all users',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => Scaffold(
+                                appBar: AppBar(
+                                  title: const Text('Send Notice'),
+                                ),
+                                body: const SafeArea(
+                                  child: AdminBroadcastPage(),
+                                ),
+                              ),
                             ),
                           );
                         },
