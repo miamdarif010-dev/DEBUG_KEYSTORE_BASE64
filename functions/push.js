@@ -264,3 +264,176 @@ exports.onNotificationCreatedPush = onDocumentCreated(
     return null;
   }
 );
+
+// ============================================================
+// ADMIN ONLY helper (same admin e-mail as the rest of the backend)
+// ============================================================
+const ADMIN_EMAIL = 'miamdarif010@gmail.com';
+
+function requireAdmin(request) {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'You must be logged in.');
+  }
+  const email = String(request.auth.token.email || '').toLowerCase();
+  if (email !== ADMIN_EMAIL || request.auth.token.email_verified !== true) {
+    throw new HttpsError('permission-denied', 'Admin access required.');
+  }
+}
+
+const isHttps = (v) => typeof v === 'string' && v.indexOf('https://') === 0;
+
+// ============================================================
+// sendAdminNotice  (Admin Panel -> "Send Notice")
+// Creates one public notice in global_notifications.
+// onGlobalNotificationCreatedPush (below) then pushes it to every phone.
+//   kind: "announcement" | "app_update"
+// ============================================================
+exports.sendAdminNotice = onCall({ region: REGION }, async (request) => {
+  requireAdmin(request);
+  const d = request.data || {};
+
+  const title = text(d.title, 100).trim();
+  const message = text(d.message, 500).trim();
+  if (!title) throw new HttpsError('invalid-argument', 'Title is required.');
+  if (!message) throw new HttpsError('invalid-argument', 'Message is required.');
+
+  const kind = d.kind === 'app_update' ? 'app_update' : 'announcement';
+  const imageUrl = isHttps(d.imageUrl) ? String(d.imageUrl).trim() : '';
+  const link = isHttps(d.link) ? String(d.link).trim() : '';
+
+  const ref = await db.collection('global_notifications').add({
+    type: kind,
+    title,
+    message,
+    active: true,
+    isActive: true,
+    productImageUrl: imageUrl,
+    imageUrl,
+    link,
+    sellerId: request.auth.uid,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { success: true, id: ref.id };
+});
+
+// ============================================================
+// onGlobalNotificationCreatedPush
+// A new document in global_notifications (new product from a seller or
+// reseller, or an Admin notice) becomes a phone push for ALL users.
+//  - users who turned notifications off (pushEnabled === false) are skipped
+//  - the person who created it does not get a push for their own product
+//  - dead tokens are removed
+// ============================================================
+exports.onGlobalNotificationCreatedPush = onDocumentCreated(
+  {
+    document: 'global_notifications/{notificationId}',
+    region: REGION,
+    timeoutSeconds: 540,
+    memory: '512MiB',
+  },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return null;
+    const n = snap.data() || {};
+    if (n.active === false || n.isActive === false) return null;
+
+    const type = text(n.type, 50);
+    const isProduct = !!n.productId;
+    const kind = n.kind === 'r' || type.indexOf('reseller') === 0 ? 'r' : 'p';
+
+    let link = '';
+    if (isProduct) {
+      link = `buynova://${kind}/${encodeURIComponent(String(n.productId))}`;
+    }
+
+    // Never put profit / earning words in a public push.
+    const clean = (s) =>
+      /profit|earning|commission|লাভ|প্রফিট/i.test(String(s || '')) ? '' : s;
+
+    const title = text(clean(n.title) || 'BuyNova', 100);
+    let body = text(clean(n.message), 300);
+    if (!body && n.productName) {
+      body = text(`${n.productName} is now available on BuyNova.`, 300);
+    }
+
+    const notification = { title, body };
+    const img = n.productImageUrl || n.imageUrl || n.productImage;
+    if (isHttps(img)) notification.imageUrl = img;
+
+    const data = {
+      type,
+      productId: text(n.productId, 100),
+      link,
+      url: isHttps(n.link) ? String(n.link) : '',
+      notificationId: event.params.notificationId,
+    };
+
+    const skipUid = isProduct ? String(n.sellerId || '') : '';
+
+    let sent = 0;
+    let last = null;
+    for (;;) {
+      let q = db
+        .collection('users')
+        .orderBy(admin.firestore.FieldPath.documentId())
+        .select('fcmTokens', 'pushEnabled')
+        .limit(300);
+      if (last) q = q.startAfter(last);
+      const page = await q.get();
+      if (page.empty) break;
+      last = page.docs[page.docs.length - 1];
+
+      const owner = new Map(); // token -> uid
+      for (const doc of page.docs) {
+        if (doc.id === skipUid) continue;
+        const u = doc.data() || {};
+        if (u.pushEnabled === false) continue;
+        const toks = Array.isArray(u.fcmTokens) ? u.fcmTokens : [];
+        for (const t of toks) {
+          if (typeof t === 'string' && t && !owner.has(t)) owner.set(t, doc.id);
+        }
+      }
+
+      const tokens = [...owner.keys()];
+      for (let i = 0; i < tokens.length; i += 500) {
+        const chunk = tokens.slice(i, i + 500);
+        let res;
+        try {
+          res = await admin.messaging().sendEachForMulticast({
+            tokens: chunk,
+            notification,
+            data,
+            android: { priority: 'high' },
+          });
+        } catch (e) {
+          console.error('Global push chunk failed', e);
+          continue;
+        }
+        sent += res.successCount;
+
+        const dead = new Map(); // uid -> [tokens]
+        res.responses.forEach((r, idx) => {
+          const code = r.error && r.error.code;
+          if (
+            code === 'messaging/registration-token-not-registered' ||
+            code === 'messaging/invalid-registration-token'
+          ) {
+            const uid = owner.get(chunk[idx]);
+            if (!dead.has(uid)) dead.set(uid, []);
+            dead.get(uid).push(chunk[idx]);
+          }
+        });
+        for (const [uid, list] of dead) {
+          await db
+            .collection('users')
+            .doc(uid)
+            .update({ fcmTokens: admin.firestore.FieldValue.arrayRemove(...list) })
+            .catch(() => {});
+        }
+      }
+      if (page.size < 300) break;
+    }
+    console.log('Global push sent:', event.params.notificationId, sent);
+    return null;
+  }
+);
