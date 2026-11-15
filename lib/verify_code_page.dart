@@ -7,48 +7,37 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'home_page.dart';
-import 'login_page.dart';
 
-// ============================================================
-// WHO MUST ENTER THE EMAIL CODE
-//
-// Only brand-new accounts made with email + password.
-// Google sign-in is already verified by Google, and accounts
-// created before this date are not asked.
-//
-// Change the date to the day you publish this update.
-// ============================================================
-final DateTime kEmailCodeRequiredAfter = DateTime.utc(2026, 10, 27);
+/// Same rule as the server (functions/orders.js -> EMAIL_CODE_AFTER) and the
+/// website: email + password accounts created on/after this day must enter
+/// the 6 digit email code. Google accounts and older accounts are not asked.
+class EmailCodeGate {
+  EmailCodeGate._();
 
-/// uid of the user who already passed the check in this app session.
-String? emailCodeOkUid;
+  static final DateTime codeAfter = DateTime.utc(2026, 10, 27);
 
-/// true  -> show the code page before the user can use the app.
-Future<bool> needsEmailCode(User user) async {
-  final usesPassword = user.providerData.any(
-    (info) => info.providerId == 'password',
-  );
+  static Future<bool> needsCode(User user) async {
+    final usesPassword =
+        user.providerData.any((p) => p.providerId == 'password');
 
-  if (!usesPassword) {
-    return false;
-  }
+    if (!usesPassword) return false;
 
-  final created = user.metadata.creationTime;
+    final created = user.metadata.creationTime;
 
-  if (created == null || created.toUtc().isBefore(kEmailCodeRequiredAfter)) {
-    return false;
-  }
+    if (created == null || created.toUtc().isBefore(codeAfter)) return false;
 
-  try {
-    final snapshot = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .get();
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
 
-    return snapshot.data()?['emailCodeVerified'] != true;
-  } catch (_) {
-    // If the check itself fails (offline), do not lock the person out.
-    return false;
+      return snap.data()?['emailCodeVerified'] != true;
+    } catch (_) {
+      // Offline: do not block the app here. The server still checks the
+      // code before an order is placed.
+      return false;
+    }
   }
 }
 
@@ -60,97 +49,81 @@ class VerifyCodePage extends StatefulWidget {
 }
 
 class _VerifyCodePageState extends State<VerifyCodePage> {
-  final _codeController = TextEditingController();
+  final TextEditingController _code = TextEditingController();
 
-  final FirebaseFunctions _functions =
+  final FirebaseFunctions _fn =
       FirebaseFunctions.instanceFor(region: 'asia-northeast3');
 
   Timer? _timer;
-
-  int _secondsLeft = 0;
-  bool _isSending = false;
-  bool _isVerifying = false;
-  String _info = '';
-  String _error = '';
+  int _wait = 0;
+  bool _sending = false;
+  bool _verifying = false;
+  bool _sentOnce = false;
 
   String get _email => FirebaseAuth.instance.currentUser?.email ?? '';
 
   @override
   void initState() {
     super.initState();
-    _sendCode();
+    _send();
   }
 
   @override
   void dispose() {
     _timer?.cancel();
-    _codeController.dispose();
+    _code.dispose();
     super.dispose();
   }
 
-  String _messageOf(Object error) {
-    if (error is FirebaseFunctionsException) {
-      return error.message ?? 'Something went wrong. Please try again.';
-    }
+  void _snack(String text, {bool error = true}) {
+    if (!mounted) return;
 
-    return 'Something went wrong. Please try again.';
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(text),
+          backgroundColor: error ? Colors.red : Colors.green,
+        ),
+      );
   }
 
-  void _startCountdown(int seconds) {
+  void _startCooldown(int seconds) {
     _timer?.cancel();
+    setState(() => _wait = seconds);
 
-    setState(() {
-      _secondsLeft = seconds;
-    });
-
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) {
-        timer.cancel();
-        return;
-      }
-
-      if (_secondsLeft <= 1) {
-        timer.cancel();
-        setState(() {
-          _secondsLeft = 0;
-        });
+        t.cancel();
         return;
       }
 
       setState(() {
-        _secondsLeft--;
+        _wait = _wait - 1;
+        if (_wait <= 0) {
+          _wait = 0;
+          t.cancel();
+        }
       });
     });
   }
 
   void _goHome() {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user != null) {
-      emailCodeOkUid = user.uid;
-    }
-
     if (!mounted) return;
 
-    Navigator.pushAndRemoveUntil(
-      context,
+    Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (context) => const HomePage()),
       (route) => false,
     );
   }
 
-  Future<void> _sendCode() async {
-    if (_isSending) return;
+  Future<void> _send() async {
+    if (_sending) return;
 
-    setState(() {
-      _isSending = true;
-      _error = '';
-      _info = '';
-    });
+    setState(() => _sending = true);
 
     try {
-      final result = await _functions.httpsCallable('sendLoginCode').call();
-
+      final result = await _fn.httpsCallable('sendLoginCode').call();
       final data = Map<String, dynamic>.from(result.data as Map);
 
       if (data['alreadyVerified'] == true) {
@@ -158,61 +131,47 @@ class _VerifyCodePageState extends State<VerifyCodePage> {
         return;
       }
 
-      if (!mounted) return;
+      _sentOnce = true;
+      _startCooldown((data['resendAfterSeconds'] as num?)?.toInt() ?? 60);
+      _snack('Code sent to $_email', error: false);
+    } on FirebaseFunctionsException catch (e) {
+      _snack(e.message ?? 'Could not send the code.');
 
-      setState(() {
-        _info = 'A 6 digit code was sent to $_email';
-      });
-
-      _startCountdown((data['resendAfterSeconds'] as num?)?.toInt() ?? 60);
-    } catch (e) {
-      if (!mounted) return;
-
-      setState(() {
-        _error = _messageOf(e);
-      });
-
-      _startCountdown(30);
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSending = false;
-        });
+      // "wait N seconds": show the same wait on the button.
+      final match = RegExp(r'(\d+) seconds').firstMatch(e.message ?? '');
+      if (match != null) {
+        _startCooldown(int.tryParse(match.group(1) ?? '') ?? 30);
       }
+    } catch (_) {
+      _snack('Could not send the code. Check your internet and try again.');
+    } finally {
+      if (mounted) setState(() => _sending = false);
     }
   }
 
   Future<void> _verify() async {
-    final code = _codeController.text.trim();
+    if (_verifying) return;
 
-    if (code.length != 6) {
-      setState(() {
-        _error = 'Please enter the 6 digit code.';
-      });
+    final code = _code.text.trim();
+
+    if (!RegExp(r'^\d{6}$').hasMatch(code)) {
+      _snack('Please enter the 6 digit code.');
       return;
     }
 
-    setState(() {
-      _isVerifying = true;
-      _error = '';
-    });
+    setState(() => _verifying = true);
 
     try {
-      await _functions.httpsCallable('verifyLoginCode').call({'code': code});
+      await _fn.httpsCallable('verifyLoginCode').call({'code': code});
 
+      _snack('Email verified.', error: false);
       _goHome();
-    } catch (e) {
-      if (!mounted) return;
-
-      setState(() {
-        _error = _messageOf(e);
-      });
+    } on FirebaseFunctionsException catch (e) {
+      _snack(e.message ?? 'The code is not correct.');
+    } catch (_) {
+      _snack('Could not verify. Check your internet and try again.');
     } finally {
-      if (mounted) {
-        setState(() {
-          _isVerifying = false;
-        });
-      }
+      if (mounted) setState(() => _verifying = false);
     }
   }
 
@@ -221,132 +180,89 @@ class _VerifyCodePageState extends State<VerifyCodePage> {
 
     if (!mounted) return;
 
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (context) => const LoginPage()),
-      (route) => false,
-    );
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   @override
   Widget build(BuildContext context) {
-    final isBusy = _isSending || _isVerifying;
+    final busy = _verifying;
 
-    return PopScope(
-      canPop: false,
-      child: Scaffold(
-        body: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                children: [
-                  const CircleAvatar(
-                    radius: 40,
-                    backgroundColor: Color(0xFFDCE8F8),
-                    child: Icon(
-                      Icons.mark_email_read_outlined,
-                      size: 40,
-                      color: Color(0xFF326295),
-                    ),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Verify your email'),
+        centerTitle: true,
+        automaticallyImplyLeading: false,
+      ),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              children: [
+                const Icon(Icons.mark_email_read_outlined, size: 64),
+                const SizedBox(height: 16),
+                const Text(
+                  'Enter the 6 digit code',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _sentOnce || _sending
+                      ? 'We sent a code to\n$_email'
+                      : 'We will send a code to\n$_email',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey.shade700),
+                ),
+                const SizedBox(height: 24),
+                TextField(
+                  controller: _code,
+                  enabled: !busy,
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.center,
+                  maxLength: 6,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  style: const TextStyle(fontSize: 28, letterSpacing: 10),
+                  decoration: const InputDecoration(
+                    counterText: '',
+                    border: OutlineInputBorder(),
+                    hintText: '------',
                   ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Verify your email',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  onSubmitted: (_) => _verify(),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: busy ? null : _verify,
+                    child: busy
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2.5),
+                          )
+                        : const Text('Verify'),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _info.isNotEmpty
-                        ? _info
-                        : 'We are sending a 6 digit code to $_email',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.grey),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: (_sending || _wait > 0 || busy) ? null : _send,
+                  child: Text(
+                    _wait > 0 ? 'Resend code in $_wait s' : 'Resend code',
                   ),
-                  const SizedBox(height: 28),
-                  TextField(
-                    controller: _codeController,
-                    keyboardType: TextInputType.number,
-                    textAlign: TextAlign.center,
-                    maxLength: 6,
-                    autofillHints: const [AutofillHints.oneTimeCode],
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    style: const TextStyle(
-                      fontSize: 28,
-                      letterSpacing: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    onSubmitted: (_) {
-                      if (!isBusy) _verify();
-                    },
-                    decoration: const InputDecoration(
-                      counterText: '',
-                      hintText: '------',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  if (_error.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      _error,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.red,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF326295),
-                        disabledBackgroundColor: const Color(0xFF9DB1C8),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(25),
-                        ),
-                      ),
-                      onPressed: isBusy ? null : _verify,
-                      child: _isVerifying
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text(
-                              'Verify',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextButton(
-                    onPressed:
-                        (isBusy || _secondsLeft > 0) ? null : _sendCode,
-                    child: Text(
-                      _secondsLeft > 0
-                          ? 'Send a new code in ${_secondsLeft}s'
-                          : 'Send a new code',
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: isBusy ? null : _useAnotherAccount,
-                    child: const Text('Use a different account'),
-                  ),
-                ],
-              ),
+                ),
+                TextButton(
+                  onPressed: busy ? null : _useAnotherAccount,
+                  child: const Text('Use a different account'),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Check your Spam folder if you cannot find the email. '
+                  'The code works for 10 minutes.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                ),
+              ],
             ),
           ),
         ),
