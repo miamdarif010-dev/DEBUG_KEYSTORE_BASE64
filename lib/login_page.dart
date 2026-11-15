@@ -14,6 +14,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import 'home_page.dart';
 import 'register_page.dart';
+import 'verify_code_page.dart';
 
 // ============================================================
 // TESTING SWITCH
@@ -22,7 +23,7 @@ import 'register_page.dart';
 // false = people only see a short friendly message.
 // Set this to false before uploading to the Play Store.
 // ============================================================
-const bool _showDebugErrors = true;
+const bool _showDebugErrors = false;
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -96,12 +97,16 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
+      // New email accounts must enter the 6 digit code first.
+      final needsCode = await EmailCodeGate.needsCode(user);
+
       if (!mounted) return;
 
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (context) => const HomePage(),
+          builder: (context) =>
+              needsCode ? const VerifyCodePage() : const HomePage(),
         ),
       );
     } on FirebaseAuthException catch (e) {
