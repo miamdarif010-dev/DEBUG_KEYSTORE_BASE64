@@ -338,37 +338,93 @@ exports.onGlobalNotificationCreatedPush = onDocumentCreated(
     if (n.active === false || n.isActive === false) return null;
 
     const type = text(n.type, 50);
-    const isProduct = !!n.productId;
-    const kind = n.kind === 'r' || type.indexOf('reseller') === 0 ? 'r' : 'p';
+    const skipUid = type === 'new_product' ? String(n.sellerId || '') : '';
 
-    let link = '';
-    if (isProduct) {
-      link = `buynova://${kind}/${encodeURIComponent(String(n.productId))}`;
+    let notification;
+    let data;
+
+    if (type === 'new_product') {
+      // SAFETY: a seller's client writes this document, so its title / message /
+      // image are NOT trusted. The push text is built here from the real
+      // product document, and only if the product really belongs to that seller.
+      const pid = text(n.productId, 100);
+      if (!pid || pid.includes('/')) return null;
+
+      let kind = 'p';
+      let pdata;
+      const pSnap = await db.collection('products').doc(pid).get();
+      if (pSnap.exists) {
+        pdata = pSnap.data() || {};
+        if (String(pdata.sellerId || '') !== String(n.sellerId || '')) return null;
+      } else {
+        const rSnap = await db.collection('reseller_products').doc(pid).get();
+        if (!rSnap.exists) return null;
+        pdata = rSnap.data() || {};
+        if (String(pdata.entrepreneurUid || '') !== String(n.sellerId || '')) {
+          return null;
+        }
+        kind = 'r';
+      }
+      if (pdata.isActive === false || pdata.active === false) return null;
+
+      const name = text(pdata.name || pdata.title || pdata.productName, 80).trim();
+      if (!name) return null;
+
+      // One push per seller every 10 minutes (the in-app notice is still created).
+      const throttleRef = db
+        .collection('push_throttle')
+        .doc(String(n.sellerId || 'unknown'));
+      const allowed = await db.runTransaction(async (tx) => {
+        const t = await tx.get(throttleRef);
+        const last =
+          t.exists && t.data().lastAt && t.data().lastAt.toMillis
+            ? t.data().lastAt.toMillis()
+            : 0;
+        if (Date.now() - last < 10 * 60 * 1000) return false;
+        tx.set(throttleRef, { lastAt: admin.firestore.Timestamp.now() });
+        return true;
+      });
+      if (!allowed) return null;
+
+      const pct = Number(pdata.discountPercent) || 0;
+      notification = {
+        title: 'New Product Added',
+        body:
+          pct > 0
+            ? `${name} is now available on BuyNova with ${Math.round(pct)}% discount.`
+            : `${name} is now available on BuyNova.`,
+      };
+      const img =
+        pdata.imageUrl ||
+        (Array.isArray(pdata.imageUrls) ? pdata.imageUrls[0] : '');
+      if (isHttps(img)) notification.imageUrl = img;
+
+      data = {
+        type,
+        productId: pid,
+        link: `buynova://${kind}/${encodeURIComponent(pid)}`,
+        url: '',
+        notificationId: event.params.notificationId,
+      };
+    } else if (type === 'announcement' || type === 'app_update') {
+      // Only the Admin can create these (Firestore rules + sendAdminNotice).
+      notification = {
+        title: text(n.title || 'BuyNova', 100),
+        body: text(n.message, 300),
+      };
+      const img = n.productImageUrl || n.imageUrl;
+      if (isHttps(img)) notification.imageUrl = img;
+
+      data = {
+        type,
+        productId: '',
+        link: '',
+        url: isHttps(n.link) ? String(n.link) : '',
+        notificationId: event.params.notificationId,
+      };
+    } else {
+      return null;
     }
-
-    // Never put profit / earning words in a public push.
-    const clean = (s) =>
-      /profit|earning|commission|লাভ|প্রফিট/i.test(String(s || '')) ? '' : s;
-
-    const title = text(clean(n.title) || 'BuyNova', 100);
-    let body = text(clean(n.message), 300);
-    if (!body && n.productName) {
-      body = text(`${n.productName} is now available on BuyNova.`, 300);
-    }
-
-    const notification = { title, body };
-    const img = n.productImageUrl || n.imageUrl || n.productImage;
-    if (isHttps(img)) notification.imageUrl = img;
-
-    const data = {
-      type,
-      productId: text(n.productId, 100),
-      link,
-      url: isHttps(n.link) ? String(n.link) : '',
-      notificationId: event.params.notificationId,
-    };
-
-    const skipUid = isProduct ? String(n.sellerId || '') : '';
 
     let sent = 0;
     let last = null;
