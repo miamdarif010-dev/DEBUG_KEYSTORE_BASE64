@@ -29,9 +29,16 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 
 import 'home_page.dart';
+import 'verify_code_page.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/gestures.dart';
+
+// Put your public page links here (see privacy.html). Until they are set, the
+// links show a short message instead of opening.
+const String kTermsUrl = '';
+const String kPrivacyPolicyUrl = '';
 
 enum _PasswordStrength { empty, weak, medium, strong }
 
@@ -407,9 +414,10 @@ class _RegisterPageState extends State<RegisterPage> {
       // into the app and clear the auth stack behind them.
       _showSuccessMessage('Account created successfully.');
 
+      // The 6 digit email code is asked right after sign-up.
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
-          builder: (context) => const HomePage(),
+          builder: (context) => const VerifyCodePage(),
         ),
         (route) => false,
       );
@@ -461,14 +469,16 @@ class _RegisterPageState extends State<RegisterPage> {
 
     final data = <String, dynamic>{
       'uid': user.uid,
-      'name': user.displayName ?? '',
       'email': user.email ?? '',
-      'phone': user.phoneNumber ?? '',
-      'profileImageUrl': user.photoURL ?? '',
       'updatedAt': FieldValue.serverTimestamp(),
     };
 
+    // Profile fields are written only for a NEW account, so a returning user's
+    // own name / phone / photo are not overwritten on every Google sign-in.
     if (!snapshot.exists) {
+      data['name'] = user.displayName ?? '';
+      data['phone'] = user.phoneNumber ?? '';
+      data['profileImageUrl'] = user.photoURL ?? '';
       data['sellerStatus'] = 'none';
       data['entrepreneurStatus'] = 'none';
       data['createdAt'] = FieldValue.serverTimestamp();
@@ -478,7 +488,7 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   void _goToAppHomeAfterSocialLogin() {
-    // Google/Facebook accounts arrive already email-verified, so there is
+    // Google accounts arrive already email-verified, so there is
     // no separate verification step for them â€” go straight to HomePage
     // and clear the auth stack so "back" doesn't return to login/register.
     Navigator.of(context).pushAndRemoveUntil(
@@ -540,64 +550,6 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  Future<void> _handleFacebookSignIn() async {
-    if (_isLoading || _isSocialLoading) return;
-
-    setState(() {
-      _isSocialLoading = true;
-    });
-
-    try {
-      final LoginResult result = await FacebookAuth.instance.login(
-        permissions: ['email', 'public_profile'],
-      );
-
-      if (result.status == LoginStatus.cancelled) {
-        return;
-      }
-
-      if (result.status != LoginStatus.success ||
-          result.accessToken == null) {
-        throw FirebaseAuthException(
-          code: 'facebook-sign-in-failed',
-          message: result.message ?? 'Could not sign in with Facebook.',
-        );
-      }
-
-      final credential = FacebookAuthProvider.credential(
-        result.accessToken!.tokenString,
-      );
-
-      final userCredential =
-          await FirebaseAuth.instance.signInWithCredential(credential);
-
-      final user = userCredential.user;
-      if (user == null) {
-        throw FirebaseAuthException(
-          code: 'facebook-sign-in-failed',
-          message: 'Could not sign in with Facebook.',
-        );
-      }
-
-      await _saveSocialUserToFirestore(user);
-
-      if (!mounted) return;
-
-      _showSuccessMessage('Signed in with Facebook.');
-      _goToAppHomeAfterSocialLogin();
-    } on FirebaseAuthException catch (e) {
-      _showFirebaseAuthError(e);
-    } catch (e) {
-      _showMessage('Facebook sign-in failed. Please try again.');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSocialLoading = false;
-        });
-      }
-    }
-  }
-
   void _showFirebaseAuthError(FirebaseAuthException e) {
     String message = 'Unable to complete sign-in.';
 
@@ -620,6 +572,19 @@ class _RegisterPageState extends State<RegisterPage> {
     }
 
     _showMessage(message);
+  }
+
+  Future<void> _openLink(String url) async {
+    if (url.isEmpty) {
+      _showMessage('This page is not available yet.');
+      return;
+    }
+
+    try {
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (_) {
+      _showMessage('Could not open the link.');
+    }
   }
 
   void _showMessage(String message) {
@@ -858,26 +823,32 @@ class _RegisterPageState extends State<RegisterPage> {
                       child: Padding(
                         padding: const EdgeInsets.only(top: 12),
                         child: RichText(
-                          text: const TextSpan(
-                            style: TextStyle(color: Colors.black87),
+                          text: TextSpan(
+                            style: const TextStyle(color: Colors.black87),
                             children: [
-                              TextSpan(text: 'I agree to the '),
+                              const TextSpan(text: 'I agree to the '),
                               TextSpan(
                                 text: 'Terms & Conditions',
-                                style: TextStyle(
+                                style: const TextStyle(
                                   color: Color(0xFF326295),
                                   fontWeight: FontWeight.w600,
+                                  decoration: TextDecoration.underline,
                                 ),
+                                recognizer: TapGestureRecognizer()
+                                  ..onTap = () => _openLink(kTermsUrl),
                               ),
-                              TextSpan(text: ' and '),
+                              const TextSpan(text: ' and '),
                               TextSpan(
                                 text: 'Privacy Policy',
-                                style: TextStyle(
+                                style: const TextStyle(
                                   color: Color(0xFF326295),
                                   fontWeight: FontWeight.w600,
+                                  decoration: TextDecoration.underline,
                                 ),
+                                recognizer: TapGestureRecognizer()
+                                  ..onTap = () => _openLink(kPrivacyPolicyUrl),
                               ),
-                              TextSpan(text: '.'),
+                              const TextSpan(text: '.'),
                             ],
                           ),
                         ),
@@ -981,39 +952,6 @@ class _RegisterPageState extends State<RegisterPage> {
                       'Continue with Google',
                       style: TextStyle(
                         color: Colors.black87,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1877F2),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(25),
-                      ),
-                    ),
-                    onPressed: (_isLoading || _isSocialLoading)
-                        ? null
-                        : _handleFacebookSignIn,
-                    icon: _isSocialLoading
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.facebook, color: Colors.white),
-                    label: const Text(
-                      'Continue with Facebook',
-                      style: TextStyle(
-                        color: Colors.white,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
