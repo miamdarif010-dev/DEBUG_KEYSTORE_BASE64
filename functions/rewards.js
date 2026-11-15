@@ -77,6 +77,39 @@ function requireUid(request) {
   return request.auth.uid;
 }
 
+// New email+password accounts (created on/after 2026-10-27) must enter the
+// 6 digit email code before they can use referral, ad rewards or convert
+// points to wallet money. Same rule as orders.js. Google accounts and older
+// accounts are not asked.
+const EMAIL_CODE_AFTER_MS = Date.UTC(2026, 9, 27);
+
+async function assertEmailVerifiedForRewards(request) {
+  const token = request.auth && request.auth.token ? request.auth.token : {};
+  const provider = token.firebase && token.firebase.sign_in_provider;
+
+  if (provider !== "password") return;
+
+  let created = 0;
+
+  try {
+    const authUser = await admin.auth().getUser(request.auth.uid);
+    created = Date.parse(authUser.metadata.creationTime) || 0;
+  } catch (e) {
+    throw new HttpsError("internal", "Could not check your account.");
+  }
+
+  if (!created || created < EMAIL_CODE_AFTER_MS) return;
+
+  const snap = await db.collection("users").doc(request.auth.uid).get();
+
+  if (!snap.exists || (snap.data() || {}).emailCodeVerified !== true) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Please verify your email code first."
+    );
+  }
+}
+
 function requireAdminCall(request) {
   const uid = requireUid(request);
   const token = request.auth.token || {};
@@ -456,6 +489,7 @@ exports.getMyReferralCode = onCall({ region: REGION }, async (request) => {
 
 exports.applyReferralCode = onCall({ region: REGION }, async (request) => {
   const uid = requireUid(request);
+  await assertEmailVerifiedForRewards(request);
 
   const code = String((request.data || {}).code || "")
     .trim()
@@ -573,6 +607,7 @@ exports.applyReferralCode = onCall({ region: REGION }, async (request) => {
 
 exports.convertPointsToWallet = onCall({ region: REGION }, async (request) => {
   const uid = requireUid(request);
+  await assertEmailVerifiedForRewards(request);
   const requested = Number((request.data || {}).points);
 
   if (!Number.isInteger(requested) || requested <= 0) {
@@ -843,6 +878,7 @@ exports.adminAdjustPoints = onCall({ region: REGION }, async (request) => {
 
 exports.claimAdReward = onCall({ region: REGION }, async (request) => {
   const uid = requireUid(request);
+  await assertEmailVerifiedForRewards(request);
   const today = dayKey(0);
 
   const userRef = db.collection("users").doc(uid);
