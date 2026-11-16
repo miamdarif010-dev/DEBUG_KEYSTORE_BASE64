@@ -45,6 +45,9 @@ jobs:
       - name: Analyze project
         run: flutter analyze
 
+      # The first failure is the REAL one. After every failed attempt the
+      # Gradle daemon is stopped, so the next attempt cannot show a fake
+      # "generateLockfiles already exists" error that hides the real cause.
       - name: Build APK (retries on network errors)
         run: |
           ok=0
@@ -53,8 +56,12 @@ jobs:
               ok=1
               break
             fi
-            echo "Build attempt $i failed. Retrying in 60 seconds..."
-            sleep 60
+            echo "Build attempt $i failed."
+            (cd android && ./gradlew --stop) || true
+            if [ "$i" != "3" ]; then
+              echo "Retrying in 60 seconds..."
+              sleep 60
+            fi
           done
           [ "$ok" = "1" ]
 
@@ -91,11 +98,9 @@ jobs:
           name: BuyNova-APK
           path: build/app/outputs/flutter-apk/app-release.apk
 
-      # ------------------------------------------------------------
       # Publish the new APK to Firebase Storage so the web page's
       # "অ্যাপ ডাউনলোড" button always gives the latest app.
       # (Only on pushes to main; pull requests have no secrets.)
-      # ------------------------------------------------------------
       - name: Authenticate with Google Cloud
         if: github.event_name != 'pull_request'
         uses: google-github-actions/auth@v2
