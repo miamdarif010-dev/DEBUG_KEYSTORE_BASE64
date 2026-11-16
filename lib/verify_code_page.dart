@@ -8,6 +8,13 @@ import 'package:flutter/services.dart';
 
 import 'home_page.dart';
 
+/// home_page.dart remembers which user already passed the email code, so the
+/// check is not repeated every time the home page opens.
+String? emailCodeOkUid;
+
+/// Used by home_page.dart: true when this user must still enter the code.
+Future<bool> needsEmailCode(User user) => EmailCodeGate.needsCode(user);
+
 /// Same rule as the server (functions/orders.js -> EMAIL_CODE_AFTER) and the
 /// website: email + password accounts created on/after this day must enter
 /// the 6 digit email code. Google accounts and older accounts are not asked.
@@ -127,6 +134,7 @@ class _VerifyCodePageState extends State<VerifyCodePage> {
       final data = Map<String, dynamic>.from(result.data as Map);
 
       if (data['alreadyVerified'] == true) {
+        emailCodeOkUid = FirebaseAuth.instance.currentUser?.uid;
         _goHome();
         return;
       }
@@ -163,6 +171,8 @@ class _VerifyCodePageState extends State<VerifyCodePage> {
 
     try {
       await _fn.httpsCallable('verifyLoginCode').call({'code': code});
+
+      emailCodeOkUid = FirebaseAuth.instance.currentUser?.uid;
 
       _snack('Email verified.', error: false);
       _goHome();
