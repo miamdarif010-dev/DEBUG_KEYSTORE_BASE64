@@ -45,16 +45,18 @@ jobs:
       - name: Analyze project
         run: flutter analyze
 
-      # The first failure is the REAL one. After every failed attempt the
-      # Gradle daemon is stopped, so the next attempt cannot show a fake
-      # "generateLockfiles already exists" error that hides the real cause.
+      # Every attempt is saved to its own log. If the build fails, the REAL
+      # reason (attempt 1) is shown on the run Summary page, so you can copy
+      # it from there. The Gradle daemon is stopped after each failure.
       - name: Build APK (retries on network errors)
         run: |
           ok=0
           for i in 1 2 3; do
-            if flutter build apk --release; then
-              ok=1
-              break
+            if flutter build apk --release 2>&1 | tee "build_attempt_$i.log"; then
+              if [ "${PIPESTATUS[0]}" = "0" ]; then
+                ok=1
+                break
+              fi
             fi
             echo "Build attempt $i failed."
             (cd android && ./gradlew --stop) || true
@@ -63,7 +65,15 @@ jobs:
               sleep 60
             fi
           done
-          [ "$ok" = "1" ]
+          if [ "$ok" != "1" ]; then
+            {
+              echo "## Build FAILED - reason from attempt 1"
+              echo '```'
+              grep -n -B3 -A25 -E "What went wrong|FAILURE: Build failed|Error:|error:" build_attempt_1.log | head -120
+              echo '```'
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
 
       - name: Signing report (read it on the run Summary page)
         run: |
