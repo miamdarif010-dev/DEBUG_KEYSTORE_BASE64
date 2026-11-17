@@ -75,6 +75,28 @@ jobs:
             exit 1
           fi
 
+      # Only runs when the build failed: prints WHICH project applies the
+      # Flutter plugin a second time (the "generateLockfiles" error).
+      - name: Diagnose Gradle failure
+        if: failure()
+        run: |
+          cd android
+          ./gradlew help --stacktrace --no-daemon > ../gradle_diag.log 2>&1 || true
+          {
+            echo "## Gradle diagnosis"
+            echo '```'
+            grep -n -E "Caused by|at .*FlutterPlugin|Where:|Build file|Settings file|Included build|project ':" ../gradle_diag.log | head -60
+            echo '```'
+            echo "### android/settings.gradle"
+            echo '```'
+            cat settings.gradle 2>/dev/null || cat settings.gradle.kts 2>/dev/null || echo "none"
+            echo '```'
+            echo "### Gradle files in android/"
+            echo '```'
+            find . -name "*.gradle" -o -name "*.gradle.kts" | grep -v "/build/" | sort
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Signing report (read it on the run Summary page)
         run: |
           APKSIGNER=$(ls $ANDROID_HOME/build-tools/*/apksigner | sort -V | tail -1)
