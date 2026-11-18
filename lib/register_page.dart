@@ -37,8 +37,8 @@ import 'package:flutter/gestures.dart';
 
 // Put your public page links here (see privacy.html). Until they are set, the
 // links show a short message instead of opening.
-const String kTermsUrl = '';
-const String kPrivacyPolicyUrl = '';
+const String kRegisterTermsUrl = 'https://buynova-cc5dd.web.app/terms.html';
+const String kRegisterPrivacyUrl = 'https://buynova-cc5dd.web.app/privacy.html';
 
 enum _PasswordStrength { empty, weak, medium, strong }
 
@@ -835,7 +835,7 @@ class _RegisterPageState extends State<RegisterPage> {
                                   decoration: TextDecoration.underline,
                                 ),
                                 recognizer: TapGestureRecognizer()
-                                  ..onTap = () => _openLink(kTermsUrl),
+                                  ..onTap = () => _openLink(kRegisterTermsUrl),
                               ),
                               const TextSpan(text: ' and '),
                               TextSpan(
@@ -846,7 +846,7 @@ class _RegisterPageState extends State<RegisterPage> {
                                   decoration: TextDecoration.underline,
                                 ),
                                 recognizer: TapGestureRecognizer()
-                                  ..onTap = () => _openLink(kPrivacyPolicyUrl),
+                                  ..onTap = () => _openLink(kRegisterPrivacyUrl),
                               ),
                               const TextSpan(text: '.'),
                             ],
