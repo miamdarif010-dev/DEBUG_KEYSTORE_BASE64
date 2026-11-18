@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'login_page.dart';
 import 'app_settings.dart';
 import 'app_strings.dart';
 
-/// TODO: put your real support email here.
-const String kSupportEmail = 'support@buynova.com';
+const String kSupportEmail = 'miamdarif1234@gmail.com';
+
+// Public pages (hosting/shop/privacy.html, terms.html, delete-account.html).
+const String kPrivacyUrl = 'https://buynova-cc5dd.web.app/privacy.html';
+const String kTermsUrl = 'https://buynova-cc5dd.web.app/terms.html';
 const String kAppVersion = '1.0.0';
 
 class SettingsPage extends StatefulWidget {
@@ -507,31 +511,12 @@ class _SettingsPageState extends State<SettingsPage> {
                 const SizedBox(height: 16),
                 _InfoRow('Sign-in method', providers.isEmpty ? '-' : providers),
                 _InfoRow('Email', user.email ?? 'Not available'),
-                _InfoRow(
-                  'Email verified',
-                  user.emailVerified ? 'Yes' : 'No',
-                ),
+
                 _InfoRow('Account created',
                     _formatDate(user.metadata.creationTime)),
                 _InfoRow('Last sign in',
                     _formatDate(user.metadata.lastSignInTime)),
                 const SizedBox(height: 12),
-                if (!user.emailVerified && user.email != null)
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.mark_email_read_outlined),
-                      label: Text('Send verification email'.tr),
-                      onPressed: () async {
-                        try {
-                          await user.sendEmailVerification();
-                          _showMessage('Verification email sent.');
-                        } on FirebaseAuthException catch (e) {
-                          _showMessage(_authError(e));
-                        }
-                      },
-                    ),
-                  ),
                 SizedBox(
                   width: double.infinity,
                   child: TextButton.icon(
@@ -804,6 +789,18 @@ class _SettingsPageState extends State<SettingsPage> {
     _showMessage('Report copied. Send it to $kSupportEmail');
   }
 
+  Future<void> _openUrl(String url) async {
+    try {
+      final ok = await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!ok) _showMessage('Could not open the link.');
+    } catch (_) {
+      _showMessage('Could not open the link.');
+    }
+  }
+
   void _openPage(Widget page) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
@@ -1063,9 +1060,7 @@ class _SettingsPageState extends State<SettingsPage> {
             _navTile(
               icon: Icons.login_outlined,
               title: 'Login & Security',
-              subtitle: user.emailVerified
-                  ? 'Email verified'
-                  : 'Email not verified',
+              subtitle: 'Sign-in and account details',
               onTap: _showLoginSecurity,
             ),
             _navTile(
@@ -1179,18 +1174,12 @@ class _SettingsPageState extends State<SettingsPage> {
           _navTile(
             icon: Icons.description_outlined,
             title: 'Terms & Conditions',
-            onTap: () => _openPage(const _TextPage(
-              title: 'Terms & Conditions',
-              sections: _termsSections,
-            )),
+            onTap: () => _openUrl(kTermsUrl),
           ),
           _navTile(
             icon: Icons.policy_outlined,
             title: 'Privacy Policy',
-            onTap: () => _openPage(const _TextPage(
-              title: 'Privacy Policy',
-              sections: _privacySections,
-            )),
+            onTap: () => _openUrl(kPrivacyUrl),
           ),
 
           // ================= LOGOUT =================
@@ -1410,51 +1399,5 @@ const List<(String, String)> _helpSections = [
   (
     'Still need help?',
     'Use Settings → Help & Support → Contact Support or Report a Problem.'
-  ),
-];
-
-// NOTE: replace these with your real legal text before publishing.
-const List<(String, String)> _termsSections = [
-  (
-    '1. Using BuyNova',
-    'By using BuyNova you agree to use the app lawfully and not to misuse '
-        'the platform, other users or sellers.'
-  ),
-  (
-    '2. Accounts',
-    'You are responsible for keeping your login details safe and for all '
-        'activity under your account.'
-  ),
-  (
-    '3. Orders & payments',
-    'Prices, availability and delivery times are shown at checkout and may '
-        'change before an order is confirmed.'
-  ),
-  (
-    '4. Changes',
-    'We may update these terms. Continued use of the app means you accept '
-        'the updated terms.'
-  ),
-];
-
-const List<(String, String)> _privacySections = [
-  (
-    'Information we collect',
-    'Account details such as email or phone number, and the activity needed '
-        'to run the app (orders, preferences).'
-  ),
-  (
-    'How we use it',
-    'To provide and improve BuyNova, process orders, and keep your account '
-        'secure.'
-  ),
-  (
-    'Your control',
-    'You can change your account details or delete your account at any time '
-        'from Settings.'
-  ),
-  (
-    'Contact',
-    'Questions about privacy? Contact $kSupportEmail.'
   ),
 ];
