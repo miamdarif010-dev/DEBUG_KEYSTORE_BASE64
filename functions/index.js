@@ -280,6 +280,34 @@ exports.approveWalletTransaction = onCall(async (request) => {
       );
     }
 
+    // A bKash/Nagad/Rocket/Bank TrxID can pay only ONE deposit, ever.
+    // (Reads must happen before the writes below.)
+    let usedTrxRef = null;
+
+    if (!isDebit) {
+      const trxKey = String(transactionData.trxId || "")
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "");
+
+      if (trxKey.length < 6) {
+        throw new HttpsError(
+          "invalid-argument",
+          "This deposit has no valid TrxID."
+        );
+      }
+
+      usedTrxRef = db.collection("usedDepositTrxIds").doc(trxKey);
+
+      const usedTrxSnapshot = await transaction.get(usedTrxRef);
+
+      if (usedTrxSnapshot.exists) {
+        throw new HttpsError(
+          "failed-precondition",
+          "This TrxID was already used for another approved deposit."
+        );
+      }
+    }
+
     const newBalance = isDebit
       ? currentBalance - amount
       : currentBalance + amount;
@@ -289,6 +317,15 @@ exports.approveWalletTransaction = onCall(async (request) => {
       walletBalance: newBalance,
       updatedAt: serverTimestamp(),
     });
+
+    if (usedTrxRef) {
+      transaction.set(usedTrxRef, {
+        userId: userId,
+        transactionId: transactionId,
+        amount: amount,
+        createdAt: serverTimestamp(),
+      });
+    }
 
     transaction.update(transactionRef, {
       status: "approved",
