@@ -117,6 +117,12 @@ service cloud.firestore {
           && request.resource.data.currencySymbol == '৳'
           && request.resource.data.amount is number
           && request.resource.data.amount >= 100
+          && request.resource.data.keys().hasOnly([
+            'userId', 'type', 'source', 'status', 'amount',
+            'currency', 'currencySymbol', 'createdAt',
+            'paymentMethod', 'paymentMethodName', 'senderNumber', 'trxId',
+            'withdrawalMethod', 'withdrawalMethodName', 'accountNumber'
+          ])
           && (
             (
               request.resource.data.type == 'credit'
