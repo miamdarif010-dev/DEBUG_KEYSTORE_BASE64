@@ -531,7 +531,7 @@ class _WalletPageState extends State<WalletPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Could not submit request: $e',
+            'Could not submit the request. Please try again.',
           ),
           backgroundColor: Colors.red,
         ),
@@ -808,7 +808,7 @@ class _WalletPageState extends State<WalletPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Could not submit withdrawal: $e',
+            'Could not submit the withdrawal. Please try again.',
           ),
           backgroundColor: Colors.red,
         ),
@@ -1026,8 +1026,11 @@ class _WalletPageState extends State<WalletPage> {
           final cashBalance =
               (userData['cashBalance'] as num?)?.toDouble() ?? 0.0;
 
+          // Reward points are stored in pointsBalance (see rewards.js).
           final points =
-              (userData['points'] as num?)?.toInt() ?? 0;
+              (userData['pointsBalance'] as num?)?.toInt() ??
+                  (userData['points'] as num?)?.toInt() ??
+                  0;
 
           final lifetimePoints =
               (userData['lifetimePoints'] as num?)?.toInt() ?? 0;
@@ -1227,7 +1230,7 @@ class _WalletPageState extends State<WalletPage> {
                               BorderRadius.circular(12),
                         ),
                         child: Text(
-                          'Could not load transactions.\n${snapshot.error}',
+                          'Could not load transactions. Please try again.',
                         ),
                       );
                     }
