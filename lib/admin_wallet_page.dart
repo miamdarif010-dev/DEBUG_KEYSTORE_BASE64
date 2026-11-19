@@ -40,28 +40,6 @@ class _AdminWalletPageState extends State<AdminWalletPage>
   }
 
   // =========================================================
-  // ACCOUNT MASKING
-  // =========================================================
-
-  String _maskedAccount(String account) {
-    final clean = account.trim();
-
-    if (clean.isEmpty) {
-      return '';
-    }
-
-    if (clean.length <= 4) {
-      return '****';
-    }
-
-    if (clean.length <= 7) {
-      return '****${clean.substring(clean.length - 2)}';
-    }
-
-    return '**** **** ${clean.substring(clean.length - 4)}';
-  }
-
-  // =========================================================
   // METHOD NAME
   // =========================================================
 
@@ -462,7 +440,7 @@ class _AdminWalletPageState extends State<AdminWalletPage>
                 if (account.isNotEmpty)
                   _detailRow(
                     'Account',
-                    _maskedAccount(account),
+                    account,
                   ),
 
                 if (trxId.isNotEmpty)
@@ -745,9 +723,12 @@ class _AdminWalletPageState extends State<AdminWalletPage>
                   const SizedBox(
                     width: 8,
                   ),
-                  Text(
-                    _maskedAccount(
-                      account,
+                  Expanded(
+                    child: SelectableText(
+                      '${_methodName(method)}: $account',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
