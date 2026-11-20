@@ -139,7 +139,7 @@ class _MyStorePageState extends State<MyStorePage> {
     } catch (e) {
       if (!mounted) return;
 
-      _showMessage('Could not add product to cart: $e');
+      _showMessage('Could not add product to cart.');
     }
   }
 
@@ -206,7 +206,7 @@ class _MyStorePageState extends State<MyStorePage> {
     } catch (e) {
       if (!mounted) return;
 
-      _showMessage('Could not remove product: $e');
+      _showMessage('Could not remove product.');
     }
   }
 
@@ -234,7 +234,7 @@ class _MyStorePageState extends State<MyStorePage> {
     } catch (e) {
       if (!mounted) return;
 
-      _showMessage('Could not update product: $e');
+      _showMessage('Could not update product.');
     }
   }
 
@@ -403,7 +403,7 @@ class _MyStorePageState extends State<MyStorePage> {
                     } catch (e) {
                       if (!mounted) return;
 
-                      _showMessage('Could not update price: $e');
+                      _showMessage('Could not update price.');
                     }
                   },
                   child: const Text('Save'),
@@ -503,7 +503,7 @@ class _MyStorePageState extends State<MyStorePage> {
         formattedPrice: priceText,
       );
     } catch (e) {
-      _showMessage('Could not share: $e');
+      _showMessage('Could not share.');
     }
   }
 
@@ -904,7 +904,7 @@ class _MyStorePageState extends State<MyStorePage> {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
-                  'Could not load your store.\n\n${snapshot.error}',
+                  'Could not load your store. Please try again.',
                   textAlign: TextAlign.center,
                 ),
               ),
