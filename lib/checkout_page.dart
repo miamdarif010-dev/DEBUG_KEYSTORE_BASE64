@@ -62,8 +62,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Wallet remains disabled until the Cloud Functions
-  // payment flow is deployed and tested.
+  // BuyNova Wallet payment is live (paid on the server by placeWalletOrder).
   static const bool _walletEnabled = true;
 
   static const String _functionsRegion = 'asia-northeast3';
