@@ -604,7 +604,7 @@ class _AvailableProductsPageState extends State<AvailableProductsPage> {
     } catch (e) {
       if (!mounted) return false;
 
-      _showMessage('Could not add product: $e');
+      _showMessage('Could not add product.');
 
       return false;
     }
@@ -862,7 +862,7 @@ class _AvailableProductsPageState extends State<AvailableProductsPage> {
                         child: Padding(
                           padding: const EdgeInsets.all(24),
                           child: Text(
-                            'Could not load products.\n\n${snapshot.error}',
+                            'Could not load products. Please try again.',
                             textAlign: TextAlign.center,
                           ),
                         ),
