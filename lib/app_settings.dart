@@ -19,7 +19,7 @@ class AppSettings {
   static final ValueNotifier<bool> reduceMotion = ValueNotifier<bool>(false);
   static final ValueNotifier<String> language =
       ValueNotifier<String>('English');
-  static final ValueNotifier<String> currency = ValueNotifier<String>('KRW');
+  static final ValueNotifier<String> currency = ValueNotifier<String>('BDT');
 
   /// 0.8 – 1.4 (app-wide text size)
   static final ValueNotifier<double> textScale = ValueNotifier<double>(1.0);
@@ -49,7 +49,7 @@ class AppSettings {
     videoQuality.value = prefs.getString('videoQuality') ?? 'Auto';
     reduceMotion.value = prefs.getBool('reduceMotion') ?? false;
     language.value = prefs.getString('language') ?? 'English';
-    currency.value = prefs.getString('currency') ?? 'KRW';
+    currency.value = prefs.getString('currency') ?? 'BDT';
     textScale.value = prefs.getDouble('textScale') ?? 1.0;
     blockedUsers.value = prefs.getStringList('blockedUsers') ?? <String>[];
   }
@@ -211,7 +211,7 @@ class AppSettings {
     videoQuality.value = 'Auto';
     reduceMotion.value = false;
     language.value = 'English';
-    currency.value = 'KRW';
+    currency.value = 'BDT';
     textScale.value = 1.0;
 
     // keep push state in sync with the default (on)
