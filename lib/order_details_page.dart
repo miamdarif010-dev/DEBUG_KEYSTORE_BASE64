@@ -669,7 +669,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
         message = 'Order was not found.';
       } else {
         message =
-            'Could not cancel order: ${e.message ?? e.code}';
+            'Could not cancel the order. Please try again.';
       }
 
       _showMessage(
@@ -682,7 +682,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
       }
 
       _showMessage(
-        'Could not cancel order: $e',
+        'Could not cancel the order. Please try again.',
         error: true,
       );
     } finally {
