@@ -657,8 +657,7 @@ class OrderTrackingPage extends StatelessWidget {
                 padding:
                     const EdgeInsets.all(20),
                 child: Text(
-                  'Unable to load order.\n\n'
-                  '${orderSnapshot.error}',
+                  'Unable to load this order. Please try again.',
                   textAlign:
                       TextAlign.center,
                 ),
@@ -731,8 +730,7 @@ class OrderTrackingPage extends StatelessWidget {
                       20,
                     ),
                     child: Text(
-                      'Unable to load seller orders.\n\n'
-                      '${sellerSnapshot.error}',
+                      'Unable to load seller orders. Please try again.',
                       textAlign:
                           TextAlign.center,
                     ),
