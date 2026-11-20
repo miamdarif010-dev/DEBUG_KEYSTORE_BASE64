@@ -190,7 +190,7 @@ class MyProfitPage extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
-                  'Could not load profit.\n\n${snapshot.error}',
+                  'Could not load profit. Please try again.',
                   textAlign: TextAlign.center,
                 ),
               ),
