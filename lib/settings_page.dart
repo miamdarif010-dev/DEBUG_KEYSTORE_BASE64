@@ -602,12 +602,12 @@ class _SettingsPageState extends State<SettingsPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     RadioListTile<String>(
-                      value: 'KRW',
-                      title: Text('₩ Korean Won'),
-                    ),
-                    RadioListTile<String>(
                       value: 'BDT',
                       title: Text('৳ Bangladeshi Taka'),
+                    ),
+                    RadioListTile<String>(
+                      value: 'KRW',
+                      title: Text('₩ Korean Won'),
                     ),
                     RadioListTile<String>(
                       value: 'USD',
@@ -676,8 +676,9 @@ class _SettingsPageState extends State<SettingsPage> {
       case 'EUR':
         return '€ Euro';
       case 'KRW':
-      default:
         return '₩ Korean Won';
+      default:
+        return '৳ Bangladeshi Taka';
     }
   }
 
