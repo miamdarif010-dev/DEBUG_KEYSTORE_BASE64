@@ -127,7 +127,17 @@ const completeReturnRefund = onCall({ region: REGION }, async (request) => {
       throw new HttpsError('not-found', 'The order was not found.');
     }
 
-    const sub = subSnap.data() || {};
+    let sub = subSnap.data() || {};
+
+    // The money of a reseller order is kept in reseller_private (hidden from
+    // the seller and the customer). Old orders still carry it on the order.
+    if (subCollection === 'reseller_orders') {
+      const privSnap = await tx.get(
+        db.collection('reseller_private').doc(subId)
+      );
+
+      if (privSnap.exists) sub = { ...sub, ...(privSnap.data() || {}) };
+    }
 
     const buyerUid = String(sub.buyerId || sub.userId || sub.customerId || '');
 
@@ -540,4 +550,3 @@ const completeReturnRefund = onCall({ region: REGION }, async (request) => {
 });
 
 module.exports = { completeReturnRefund };
-
