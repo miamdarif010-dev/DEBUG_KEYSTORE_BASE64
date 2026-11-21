@@ -11,15 +11,24 @@
   },
   "hosting": {
     "public": "hosting",
-    "ignore": ["firebase.json", "**/node_modules/**"],
+    "ignore": [
+      "firebase.json",
+      "**/node_modules/**"
+    ],
     "rewrites": [
       {
         "source": "/r/**",
-        "function": { "functionId": "sharePage", "region": "asia-northeast3" }
+        "function": {
+          "functionId": "sharePage",
+          "region": "asia-northeast3"
+        }
       },
       {
         "source": "/p/**",
-        "function": { "functionId": "sharePage", "region": "asia-northeast3" }
+        "function": {
+          "functionId": "sharePage",
+          "region": "asia-northeast3"
+        }
       }
     ],
     "headers": [
@@ -32,6 +41,26 @@
           }
         ]
       }
+    ],
+    "redirects": [
+      {
+        "source": "/privacy.html",
+        "destination": "/shop/privacy.html",
+        "type": 301
+      },
+      {
+        "source": "/terms.html",
+        "destination": "/shop/terms.html",
+        "type": 301
+      },
+      {
+        "source": "/delete-account.html",
+        "destination": "/shop/delete-account.html",
+        "type": 301
+      }
     ]
+  },
+  "storage": {
+    "rules": "storage.rules"
   }
 }
