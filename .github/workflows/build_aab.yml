@@ -10,6 +10,8 @@ on:
 jobs:
   build-aab:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -69,3 +71,15 @@ jobs:
           name: buynova-release-aab
           path: build/app/outputs/bundle/release/app-release.aab
           retention-days: 30
+
+      # Also attach the AAB to a DRAFT release: it downloads as a plain
+      # .aab file (no zip). A draft release is visible only to you.
+      - name: Create draft release with the AAB
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "aab-${{ github.run_number }}" \
+            build/app/outputs/bundle/release/app-release.aab \
+            --draft \
+            --title "BuyNova AAB #${{ github.run_number }}" \
+            --notes "Play Store upload file. Build number ${{ github.run_number }}."
