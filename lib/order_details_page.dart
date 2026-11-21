@@ -676,7 +676,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
         message,
         error: true,
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) {
         return;
       }
