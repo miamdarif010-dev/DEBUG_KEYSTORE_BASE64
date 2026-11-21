@@ -780,12 +780,7 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
         (data['orderStatus'] ?? 'placed').toString();
 
     final subtotal = _number(
-      isResellerOrder
-          ? (data['sellingTotal'] ??
-              data['subtotal'] ??
-              data['sellerSubtotal'])
-          : (data['sellerSubtotal'] ??
-              data['subtotal']),
+      data['sellerSubtotal'] ?? data['subtotal'],
     );
 
     final couponDiscount = _number(
@@ -809,6 +804,24 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
             )
             .toList()
         : <Map<String, dynamic>>[];
+
+    // A reseller order document carries no prices (the seller can read it).
+    // The customer's own order has them, so take them from there.
+    if (isResellerOrder) {
+      final mainItems = _mainItems();
+
+      for (final item in items) {
+        final productId = (item['productId'] ?? '').toString();
+
+        for (final main in mainItems) {
+          if ((main['productId'] ?? '').toString() == productId) {
+            item['price'] = main['price'];
+            item['total'] = main['total'];
+            break;
+          }
+        }
+      }
+    }
 
     return Card(
       margin: const EdgeInsets.only(
@@ -906,23 +919,23 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
                 ),
               ),
             const Divider(),
-            _infoRow(
-              isResellerOrder
-                  ? 'Selling Total'
-                  : 'Seller Subtotal',
-              '৳${subtotal.toStringAsFixed(0)}',
-              bold: true,
-            ),
-            if (couponDiscount > 0)
+            if (!isResellerOrder) ...[
               _infoRow(
-                'Coupon Discount',
-                '-৳${couponDiscount.toStringAsFixed(0)}',
+                'Seller Subtotal',
+                '৳${subtotal.toStringAsFixed(0)}',
+                bold: true,
               ),
-            _infoRow(
-              'Your Order Amount',
-              '৳${customerAmount.toStringAsFixed(0)}',
-              bold: true,
-            ),
+              if (couponDiscount > 0)
+                _infoRow(
+                  'Coupon Discount',
+                  '-৳${couponDiscount.toStringAsFixed(0)}',
+                ),
+              _infoRow(
+                'Your Order Amount',
+                '৳${customerAmount.toStringAsFixed(0)}',
+                bold: true,
+              ),
+            ],
             const SizedBox(height: 8),
             if (_canCancel(status))
               SizedBox(
