@@ -627,6 +627,20 @@ function statusRank(status) {
   return rank === undefined ? 0 : rank;
 }
 
+
+// Money of a reseller order lives in reseller_private (reseller side) so the
+// seller and the customer cannot read it. Server code merges it back here.
+// Old, not yet migrated orders still have the fields on the order itself.
+async function withResellerPrivate(transaction, collectionName, subOrderId, sub) {
+  if (collectionName !== "reseller_orders") return sub;
+
+  const snap = await transaction.get(
+    db.collection("reseller_private").doc(subOrderId)
+  );
+
+  return snap.exists ? { ...sub, ...(snap.data() || {}) } : sub;
+}
+
 async function refundCancelledSubOrder(orderId, collectionName, subOrderId) {
   const orderRef = db.collection("orders").doc(orderId);
 
@@ -651,7 +665,12 @@ async function refundCancelledSubOrder(orderId, collectionName, subOrderId) {
 
     const order = orderSnap.data() || {};
 
-    const sub = subSnap.data() || {};
+    const sub = await withResellerPrivate(
+      transaction,
+      collectionName,
+      subOrderId,
+      subSnap.data() || {}
+    );
 
     const paymentStatus = String(order.paymentStatus || "");
 
@@ -940,7 +959,12 @@ async function payoutDeliveredSubOrder(
       return { paid: false, reason: "not-found" };
     }
 
-    const sub = subSnap.data() || {};
+    const sub = await withResellerPrivate(
+      transaction,
+      collectionName,
+      subOrderId,
+      subSnap.data() || {}
+    );
 
     if (sub.payoutDone === true) {
       return { paid: false, reason: "already-paid" };
@@ -1262,6 +1286,107 @@ exports.retrySubOrderPayout = onCall(async (request) => {
 
   return { success: true, ...result };
 });
+
+// Admin, run ONCE after deploying the privacy split: moves the money of old
+// reseller orders out of reseller_orders into reseller_private (reseller) and
+// reseller_supplier (seller), then removes it from the order itself.
+// Safe to run again (finished orders are skipped).
+exports.migrateResellerPrivacy = onCall(
+  { timeoutSeconds: 540 },
+  async (request) => {
+    requireAdmin(request);
+
+    const MONEY = [
+      "sellingTotal",
+      "supplierTotal",
+      "supplierEarning",
+      "couponDiscount",
+      "discountShare",
+      "resellerProfit",
+      "profit",
+      "serviceFeeShare",
+    ];
+
+    const snap = await db.collection("reseller_orders").get();
+
+    let migrated = 0;
+
+    for (const doc of snap.docs) {
+      const d = doc.data() || {};
+
+      const hasMoney = MONEY.some((k) => d[k] !== undefined);
+
+      if (!hasMoney) continue;
+
+      const items = Array.isArray(d.items) ? d.items : [];
+
+      const batch = db.batch();
+
+      const privData = { ...d };
+      delete privData.paymentMethod;
+      delete privData.paymentStatus;
+      delete privData.orderStatus;
+      delete privData.customerName;
+      delete privData.customerPhone;
+      delete privData.address;
+      delete privData.deliveryZone;
+      privData.items = items;
+      privData.resellerOrderId = doc.id;
+
+      batch.set(db.collection("reseller_private").doc(doc.id), privData, {
+        merge: true,
+      });
+
+      batch.set(
+        db.collection("reseller_supplier").doc(doc.id),
+        {
+          orderId: d.orderId || null,
+          resellerOrderId: doc.id,
+          sellerId: d.sellerId || null,
+          items: items.map((i) => ({
+            productId: i.productId || null,
+            name: i.name || "",
+            quantity: Number(i.quantity) || 1,
+            price: Number(i.supplierPrice) || 0,
+            total: roundMoney(
+              (Number(i.supplierPrice) || 0) * (Number(i.quantity) || 1)
+            ),
+            size: i.size ?? null,
+            color: i.color ?? null,
+            imageUrl: i.imageUrl || "",
+          })),
+          supplierTotal: Number(d.supplierTotal) || 0,
+          supplierEarning: Number(d.supplierEarning ?? d.supplierTotal) || 0,
+          currency: "BDT",
+          createdAt: d.createdAt || serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      const clean = {};
+
+      for (const k of MONEY) clean[k] = admin.firestore.FieldValue.delete();
+
+      clean.items = items.map((i) => ({
+        productId: i.productId || null,
+        name: i.name || "",
+        quantity: Number(i.quantity) || 1,
+        size: i.size ?? null,
+        color: i.color ?? null,
+        imageUrl: i.imageUrl || "",
+        supplierProductId: i.supplierProductId || null,
+      }));
+
+      batch.update(doc.ref, clean);
+
+      await batch.commit();
+
+      migrated++;
+    }
+
+    return { success: true, migrated };
+  }
+);
 
 async function handleSubOrderStatusChange(event, collectionName) {
   const before =
@@ -2282,6 +2407,12 @@ exports.adminDeleteUser = onCall(
             uid
           )
       );
+
+    await deleteQueryDocuments(
+      db
+        .collection("reseller_private")
+        .where("entrepreneurUid", "==", uid)
+    );
 
     // ========================================================
     // DELETE MAIN CUSTOMER ORDERS
