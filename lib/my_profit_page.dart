@@ -181,6 +181,17 @@ class MyProfitPage extends StatelessWidget {
       appBar: AppBar(title: const Text('My Profit')),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: FirebaseFirestore.instance
+            .collection('reseller_private')
+            .where('entrepreneurUid', isEqualTo: user.uid)
+            .snapshots(),
+        builder: (context, privateSnapshot) {
+          final priv = <String, Map<String, dynamic>>{
+            for (final d in privateSnapshot.data?.docs ?? [])
+              d.id: d.data(),
+          };
+
+          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
             .collection('reseller_orders')
             .where('entrepreneurUid', isEqualTo: user.uid)
             .snapshots(),
@@ -209,7 +220,10 @@ class MyProfitPage extends StatelessWidget {
           int pendingCount = 0;
 
           for (final doc in docs) {
-            final data = doc.data();
+            final data = <String, dynamic>{
+              ...doc.data(),
+              ...(priv[doc.id] ?? const <String, dynamic>{}),
+            };
             final status =
                 (data['orderStatus']?.toString() ?? 'placed')
                     .toLowerCase();
@@ -349,12 +363,17 @@ class MyProfitPage extends StatelessWidget {
                 )
               else
                 ...sorted.map(
-                  (doc) => _orderTile(doc.id, doc.data()),
+                  (doc) => _orderTile(doc.id, {
+                    ...doc.data(),
+                    ...(priv[doc.id] ?? const <String, dynamic>{}),
+                  }),
                 ),
             ],
           );
             },
           );
+        },
+      );
         },
       ),
     );
