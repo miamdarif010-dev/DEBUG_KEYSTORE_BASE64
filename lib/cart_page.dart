@@ -1023,7 +1023,9 @@ class _CartPageState extends State<CartPage> {
                             Text(
                               selectedItems.isEmpty
                                   ? 'No items selected'
-                                  : '$totalQuantity item${totalQuantity == 1 ? '' : 's'} selected',
+                                  : selectedItems.length == totalQuantity
+                                      ? '$totalQuantity item${totalQuantity == 1 ? '' : 's'} selected'
+                                      : '${selectedItems.length} product${selectedItems.length == 1 ? '' : 's'} • $totalQuantity items selected',
                               style: TextStyle(
                                 color: Colors.grey.shade700,
                                 fontSize: 12,
@@ -1061,7 +1063,7 @@ class _CartPageState extends State<CartPage> {
                           child: Text(
                             selectedItems.isEmpty
                                 ? 'Checkout'
-                                : 'Checkout (${selectedItems.length})',
+                                : 'Checkout ($totalQuantity)',
                             style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.bold,
