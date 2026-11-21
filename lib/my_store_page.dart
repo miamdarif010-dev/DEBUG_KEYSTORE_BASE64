@@ -136,7 +136,7 @@ class _MyStorePageState extends State<MyStorePage> {
       if (!mounted) return;
 
       _showMessage('$productName added to cart.');
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       _showMessage('Could not add product to cart.');
@@ -203,7 +203,7 @@ class _MyStorePageState extends State<MyStorePage> {
       if (!mounted) return;
 
       _showMessage('Product removed from your store.');
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       _showMessage('Could not remove product.');
@@ -231,7 +231,7 @@ class _MyStorePageState extends State<MyStorePage> {
       _showMessage(
         !active ? 'Product is now active.' : 'Product is now inactive.',
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       _showMessage('Could not update product.');
@@ -400,7 +400,7 @@ class _MyStorePageState extends State<MyStorePage> {
                       if (!mounted) return;
 
                       _showMessage('Price updated.');
-                    } catch (e) {
+                    } catch (_) {
                       if (!mounted) return;
 
                       _showMessage('Could not update price.');
@@ -502,7 +502,7 @@ class _MyStorePageState extends State<MyStorePage> {
         name: name,
         formattedPrice: priceText,
       );
-    } catch (e) {
+    } catch (_) {
       _showMessage('Could not share.');
     }
   }
