@@ -13,12 +13,16 @@ class _SellerOrderEntry {
   final QueryDocumentSnapshot<Map<String, dynamic>> document;
   final bool isResellerOrder;
 
+  // The seller's own money of a reseller order (reseller_supplier).
+  final Map<String, dynamic> extra;
+
   const _SellerOrderEntry({
     required this.document,
     required this.isResellerOrder,
+    this.extra = const <String, dynamic>{},
   });
 
-  Map<String, dynamic> get data => document.data();
+  Map<String, dynamic> get data => {...document.data(), ...extra};
 
   String get documentId => document.id;
 }
@@ -446,6 +450,28 @@ class SellerOrdersPage extends StatelessWidget {
   }
 
   // ===========================================================
+  // SELLER MONEY OF A RESELLER ORDER (reseller_supplier document)
+  // ===========================================================
+
+  Map<String, dynamic> _supplierExtra(Map<String, dynamic>? supplier) {
+    if (supplier == null) {
+      return const <String, dynamic>{};
+    }
+
+    final raw = supplier['items'];
+
+    return <String, dynamic>{
+      'supplierTotal': supplier['supplierTotal'],
+      'supplierEarning': supplier['supplierEarning'],
+      if (raw is List)
+        'items': raw
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList(),
+    };
+  }
+
+  // ===========================================================
   // ITEMS
   // ===========================================================
 
@@ -651,8 +677,7 @@ class SellerOrdersPage extends StatelessWidget {
           .showSnackBar(
         SnackBar(
           content: Text(
-            'Could not update order.\n'
-            '${e.message ?? e.code}',
+            'Could not update the order. Please try again.',
           ),
         ),
       );
@@ -663,7 +688,7 @@ class SellerOrdersPage extends StatelessWidget {
           .showSnackBar(
         SnackBar(
           content: Text(
-            'Could not update order.\n$e',
+            'Could not update the order. Please try again.',
           ),
         ),
       );
@@ -1233,21 +1258,9 @@ class SellerOrdersPage extends StatelessWidget {
           data['subtotal'],
     );
 
-    final sellingTotal =
-        _number(
-      data['sellingTotal'] ??
-          data['total'],
-    );
-
     final supplierTotal =
         _number(
       data['supplierTotal'],
-    );
-
-    final resellerProfit =
-        _number(
-      data['resellerProfit'] ??
-          data['profit'],
     );
 
     final netSellerEarnings =
@@ -1500,16 +1513,8 @@ class SellerOrdersPage extends StatelessWidget {
 
                     if (isResellerOrder) ...[
                       _moneyDetailRow(
-                        'Selling Total',
-                        sellingTotal,
-                      ),
-                      _moneyDetailRow(
-                        'Supplier Cost',
+                        'Your Order Amount',
                         supplierTotal,
-                      ),
-                      _moneyDetailRow(
-                        'Reseller Profit',
-                        resellerProfit,
                         green: true,
                       ),
                     ] else ...[
@@ -1715,12 +1720,6 @@ class SellerOrdersPage extends StatelessWidget {
     final supplierTotal =
         _number(
       data['supplierTotal'],
-    );
-
-    final resellerProfit =
-        _number(
-      data['resellerProfit'] ??
-          data['profit'],
     );
 
     final netSellerEarnings =
@@ -2030,20 +2029,8 @@ class SellerOrdersPage extends StatelessWidget {
                   children: [
                     Expanded(
                       child: _miniMoney(
-                        'Selling',
-                        total,
-                      ),
-                    ),
-                    Expanded(
-                      child: _miniMoney(
-                        'Supplier',
+                        'Your Order Amount',
                         supplierTotal,
-                      ),
-                    ),
-                    Expanded(
-                      child: _miniMoney(
-                        'Reseller Profit',
-                        resellerProfit,
                         green: true,
                       ),
                     ),
@@ -2361,8 +2348,7 @@ class SellerOrdersPage extends StatelessWidget {
                   20,
                 ),
                 child: Text(
-                  'Unable to load seller orders.\n\n'
-                  '${sellerSnapshot.error}',
+                  'Unable to load seller orders. Please try again.',
                   textAlign:
                       TextAlign.center,
                 ),
@@ -2410,8 +2396,7 @@ class SellerOrdersPage extends StatelessWidget {
                       20,
                     ),
                     child: Text(
-                      'Unable to load reseller orders.\n\n'
-                      '${resellerSnapshot.error}',
+                      'Unable to load reseller orders. Please try again.',
                       textAlign:
                           TextAlign.center,
                     ),
@@ -2532,9 +2517,33 @@ class SellerOrdersPage extends StatelessWidget {
                     final entry =
                         entries[index];
 
-                    return _buildOrderCard(
-                      context,
-                      entry,
+                    if (!entry.isResellerOrder) {
+                      return _buildOrderCard(
+                        context,
+                        entry,
+                      );
+                    }
+
+                    // Reseller order: the seller sees only HIS supplier
+                    // price (never the selling price or the profit).
+                    return StreamBuilder<
+                        DocumentSnapshot<Map<String, dynamic>>>(
+                      stream: FirebaseFirestore.instance
+                          .collection('reseller_supplier')
+                          .doc(entry.documentId)
+                          .snapshots(),
+                      builder: (context, supplierSnapshot) {
+                        return _buildOrderCard(
+                          context,
+                          _SellerOrderEntry(
+                            document: entry.document,
+                            isResellerOrder: true,
+                            extra: _supplierExtra(
+                              supplierSnapshot.data?.data(),
+                            ),
+                          ),
+                        );
+                      },
                     );
                   },
                 ),
