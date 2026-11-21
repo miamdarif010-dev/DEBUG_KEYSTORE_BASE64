@@ -650,6 +650,15 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
       }
 
       const ref = db.collection(COL.resellerOrders).doc();
+
+      // PRIVACY SPLIT (three documents, same id):
+      //  reseller_orders   : what the SELLER, the CUSTOMER and the reseller may
+      //                      all read: status, delivery address, items WITHOUT
+      //                      any price.
+      //  reseller_supplier : the SELLER's own money only (supplier price).
+      //  reseller_private  : the RESELLER's money (selling price, profit).
+      // So the seller never sees the selling price or the profit, and the
+      // customer never sees the supplier price or the profit.
       tx.set(ref, {
         orderId,
         resellerOrderId: ref.id,
@@ -662,6 +671,49 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
         customerPhone: String(address.phone ?? ''),
         address: String(address.address ?? address.addressLine1 ?? ''),
         deliveryZone: zone,
+        items: group.map((l) => ({
+          productId: l.id,
+          name: l.name,
+          quantity: l.quantity,
+          size: l.size,
+          color: l.color,
+          imageUrl: l.imageUrl,
+          supplierProductId: l.supplierProductId,
+        })),
+        currency: 'BDT',
+        paymentMethod,
+        paymentStatus: 'pending',
+        orderStatus: 'placed',
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+
+      tx.set(db.collection('reseller_supplier').doc(ref.id), {
+        orderId,
+        resellerOrderId: ref.id,
+        sellerId: first.sellerId,
+        items: group.map((l) => ({
+          productId: l.id,
+          name: l.name,
+          quantity: l.quantity,
+          price: l.supplierPrice,
+          total: round2(l.supplierPrice * l.quantity),
+          size: l.size,
+          color: l.color,
+          imageUrl: l.imageUrl,
+        })),
+        supplierTotal,
+        supplierEarning: supplierTotal,
+        currency: 'BDT',
+        createdAt: FieldValue.serverTimestamp(),
+      });
+
+      tx.set(db.collection('reseller_private').doc(ref.id), {
+        orderId,
+        resellerOrderId: ref.id,
+        entrepreneurUid: first.entrepreneurUid,
+        sellerId: first.sellerId,
+        customerId: uid,
         items: group.map((l) => ({
           productId: l.id,
           name: l.name,
@@ -684,11 +736,7 @@ exports.createOrder = onCall({ region: REGION }, async (request) => {
         profit,
         serviceFeeShare: p.serviceFeeShare,
         currency: 'BDT',
-        paymentMethod,
-        paymentStatus: 'pending',
-        orderStatus: 'placed',
         createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
       });
     }
   });
