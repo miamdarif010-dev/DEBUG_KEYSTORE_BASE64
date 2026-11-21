@@ -65,7 +65,7 @@ class _AvailableProductsPageState extends State<AvailableProductsPage> {
         _entrepreneurCode = code;
         _isCheckingEntrepreneur = false;
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       setState(() {
@@ -601,7 +601,7 @@ class _AvailableProductsPageState extends State<AvailableProductsPage> {
       );
 
       return true;
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return false;
 
       _showMessage('Could not add product.');
