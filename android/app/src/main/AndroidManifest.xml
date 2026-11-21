@@ -2,8 +2,21 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="com.google.android.gms.permission.AD_ID"/>
+
+    <!-- Lets url_launcher open web pages and mail apps (Android 11+). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO"/>
+            <data android:scheme="mailto"/>
+        </intent>
+    </queries>
+
     <application
-        android:label="buynova"
+        android:label="BuyNova"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -21,6 +34,7 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- buynova://r/... and buynova://p/... -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
@@ -28,12 +42,30 @@
                 <data android:scheme="buynova" android:host="r"/>
                 <data android:scheme="buynova" android:host="p"/>
             </intent-filter>
+            <!-- Shared web links https://buynova-cc5dd.web.app/r/... and /p/...
+                 open the app when it is installed (needs assetlinks.json
+                 with the Play app-signing SHA-256; otherwise the browser
+                 opens, nothing breaks). -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"
+                      android:host="buynova-cc5dd.web.app"
+                      android:pathPrefix="/r/"/>
+                <data android:scheme="https"
+                      android:host="buynova-cc5dd.web.app"
+                      android:pathPrefix="/p/"/>
+            </intent-filter>
         </activity>
         <meta-data android:name="flutterEmbedding" android:value="2"/>
         <meta-data android:name="flutter_deeplinking_enabled" android:value="false"/>
-        <!-- AdMob App ID (এটা Google-এর টেস্ট ID, রিলিজে নিজেরটা বসাবে) -->
+        <!-- AdMob App ID: this is Google's TEST id. Replace it with your own
+             real AdMob App ID (ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY)
+             before the Play Store release. -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-3940256099942544~3347511713"/>
     </application>
 </manifest>
+
