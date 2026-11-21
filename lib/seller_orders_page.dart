@@ -670,7 +670,7 @@ class SellerOrdersPage extends StatelessWidget {
           ),
         ),
       );
-    } on FirebaseException catch (e) {
+    } on FirebaseException catch (_) {
       if (!context.mounted) return;
 
       ScaffoldMessenger.of(context)
@@ -681,7 +681,7 @@ class SellerOrdersPage extends StatelessWidget {
           ),
         ),
       );
-    } catch (e) {
+    } catch (_) {
       if (!context.mounted) return;
 
       ScaffoldMessenger.of(context)
