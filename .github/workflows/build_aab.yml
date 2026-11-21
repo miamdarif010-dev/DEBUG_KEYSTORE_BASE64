@@ -1,0 +1,71 @@
+name: BuyNova Build AAB (Play Store)
+
+# Manual only: GitHub -> Actions -> "BuyNova Build AAB (Play Store)" -> Run workflow.
+# Needs 4 repository secrets (Settings -> Secrets and variables -> Actions):
+#   UPLOAD_KEYSTORE_BASE64, UPLOAD_KEYSTORE_PASSWORD,
+#   UPLOAD_KEY_ALIAS, UPLOAD_KEY_PASSWORD
+on:
+  workflow_dispatch:
+
+jobs:
+  build-aab:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.35.0"
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Restore keys (needed by the debug/test signing config)
+        run: |
+          mkdir -p "$HOME/.android"
+          echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | base64 --decode > "$HOME/.android/debug.keystore"
+          cp "$HOME/.android/debug.keystore" android/app/ci-debug.keystore
+
+      - name: Restore Play Store upload key
+        env:
+          UPLOAD_KEYSTORE_BASE64: ${{ secrets.UPLOAD_KEYSTORE_BASE64 }}
+          UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.UPLOAD_KEYSTORE_PASSWORD }}
+          UPLOAD_KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
+          UPLOAD_KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
+        run: |
+          if [ -z "$UPLOAD_KEYSTORE_BASE64" ]; then
+            echo "UPLOAD_KEYSTORE_BASE64 secret is missing" && exit 1
+          fi
+          echo "$UPLOAD_KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
+          {
+            echo "storePassword=$UPLOAD_KEYSTORE_PASSWORD"
+            echo "keyPassword=$UPLOAD_KEY_PASSWORD"
+            echo "keyAlias=$UPLOAD_KEY_ALIAS"
+            echo "storeFile=upload-keystore.jks"
+          } > android/key.properties
+
+      - name: Analyze project
+        run: flutter analyze
+
+      # The version code must go up with every upload to Play.
+      # The GitHub run number always increases, so it is used for that.
+      - name: Build AAB
+        run: flutter build appbundle --release --build-number=${{ github.run_number }}
+
+      - name: Upload AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: buynova-release-aab
+          path: build/app/outputs/bundle/release/app-release.aab
+          retention-days: 30
