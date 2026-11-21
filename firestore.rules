@@ -888,6 +888,22 @@ service cloud.firestore {
     // RESELLER / ENTREPRENEUR ORDERS
     // =====================================================
 
+    // Money of reseller orders is split so nobody sees the other side:
+    //   reseller_private  : selling price + reseller profit (reseller, admin)
+    //   reseller_supplier : supplier price (the seller, admin)
+    // Written only by Cloud Functions.
+    match /reseller_private/{id} {
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.entrepreneurUid == request.auth.uid);
+      allow write: if false;
+    }
+
+    match /reseller_supplier/{id} {
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.sellerId == request.auth.uid);
+      allow write: if false;
+    }
+
     match /reseller_orders/{resellerOrderId} {
 
       allow read: if isAdmin()
