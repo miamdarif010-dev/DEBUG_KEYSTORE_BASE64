@@ -1228,11 +1228,11 @@ class _ResellerMembershipCardState
           isError: true,
         );
       }
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       _showMessage(
-        'Something went wrong.\n$e',
+        'Something went wrong. Please try again.',
         isError: true,
       );
     } finally {
