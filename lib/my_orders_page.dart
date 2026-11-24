@@ -273,8 +273,9 @@ class MyOrdersPage extends StatelessWidget {
   // ============================================================
 
   Widget _buildProductItem(
-    Map<String, dynamic> item,
-  ) {
+    Map<String, dynamic> item, {
+    bool showPrice = true,
+  }) {
     final name =
         (item['name'] ?? 'Product').toString();
 
@@ -347,14 +348,16 @@ class MyOrdersPage extends StatelessWidget {
                   ),
                 ),
                 VariantLine(item),
-                const SizedBox(height: 4),
-                Text(
-                  '৳${(price * quantity).toStringAsFixed(0)}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.redAccent,
+                if (showPrice) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '৳${(price * quantity).toStringAsFixed(0)}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.redAccent,
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -955,9 +958,15 @@ class MyOrdersPage extends StatelessWidget {
 
             if (items.isNotEmpty)
               ...items.map(
-                _buildProductItem,
+                (item) => _buildProductItem(
+                  item,
+                  // Reseller orders carry no prices: the prices the
+                  // customer paid are shown in the main order above.
+                  showPrice: !isResellerOrder,
+                ),
               ),
 
+            if (!isResellerOrder) ...[
             const Divider(),
 
             Row(
@@ -1023,6 +1032,7 @@ class MyOrdersPage extends StatelessWidget {
                   ),
                 ],
               ),
+            ],
             ],
 
             _buildDeliverySummary(
@@ -1428,9 +1438,8 @@ class MyOrdersPage extends StatelessWidget {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(20),
-                child: Text(
-                  'Unable to load orders.\n\n'
-                  '${orderSnapshot.error}',
+                child: const Text(
+                  'Unable to load orders. Please try again.',
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -1498,9 +1507,8 @@ class MyOrdersPage extends StatelessWidget {
                   child: Padding(
                     padding:
                         const EdgeInsets.all(20),
-                    child: Text(
-                      'Unable to load seller orders.\n\n'
-                      '${sellerSnapshot.error}',
+                    child: const Text(
+                      'Unable to load seller orders. Please try again.',
                       textAlign:
                           TextAlign.center,
                     ),
@@ -1566,9 +1574,8 @@ class MyOrdersPage extends StatelessWidget {
                       child: Padding(
                         padding:
                             const EdgeInsets.all(20),
-                        child: Text(
-                          'Unable to load reseller orders.\n\n'
-                          '${resellerSnapshot.error}',
+                        child: const Text(
+                          'Unable to load reseller orders. Please try again.',
                           textAlign:
                               TextAlign.center,
                         ),
