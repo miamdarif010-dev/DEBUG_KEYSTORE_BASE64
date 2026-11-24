@@ -27,7 +27,6 @@ dependencies:
 
   # Authentication
   google_sign_in: ^6.2.1
-  flutter_facebook_auth: ^7.1.1
 
   # Local storage
   shared_preferences: ^2.5.3
