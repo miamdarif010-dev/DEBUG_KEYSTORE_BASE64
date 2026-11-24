@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +20,40 @@ class _ResellerOrdersPageState
 
   final FirebaseAuth _auth =
       FirebaseAuth.instance;
+
+  // reseller_private documents of this reseller, by order id.
+  Map<String, Map<String, dynamic>> _private = {};
+
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _privateSub;
+
+  @override
+  void initState() {
+    super.initState();
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+
+    if (uid != null) {
+      _privateSub = FirebaseFirestore.instance
+          .collection('reseller_private')
+          .where('entrepreneurUid', isEqualTo: uid)
+          .snapshots()
+          .listen((snapshot) {
+        if (!mounted) return;
+
+        setState(() {
+          _private = {
+            for (final doc in snapshot.docs) doc.id: doc.data(),
+          };
+        });
+      }, onError: (_) {});
+    }
+  }
+
+  @override
+  void dispose() {
+    _privateSub?.cancel();
+    super.dispose();
+  }
 
   // =========================================================
   // MONEY
@@ -437,6 +473,9 @@ class _ResellerOrdersPageState
         ),
       ),
     );
+
+    // Add the reseller's private money (selling price, profit).
+    data.addAll(_private[order.id] ?? const <String, dynamic>{});
 
     final items =
         data['items'] is List
@@ -1052,6 +1091,9 @@ class _ResellerOrdersPageState
       ),
     );
 
+    // Add the reseller's private money (selling price, profit).
+    data.addAll(_private[order.id] ?? const <String, dynamic>{});
+
     final orderId =
         _orderId(
       order,
@@ -1593,7 +1635,7 @@ class _ResellerOrdersPageState
                   24,
                 ),
                 child: Text(
-                  'Could not load reseller orders.\n\n${snapshot.error}',
+                  'Could not load reseller orders. Please try again.',
                   textAlign:
                       TextAlign.center,
                 ),
