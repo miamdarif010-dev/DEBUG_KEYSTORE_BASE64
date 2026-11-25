@@ -488,8 +488,7 @@ class SellerPage extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Text(
-                  'Unable to load seller information.\n\n'
-                  '${userSnapshot.error}',
+                  'Unable to load seller information.',
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -529,8 +528,7 @@ class SellerPage extends StatelessWidget {
                   child: Padding(
                     padding: const EdgeInsets.all(20),
                     child: Text(
-                      'Unable to load products.\n\n'
-                      '${productSnapshot.error}',
+                      'Unable to load products.',
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -1277,11 +1275,11 @@ class _SellerMembershipPaymentCardState
           isError: true,
         );
       }
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       _showMessage(
-        'Something went wrong.\n$e',
+        'Something went wrong. Please try again.',
         isError: true,
       );
     } finally {
