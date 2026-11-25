@@ -204,7 +204,7 @@ class _AddProductPageState extends State<AddProductPage> {
         _shopName =
             (data['shopName'] ?? data['storeName'] ?? '').toString().trim();
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       setState(() {
@@ -212,7 +212,7 @@ class _AddProductPageState extends State<AddProductPage> {
         _isApprovedSeller = false;
       });
 
-      _showSnackBar('Seller information load failed: $e', isError: true);
+      _showSnackBar('Could not load seller information.', isError: true);
     }
   }
 
@@ -249,8 +249,8 @@ class _AddProductPageState extends State<AddProductPage> {
       if (images.length > remaining) {
         _showSnackBar('Only $_maxImages images can be added.', isError: true);
       }
-    } catch (e) {
-      _showSnackBar('Image selection failed: $e', isError: true);
+    } catch (_) {
+      _showSnackBar('Image selection failed.', isError: true);
     }
   }
 
@@ -297,8 +297,8 @@ class _AddProductPageState extends State<AddProductPage> {
         _pickedVideo = video;
         _uploadedVideoUrl = null;
       });
-    } catch (e) {
-      _showSnackBar('Video selection failed: $e', isError: true);
+    } catch (_) {
+      _showSnackBar('Video selection failed.', isError: true);
     }
   }
 
@@ -471,8 +471,8 @@ class _AddProductPageState extends State<AddProductPage> {
       });
 
       return true;
-    } catch (e) {
-      _showSnackBar('Media upload failed: $e', isError: true);
+    } catch (_) {
+      _showSnackBar('Media upload failed. Please try again.', isError: true);
 
       return false;
     } finally {
@@ -753,9 +753,9 @@ class _AddProductPageState extends State<AddProductPage> {
       if (!mounted) return;
 
       Navigator.of(context).pop(true);
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        _showSnackBar('Product save failed: $e', isError: true);
+        _showSnackBar('Product save failed. Please try again.', isError: true);
       }
     } finally {
       if (mounted) {
@@ -841,8 +841,8 @@ class _AddProductPageState extends State<AddProductPage> {
       setState(() {
         draft.images.addAll(images.take(remaining));
       });
-    } catch (e) {
-      _showSnackBar('Image selection failed: $e', isError: true);
+    } catch (_) {
+      _showSnackBar('Image selection failed.', isError: true);
     }
   }
 
