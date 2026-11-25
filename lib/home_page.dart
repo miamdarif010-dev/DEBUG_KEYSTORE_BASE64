@@ -852,12 +852,12 @@ class _HomePageState extends State<HomePage>
             ),
           );
       }
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Could not update Favorites: $e'),
+          content: const Text('Could not update Favorites. Please try again.'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -879,12 +879,12 @@ class _HomePageState extends State<HomePage>
         name: productData['name']?.toString() ?? 'Unnamed Product',
         formattedPrice: _formatBdtPrice(productData),
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Share failed: $e'),
+          content: const Text('Share failed. Please try again.'),
           behavior: SnackBarBehavior.floating,
         ),
       );
