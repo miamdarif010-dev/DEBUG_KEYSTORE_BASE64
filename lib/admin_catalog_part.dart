@@ -355,7 +355,37 @@ extension _AdminCatalogPart on _AdminPanelPageState {
     );
   }
 
+  // Reseller orders no longer hold prices. The admin reads the money from
+  // reseller_private/{id} and merges it in for display.
   Widget _adminOrderCard(_AdminOrderItem order) {
+    if (order.collection != 'reseller_orders') {
+      return _adminOrderCardBody(order);
+    }
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: _db
+          .collection('reseller_private')
+          .doc(order.id)
+          .snapshots(),
+      builder: (context, snapshot) {
+        final merged = <String, dynamic>{
+          ...order.data,
+          ...(snapshot.data?.data() ?? <String, dynamic>{}),
+        };
+
+        return _adminOrderCardBody(
+          _AdminOrderItem(
+            id: order.id,
+            data: merged,
+            type: order.type,
+            collection: order.collection,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _adminOrderCardBody(_AdminOrderItem order) {
     final data = order.data;
 
     final total = _toDouble(
@@ -443,41 +473,97 @@ extension _AdminCatalogPart on _AdminPanelPageState {
                 customerPhone,
               ),
 
-            if (order.type == 'Reseller Order')
+            if (order.type == 'Reseller Order') ...[
               _summaryRow(
                 'Order Source',
                 'Reseller → Seller delivery',
               ),
+              _summaryRow(
+                'Supplier Total',
+                '৳${_toDouble(data['supplierTotal']).toStringAsFixed(2)}',
+              ),
+              _summaryRow(
+                'Reseller Profit',
+                '৳${_toDouble(data['profit']).toStringAsFixed(2)}',
+              ),
+            ],
 
-            const SizedBox(height: 10),
+            // The main customer order follows its seller / reseller
+            // sub-orders automatically, so manual buttons are only shown
+            // on the sub-orders. Cancelling a sub-order refunds the customer;
+            // marking it delivered pays the seller / reseller.
+            if (order.collection != 'orders') ...[
+              const SizedBox(height: 10),
 
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => _updateAdminOrderStatus(
-                      order,
-                      'Cancelled',
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => _confirmAdminOrderStatus(
+                        order,
+                        'cancelled',
+                      ),
+                      child: const Text('Cancel'),
                     ),
-                    child: const Text('Cancel'),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: () => _updateAdminOrderStatus(
-                      order,
-                      'Completed',
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () => _confirmAdminOrderStatus(
+                        order,
+                        'delivered',
+                      ),
+                      child: const Text('Delivered'),
                     ),
-                    child: const Text('Complete'),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _confirmAdminOrderStatus(
+    _AdminOrderItem order,
+    String status,
+  ) async {
+    final cancel = status == 'cancelled';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(
+            cancel ? 'Cancel this order?' : 'Mark as delivered?',
+          ),
+          content: Text(
+            cancel
+                ? 'The customer will be refunded automatically. '
+                    'This cannot be undone.'
+                : 'The seller (and reseller) will be paid automatically. '
+                    'This cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, false),
+              child: const Text('No'),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, true),
+              child: const Text('Yes'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    await _updateAdminOrderStatus(order, status);
   }
 
   Future<void> _updateAdminOrderStatus(
@@ -508,13 +594,13 @@ extension _AdminCatalogPart on _AdminPanelPageState {
           ),
         ),
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text(
-            'Failed to update order: $e',
+            'Failed to update order. Please try again.',
           ),
         ),
       );
