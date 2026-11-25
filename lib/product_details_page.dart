@@ -437,10 +437,10 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
             ? '$formattedPrice (was ${formatTaka(originalPrice)})'
             : formattedPrice,
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
-      _showSelectSnack('Share failed: $e');
+      _showSelectSnack('Share failed. Please try again.');
     }
   }
 
@@ -548,12 +548,12 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
           ),
         );
       }
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Favorite update failed: $e'),
+          content: const Text('Favorite update failed. Please try again.'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -613,12 +613,12 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
           duration: const Duration(seconds: 1),
         ),
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Could not add to cart: $e'),
+          content: const Text('Could not add to cart. Please try again.'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -1236,7 +1236,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
           'Review Not Available',
           _reviewCheckError == null
               ? 'You can review this product after your order has been delivered.'
-              : 'Could not verify your orders.\n\n$_reviewCheckError',
+              : 'Could not verify your orders. Please try again later.',
         );
 
         return;
@@ -1359,11 +1359,13 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                       if (!dialogContext.mounted) return;
 
                       Navigator.pop(dialogContext, true);
-                    } catch (e) {
+                    } catch (_) {
                       if (!dialogContext.mounted) return;
 
                       ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        SnackBar(content: Text('Review failed: $e')),
+                        const SnackBar(
+                          content: Text('Review failed. Please try again.'),
+                        ),
                       );
                     }
                   },
