@@ -917,38 +917,66 @@ class SellerReturnRefundPage extends StatelessWidget {
                       Text(
                         'Quantity: $quantity',
                       ),
-                      const SizedBox(
-                        height: 3,
+                      // Prices are shown only for the seller's OWN direct
+                      // orders. For a reseller order the customer's price
+                      // would reveal the reseller's profit, so it is hidden.
+                      FutureBuilder<
+                          DocumentSnapshot<Map<String, dynamic>>>(
+                        future: sellerOrderId.isEmpty
+                            ? null
+                            : FirebaseFirestore.instance
+                                .collection('seller_orders')
+                                .doc(sellerOrderId)
+                                .get(),
+                        builder: (context, orderSnapshot) {
+                          final isDirectOrder =
+                              orderSnapshot.hasData &&
+                                  orderSnapshot.data!.exists;
+
+                          if (!isDirectOrder) {
+                            return const SizedBox.shrink();
+                          }
+
+                          return Column(
+                            crossAxisAlignment:
+                                CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(
+                                height: 3,
+                              ),
+                              Text(
+                                'Price: ৳${price.toStringAsFixed(0)}',
+                              ),
+                              const SizedBox(
+                                height: 3,
+                              ),
+                              Text(
+                                'Total: ৳${total.toStringAsFixed(0)}',
+                                style:
+                                    const TextStyle(
+                                  fontWeight:
+                                      FontWeight.bold,
+                                ),
+                              ),
+                              if (data['refundAmount'] is num &&
+                                  (data['refundAmount'] as num) > 0) ...[
+                                const SizedBox(
+                                  height: 3,
+                                ),
+                                Text(
+                                  'Refunded: ৳${(data['refundAmount'] as num).toStringAsFixed(2)}',
+                                  style:
+                                      const TextStyle(
+                                    color: Colors.green,
+                                    fontWeight:
+                                        FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          );
+                        },
                       ),
-                      Text(
-                        'Price: ৳${price.toStringAsFixed(0)}',
-                      ),
-                      const SizedBox(
-                        height: 3,
-                      ),
-                      Text(
-                        'Total: ৳${total.toStringAsFixed(0)}',
-                        style:
-                            const TextStyle(
-                          fontWeight:
-                              FontWeight.bold,
-                        ),
-                      ),
-                      if (data['refundAmount'] is num &&
-                          (data['refundAmount'] as num) > 0) ...[
-                        const SizedBox(
-                          height: 3,
-                        ),
-                        Text(
-                          'Refunded: ৳${(data['refundAmount'] as num).toStringAsFixed(2)}',
-                          style:
-                              const TextStyle(
-                            color: Colors.green,
-                            fontWeight:
-                                FontWeight.bold,
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),
