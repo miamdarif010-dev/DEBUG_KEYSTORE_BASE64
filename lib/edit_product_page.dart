@@ -165,7 +165,7 @@ class _EditProductPageState extends State<EditProductPage> {
           _isLoadingProduct = false;
         });
       }
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       setState(() {
@@ -173,7 +173,7 @@ class _EditProductPageState extends State<EditProductPage> {
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not load product: $e')),
+        const SnackBar(content: Text('Could not load product.')),
       );
     }
   }
@@ -196,11 +196,11 @@ class _EditProductPageState extends State<EditProductPage> {
       if (picked == null) return;
 
       await _uploadToCloudinary(File(picked.path));
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not select photo: $e')),
+        const SnackBar(content: Text('Could not select photo.')),
       );
     }
   }
@@ -236,7 +236,7 @@ class _EditProductPageState extends State<EditProductPage> {
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw Exception(
-          'Cloudinary upload failed: ${response.statusCode}\n${response.body}',
+          'Cloudinary upload failed: ${response.statusCode}',
         );
       }
 
@@ -257,7 +257,7 @@ class _EditProductPageState extends State<EditProductPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('New product image uploaded.')),
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       setState(() {
@@ -265,7 +265,9 @@ class _EditProductPageState extends State<EditProductPage> {
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Photo upload failed: $e')),
+        const SnackBar(
+          content: Text('Photo upload failed. Please try again.'),
+        ),
       );
     } finally {
       if (mounted) {
@@ -425,11 +427,13 @@ class _EditProductPageState extends State<EditProductPage> {
       );
 
       Navigator.pop(context);
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Update failed: $e')),
+        const SnackBar(
+          content: Text('Update failed. Please try again.'),
+        ),
       );
     } finally {
       if (mounted) {
