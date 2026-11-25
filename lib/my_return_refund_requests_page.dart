@@ -308,7 +308,7 @@ class MyReturnRefundRequestsPage extends StatelessWidget {
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          'Price: ₩${price.toStringAsFixed(0)}',
+                          'Price: ৳${price.toStringAsFixed(0)}',
                         ),
                         const SizedBox(height: 5),
                         Text(
@@ -404,9 +404,8 @@ class MyReturnRefundRequestsPage extends StatelessWidget {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(20),
-                child: Text(
-                  'Could not load your requests.\n\n'
-                  '${snapshot.error}',
+                child: const Text(
+                  'Could not load your requests. Please try again.',
                   textAlign: TextAlign.center,
                 ),
               ),
