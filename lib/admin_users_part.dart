@@ -997,6 +997,33 @@ extension _AdminUsersPart on _AdminPanelPageState {
   }
 
   Widget _adminOrderListTile(_AdminOrderItem order) {
+    if (order.collection != 'reseller_orders') {
+      return _adminOrderListTileBody(order);
+    }
+
+    // Reseller orders hold no prices; the admin reads reseller_private.
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: _db
+          .collection('reseller_private')
+          .doc(order.id)
+          .snapshots(),
+      builder: (context, snapshot) {
+        return _adminOrderListTileBody(
+          _AdminOrderItem(
+            id: order.id,
+            data: <String, dynamic>{
+              ...order.data,
+              ...(snapshot.data?.data() ?? <String, dynamic>{}),
+            },
+            type: order.type,
+            collection: order.collection,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _adminOrderListTileBody(_AdminOrderItem order) {
     final data = order.data;
 
     final total = _toDouble(
@@ -1090,13 +1117,13 @@ extension _AdminUsersPart on _AdminPanelPageState {
       );
 
       Navigator.of(context).pop();
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Failed to delete user: $e',
+            'Failed to delete user. Please try again.',
           ),
           behavior: SnackBarBehavior.floating,
         ),
