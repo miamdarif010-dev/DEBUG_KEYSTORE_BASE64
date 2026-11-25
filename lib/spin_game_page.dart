@@ -21,20 +21,18 @@ String _gameErrorText(Object e) {
   if (e is FirebaseFunctionsException) {
     switch (e.code) {
       case 'not-found':
-        return 'The game is not set up on the server yet.\n'
-            '(not-found: deploy functions/games.js)';
+        return 'The game is not available right now.\nPlease try again later.';
       case 'unauthenticated':
-        return 'Please sign in again.\n(unauthenticated)';
+        return 'Please sign in again.';
       case 'unavailable':
       case 'deadline-exceeded':
-        return 'No connection to the server. Check your internet.\n'
-            '(${e.code})';
+        return 'No connection to the server. Check your internet.';
       default:
-        return 'Could not load.\n(${e.code}) ${e.message ?? ''}';
+        return 'Could not load. Please try again.';
     }
   }
 
-  return 'Could not load.\n$e';
+  return 'Could not load. Please try again.';
 }
 
 class SpinGamePage extends StatefulWidget {
@@ -228,7 +226,7 @@ class _SpinGamePageState extends State<SpinGamePage>
       if (e.code == 'resource-exhausted') {
         setState(() => _playsLeft = 0);
       }
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       setState(() => _spinning = false);
