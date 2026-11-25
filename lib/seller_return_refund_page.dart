@@ -320,13 +320,13 @@ class SellerReturnRefundPage extends StatelessWidget {
           ),
         ),
       );
-    } catch (e) {
+    } catch (_) {
       if (!context.mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text(
-            'Could not update request.\n$e',
+            'Could not update request. Please try again.',
           ),
         ),
       );
@@ -503,10 +503,10 @@ class SellerReturnRefundPage extends StatelessWidget {
           ),
         ),
       );
-    } catch (e) {
+    } catch (_) {
       messenger.showSnackBar(
-        SnackBar(
-          content: Text('Could not complete the refund.\n$e'),
+        const SnackBar(
+          content: Text('Could not complete the refund.'),
         ),
       );
     }
@@ -1286,9 +1286,8 @@ class SellerReturnRefundPage extends StatelessWidget {
                     const EdgeInsets.all(
                   20,
                 ),
-                child: Text(
-                  'Could not load requests.\n\n'
-                  '${snapshot.error}',
+                child: const Text(
+                  'Could not load requests. Please try again.',
                   textAlign:
                       TextAlign.center,
                 ),
