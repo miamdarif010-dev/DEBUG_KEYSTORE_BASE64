@@ -232,23 +232,23 @@ class _ReturnRefundRequestPageState
         ),
         (route) => route.isFirst,
       );
-    } on FirebaseException catch (e) {
+    } on FirebaseException catch (_) {
       if (!mounted) {
         return;
       }
 
       _showMessage(
         'Request Failed',
-        e.message ?? 'Could not submit your request.',
+        'Could not submit your request. Please try again.',
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) {
         return;
       }
 
       _showMessage(
         'Request Failed',
-        e.toString().replaceFirst('Exception: ', ''),
+        'Could not submit your request. Please try again.',
       );
     } finally {
       if (mounted) {
