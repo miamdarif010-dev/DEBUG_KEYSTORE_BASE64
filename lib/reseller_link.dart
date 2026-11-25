@@ -179,7 +179,7 @@ class ResellerLinkHandler {
       );
     } on FirebaseFunctionsException catch (e) {
       _message(context, e.message ?? 'Could not open this product.');
-    } catch (e) {
+    } catch (_) {
       _message(context, 'Could not open this product.');
     }
   }
