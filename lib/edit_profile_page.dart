@@ -1,4 +1,4 @@
-  import 'dart:convert';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -94,8 +94,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Could not load profile: $e'),
+          const SnackBar(
+            content: Text('Could not load profile.'),
           ),
         );
       }
@@ -134,8 +134,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not select photo: $e'),
+        const SnackBar(
+          content: Text('Could not select photo.'),
         ),
       );
     }
@@ -180,8 +180,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       if (response.statusCode < 200 ||
           response.statusCode >= 300) {
         throw Exception(
-          'Cloudinary upload failed: ${response.statusCode}\n'
-          '${response.body}',
+          'Cloudinary upload failed: ${response.statusCode}',
         );
       }
 
@@ -234,9 +233,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text(
-            'Photo upload failed: $e',
+            'Photo upload failed. Please try again.',
           ),
         ),
       );
@@ -328,9 +327,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text(
-            'Error: $e',
+            'Could not save your profile. Please try again.',
           ),
         ),
       );
@@ -542,4 +541,3 @@ class _EditProfilePageState extends State<EditProfilePage> {
     );
   }
 }
-
