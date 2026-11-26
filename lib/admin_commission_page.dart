@@ -139,7 +139,7 @@ class AdminCommissionPage extends StatelessWidget {
               color: Colors.red.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Text('Could not load income history.\n${snapshot.error}'),
+            child: const Text('Could not load income history.'),
           );
         }
 
@@ -279,4 +279,3 @@ class AdminCommissionPage extends StatelessWidget {
     );
   }
 }
-
