@@ -81,12 +81,12 @@ class _CargoDriveGameScreenState
 
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       setState(() => _isLoading = false);
 
-      _showSnack('গেম স্ট্যাটাস লোড হয়নি: $e');
+      _showSnack('গেম স্ট্যাটাস লোড হয়নি। আবার চেষ্টা করো।');
     }
   }
 
@@ -134,12 +134,12 @@ class _CargoDriveGameScreenState
       });
 
       _startGameLoop();
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       setState(() => _isLoading = false);
 
-      _showSnack('গেম শুরু করা যায়নি: $e');
+      _showSnack('গেম শুরু করা যায়নি। আবার চেষ্টা করো।');
     }
   }
 
@@ -281,7 +281,7 @@ class _CargoDriveGameScreenState
 
       // Refresh latest server settings
       await _fetchGameStatus();
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       // Keep session ID so user can retry submission.
