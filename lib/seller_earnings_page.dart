@@ -195,7 +195,7 @@ class _SellerEarningsPageState extends State<SellerEarningsPage> {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
-                  'Unable to load earnings.\n\n${snapshot.error}',
+                  'Unable to load earnings.',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontSize: 15,
