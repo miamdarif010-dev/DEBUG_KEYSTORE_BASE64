@@ -326,8 +326,7 @@ class SellerViewsPage extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Text(
-                  'Unable to load product views.\n\n'
-                  '${snapshot.error}',
+                  'Unable to load product views.',
                   textAlign: TextAlign.center,
                 ),
               ),
