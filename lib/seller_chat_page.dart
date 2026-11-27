@@ -532,13 +532,13 @@ class _SellerChatPageState
       );
 
       _scrollToBottom();
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text(
-              'Unable to send message: $e',
+              'Unable to send message. Please try again.',
             ),
           ),
         );
