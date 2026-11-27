@@ -214,13 +214,13 @@ class _GlobalNotificationsPageState
           ),
         ),
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text(
-            'Could not open product: $e',
+            'Could not open product. Please try again.',
           ),
         ),
       );
@@ -273,13 +273,13 @@ class _GlobalNotificationsPageState
           duration: Duration(seconds: 1),
         ),
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text(
-            'Could not mark notifications as read: $e',
+            'Could not mark notifications as read. Please try again.',
           ),
         ),
       );
