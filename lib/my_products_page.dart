@@ -57,11 +57,11 @@ class MyProductsPage extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Product deleted successfully.')),
       );
-    } catch (e) {
+    } catch (_) {
       if (!context.mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Delete failed: $e')),
+        const SnackBar(content: Text('Delete failed. Please try again.')),
       );
     }
   }
@@ -375,7 +375,7 @@ class MyProductsPage extends StatelessWidget {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            '${snapshot.error}',
+                            'Please check your connection and try again.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Colors.grey.shade600,
