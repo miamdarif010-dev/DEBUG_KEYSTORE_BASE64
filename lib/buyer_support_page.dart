@@ -1,9 +1,41 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'return_refund_page.dart';
 
+const String _kSupportEmail = 'miamdarif1234@gmail.com';
+
 class BuyerSupportPage extends StatelessWidget {
   const BuyerSupportPage({super.key});
+
+  Future<void> _emailSupport(BuildContext context) async {
+    final uri = Uri(
+      scheme: 'mailto',
+      path: _kSupportEmail,
+      queryParameters: {'subject': 'BuyNova support'},
+    );
+
+    var opened = false;
+
+    try {
+      opened = await launchUrl(uri);
+    } catch (_) {
+      opened = false;
+    }
+
+    if (opened || !context.mounted) return;
+
+    await Clipboard.setData(const ClipboardData(text: _kSupportEmail));
+
+    if (!context.mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Email address copied: $_kSupportEmail'),
+      ),
+    );
+  }
 
   void _showMessage(
     BuildContext context,
@@ -143,7 +175,9 @@ class BuyerSupportPage extends StatelessWidget {
               _showMessage(
                 context,
                 'FAQ',
-                'Frequently Asked Questions will be available here.',
+                'Orders: open My Orders to see status.\n'
+                'Password: Settings > Account & Security.\n'
+                'More help: email $_kSupportEmail',
               );
             },
           ),
@@ -171,7 +205,7 @@ class BuyerSupportPage extends StatelessWidget {
               _showMessage(
                 context,
                 'Payment Help',
-                'Payment support will be available here.',
+                'For a payment or wallet problem, email $_kSupportEmail with your transaction ID.',
               );
             },
           ),
@@ -185,7 +219,7 @@ class BuyerSupportPage extends StatelessWidget {
               _showMessage(
                 context,
                 'Delivery Help',
-                'Delivery support will be available here.',
+                'Open My Orders to track your delivery. If it is late, email $_kSupportEmail with your order ID.',
               );
             },
           ),
@@ -215,7 +249,7 @@ class BuyerSupportPage extends StatelessWidget {
               _showMessage(
                 context,
                 'Account Help',
-                'Account support will be available here.',
+                'For account problems, email $_kSupportEmail from the email address of your account.',
               );
             },
           ),
@@ -236,13 +270,9 @@ class BuyerSupportPage extends StatelessWidget {
             context: context,
             icon: Icons.chat_outlined,
             title: 'Contact BuyNova Support',
-            subtitle: 'Chat with our support team.',
+            subtitle: 'Send a message to our support team.',
             onTap: () {
-              _showMessage(
-                context,
-                'BuyNova Support',
-                'Live support chat will be connected here.',
-              );
+              _emailSupport(context);
             },
           ),
 
@@ -252,11 +282,7 @@ class BuyerSupportPage extends StatelessWidget {
             title: 'Email Support',
             subtitle: 'Send us your question or problem.',
             onTap: () {
-              _showMessage(
-                context,
-                'Email Support',
-                'Email support will be connected here.',
-              );
+              _emailSupport(context);
             },
           ),
 
