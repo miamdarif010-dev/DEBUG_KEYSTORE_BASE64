@@ -96,8 +96,8 @@ class _PublicStoreProductsState extends State<PublicStoreProducts> {
           builder: (_) => ProductDetailsPage(productId: id, product: product),
         ),
       );
-    } on FirebaseFunctionsException catch (e) {
-      _showMessage(e.message ?? 'Could not open this product.');
+    } on FirebaseFunctionsException {
+      _showMessage('Could not open this product.');
     } catch (_) {
       _showMessage('Could not open this product.');
     }
