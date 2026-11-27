@@ -310,8 +310,7 @@ class SellerStockPage extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Text(
-                  'Unable to load stock information.\n\n'
-                  '${snapshot.error}',
+                  'Unable to load stock information.',
                   textAlign: TextAlign.center,
                 ),
               ),
