@@ -61,7 +61,7 @@ class _SettingsPageState extends State<SettingsPage> {
       case 'provider-already-linked':
         return 'This phone number is already used.';
       default:
-        return e.message ?? 'Something went wrong.';
+        return 'Something went wrong. Please try again.';
     }
   }
 
@@ -222,8 +222,8 @@ class _SettingsPageState extends State<SettingsPage> {
       await FirebaseFunctions.instanceFor(region: 'asia-northeast3')
           .httpsCallable('deleteMyAccount')
           .call();
-    } on FirebaseFunctionsException catch (e) {
-      _showMessage(e.message ?? 'Could not delete the account.');
+    } on FirebaseFunctionsException {
+      _showMessage('Could not delete the account. Please try again.');
       return;
     } catch (_) {
       _showMessage('Could not delete the account. Check your internet.');
