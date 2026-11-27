@@ -256,12 +256,12 @@ class NotificationsPage extends StatelessWidget {
           ),
         );
       }
-    } catch (e) {
+    } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text(
-              'Could not update notifications: $e',
+              'Could not update notifications. Please try again.',
             ),
           ),
         );
@@ -389,14 +389,6 @@ class NotificationsPage extends StatelessWidget {
                 ),
               ],
 
-              const SizedBox(height: 12),
-
-              Text(
-                'Type: $type',
-                style: TextStyle(
-                  color: Colors.grey.shade600,
-                ),
-              ),
             ],
           ),
           actions: [
@@ -580,8 +572,7 @@ class NotificationsPage extends StatelessWidget {
                 padding:
                     const EdgeInsets.all(24),
                 child: Text(
-                  'Could not load notifications.\n\n'
-                  '${snapshot.error}',
+'Could not load notifications.',
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -868,4 +859,3 @@ class NotificationsPage extends StatelessWidget {
     );
   }
 }
-
