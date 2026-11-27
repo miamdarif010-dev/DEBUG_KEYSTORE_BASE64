@@ -493,8 +493,7 @@ class SellerInformationPage extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Text(
-                  'Unable to load seller information.\n\n'
-                  '${snapshot.error}',
+                  'Unable to load seller information.',
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -527,14 +526,13 @@ class SellerInformationPage extends StatelessWidget {
           final name =
               data['name']?.toString() ?? '';
 
+          // Phone and email are private. Only the seller sees them.
           final phone =
-              data['phone']?.toString() ?? '';
+              isOwnProfile ? (data['phone']?.toString() ?? '') : '';
 
-          final email =
-              data['email']?.toString() ??
-                  (isOwnProfile
-                      ? currentUser.email ?? ''
-                      : '');
+          final email = isOwnProfile
+              ? (data['email']?.toString() ?? currentUser.email ?? '')
+              : '';
 
           final sellerCode =
               data['sellerCode']?.toString() ?? '';
