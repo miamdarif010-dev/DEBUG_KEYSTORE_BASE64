@@ -199,19 +199,17 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
       }
 
       await _markMessagesAsRead();
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       setState(() {
         _conversationReady = false;
-        _openError = e.toString();
+        _openError = 'Please check your connection.';
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Unable to open chat: $e',
-          ),
+        const SnackBar(
+          content: Text('Unable to open chat. Please try again.'),
         ),
       );
     }
@@ -292,6 +290,15 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
       return;
     }
 
+    if (message.length > 5000) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Message is too long. Maximum 5000 characters.'),
+        ),
+      );
+      return;
+    }
+
     if (!_conversationReady) {
       await _ensureConversation();
 
@@ -359,14 +366,12 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
       );
 
       _scrollToBottom();
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Message could not be sent: $e',
-          ),
+        const SnackBar(
+          content: Text('Message could not be sent. Please try again.'),
         ),
       );
     } finally {
@@ -658,8 +663,7 @@ class _BuyerChatPageState extends State<BuyerChatPage> {
               padding:
                   const EdgeInsets.all(24),
               child: Text(
-                'Unable to load messages.\n\n'
-                '${snapshot.error}',
+                'Unable to load messages.',
                 textAlign:
                     TextAlign.center,
               ),
