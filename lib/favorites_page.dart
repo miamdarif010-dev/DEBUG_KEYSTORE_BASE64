@@ -35,7 +35,7 @@ class FavoritesPage extends StatelessWidget {
           0;
     }
 
-    return '₩${value.toStringAsFixed(0)}';
+    return '৳${value.toStringAsFixed(0)}';
   }
 
   double _priceAsDouble(dynamic price) {
@@ -75,12 +75,12 @@ class FavoritesPage extends StatelessWidget {
           ),
         );
       }
-    } catch (e) {
+    } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text(
-              'Could not remove favorite: $e',
+              'Could not remove favorite. Please try again.',
             ),
             behavior: SnackBarBehavior.floating,
           ),
@@ -148,12 +148,12 @@ class FavoritesPage extends StatelessWidget {
           ),
         );
       }
-    } catch (e) {
+    } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text(
-              'Could not add to Cart: $e',
+              'Could not add to Cart. Please try again.',
             ),
             behavior: SnackBarBehavior.floating,
           ),
@@ -444,7 +444,7 @@ class FavoritesPage extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      snapshot.error.toString(),
+                      'Please check your connection and try again.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 12,
