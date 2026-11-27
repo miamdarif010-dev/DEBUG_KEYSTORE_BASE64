@@ -72,7 +72,7 @@ class SellerAnalyticsPage extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Text(
-                  'Unable to load sales analytics.\n\n${snapshot.error}',
+                  'Unable to load sales analytics.',
                   textAlign: TextAlign.center,
                 ),
               ),
