@@ -186,7 +186,7 @@ class MyFreshProductsPage extends StatelessWidget {
                     child: Padding(
                       padding: const EdgeInsets.all(20),
                       child: Text(
-                        'Could not load products.\n${snapshot.error}',
+                        'Could not load products.',
                         textAlign: TextAlign.center,
                       ),
                     ),
