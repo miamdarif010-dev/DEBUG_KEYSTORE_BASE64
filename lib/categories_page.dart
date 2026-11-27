@@ -182,7 +182,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Text(
-                'Failed to load products\n${snap.error}',
+                'Failed to load products.',
                 textAlign: TextAlign.center,
               ),
             ),
@@ -325,7 +325,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Text(
-                  'Unable to load categories.\n${snapshot.error}',
+                  'Unable to load categories.',
                   textAlign: TextAlign.center,
                 ),
               ),
