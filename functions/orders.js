@@ -786,7 +786,13 @@ exports.cancelUnpaidOrder = onCall({ region: REGION }, async (request) => {
   const batch = db.batch();
 
   sellerSnap.docs.forEach((d) => batch.delete(d.ref));
-  resellerSnap.docs.forEach((d) => batch.delete(d.ref));
+  resellerSnap.docs.forEach((d) => {
+    batch.delete(d.ref);
+    // Same id in the two private money documents: remove them too, so no
+    // orphan profit / supplier record is left for a cancelled unpaid order.
+    batch.delete(db.collection('reseller_supplier').doc(d.id));
+    batch.delete(db.collection('reseller_private').doc(d.id));
+  });
   batch.delete(orderRef);
 
   if (order.couponCode) {
